@@ -1,0 +1,17 @@
+
+= VTX1 Ternary SoC Architecture
+:doctype: book
+:description: VTX1 Ternary SoC Architecture
+:keywords: VTX1, Ternary SoC, Architecture, Specification
+:url-repo: https://github.com/itworks99/vtx1l
+:source-highlighter: rouge
+:stem: latexmath
+:toc:
+
+include::overview.adoc[]
+include::system.adoc[]
+include::cpu.adoc[]
+include::memory.adoc[]
+include::boot.adoc[]
+include::debug.adoc[]
+include::addendums.adoc[]

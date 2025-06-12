@@ -1,0 +1,87 @@
+=== Glossary
+==== Terms and Acronyms
+* *TCU*: Ternary Computing Unit
+* *VLIW*: Very Long Instruction Word
+* *SIMD*: Single Instruction Multiple Data
+* *FPU*: Floating Point Unit
+* *ALU*: Arithmetic Logic Unit
+* *BIST*: Built-In Self Test
+* *DMA*: Direct Memory Access
+* *PLL*: Phase-Locked Loop
+* *ECC*: Error Correction Code
+* *SEC-DED*: Single Error Correction, Double Error Detection
+
+==== Technical Terms
+* *Balanced Ternary*: A three-state logic system using -1, 0, and +1
+* *Microcode*: Low-level instructions stored in ROM that implement complex operations. See `microcode.adoc` for architecture details and `microcode_implementation.adoc` for complete implementations
+* *VLIW*: An instruction set architecture designed to exploit instruction-level parallelism
+* *Cache Line*: The smallest unit of memory that can be transferred between cache and main memory
+* *Clock Domain*: A group of synchronous logic elements that share the same clock signal
+* *Microcode ROM*: 4KB storage containing 32-bit microinstructions that implement 26 complex operations
+* *Microcode Sequencer*: Control unit that fetches, decodes, and executes microinstructions
+* *CORDIC Algorithm*: Coordinate Rotation Digital Computer algorithm used for transcendental functions in microcode
+* *TCU*: Ternary Computing Unit - unified execution unit handling ALU, FPU, and SIMD operations
+* *INTC*: Interrupt Controller - manages 32 interrupt sources with priority-based arbitration
+* *ISR*: Interrupt Service Routine - software handler for interrupt processing
+* *EOI*: End of Interrupt - signal indicating interrupt processing completion
+* *FIQ*: Fast Interrupt Request - high-priority interrupt with reduced latency
+* *NMI*: Non-Maskable Interrupt - highest priority interrupt that cannot be disabled
+* *IRQ*: Interrupt Request - standard maskable interrupt signal
+
+=== Microcode Documentation References
+
+The VTX1 microcode system is documented across two specialized documents:
+
+* **microcode.adoc**: High-level microcode architecture and operation descriptions
+  - Microcode system overview and organization
+  - Operation categories and performance characteristics  
+  - Implementation methodology and design rationale
+  - Integration with CPU pipeline and TCU
+
+* **microcode_implementation.adoc**: Complete microcode ROM specifications
+  - Full ROM image with actual microcode for all 26 operations
+  - Detailed cycle-by-cycle implementations for complex operations
+  - Constants, lookup tables, and optimization details
+  - Error handling routines and performance analysis
+
+=== System Architecture Documentation References
+
+The VTX1 interrupt controller system is comprehensively documented in:
+
+* **system.adoc**: Complete interrupt controller architecture
+  - Hardware architecture with 32 interrupt sources
+  - Register map and programming model
+  - Priority-based arbitration and nesting support
+  - Performance characteristics and timing analysis
+  - Integration with CPU pipeline and power management
+  - Software programming examples and debug features
+
+=== Document Cross-References
+
+This section provides navigation guidance for different aspects of VTX1 development:
+
+==== For Hardware Implementation Teams:
+* **cpu.adoc**: Core pipeline architecture, register file, and TCU specifications
+* **memory.adoc**: Cache architecture, memory controller, and storage specifications
+* **system.adoc**: Bus architecture, clock distribution, power management, and interrupt controller
+* **boot.adoc**: Reset sequences, timing constraints, and startup procedures
+
+==== For Software Development Teams:
+* **addendums/instructions.adoc**: Complete instruction set reference with encoding
+* **addendums/microcode.adoc**: High-level microcode operation descriptions
+* **cpu.adoc**: ISA overview, pipeline behavior, and programming model
+* **system.adoc**: Interrupt controller programming and system integration
+
+==== For System Integration Teams:
+* **overview.adoc**: High-level architecture summary and design decisions
+* **system.adoc**: Bus protocols, clock domains, and power distribution
+* **addendums/pins.adoc**: Pinout specifications and electrical characteristics
+* **debug.adoc**: Debug interfaces, JTAG configuration, and verification methodology
+
+==== Quick Reference Guide:
+* **Register Map**: See cpu.adoc (register file) and system.adoc (interrupt controller)
+* **Instruction Encoding**: See addendums/instructions.adoc for complete reference tables
+* **Microcode Details**: See addendums/microcode.adoc (architecture) and microcode_implementation.adoc (implementation)
+* **Timing Specifications**: See boot.adoc and system.adoc for timing constraints
+* **Memory Layout**: See memory.adoc for cache and memory controller specifications
+* **I/O Configuration**: See system.adoc for peripheral bus and GPIO specifications

@@ -1,0 +1,40 @@
+=== Pin Descriptions and Package Information
+==== QFP-64 Pinout
+
+. *Power Pins*
+* VDD (Pins 1, 32, 64): 5.0V power supply
+* GND (Pins 16, 48): Ground
+* AVDD (Pin 33): Analog power supply
+* AGND (Pin 17): Analog ground
+. *Clock and Reset*
+* CLK (Pin 2): System clock input
+* RST_N (Pin 3): Active-low reset input
+* XTAL1 (Pin 4): Crystal oscillator input
+* XTAL2 (Pin 5): Crystal oscillator output
+. *Debug Interface*
+* TCK (Pin 6): JTAG clock
+* TMS (Pin 7): JTAG mode select
+* TDI (Pin 8): JTAG data input
+* TDO (Pin 9): JTAG data output
+* TRST_N (Pin 10): JTAG reset
+. *Communication Interfaces*
+* UART_TX (Pin 11): UART transmit
+* UART_RX (Pin 12): UART receive
+* SPI_MOSI (Pin 13): SPI master out
+* SPI_MISO (Pin 14): SPI master in
+* SPI_SCK (Pin 15): SPI clock
+* SPI_SS (Pin 34): SPI slave select
+* I2C_SDA (Pin 35): I2C data
+* I2C_SCL (Pin 36): I2C clock
+. *GPIO Ports*
+* GPIO0-GPIO7 (Pins 18-25): General purpose I/O
+* GPIO8-GPIO15 (Pins 37-44): General purpose I/O
+* GPIO16-GPIO23 (Pins 45-52): General purpose I/O
+. *Special Function Pins*
+* READY (Pin 53): System ready indicator
+* IRQ (Pin 54): Interrupt request
+* DMA_REQ (Pin 55): DMA request
+* DMA_ACK (Pin 56): DMA acknowledge
+* TEST (Pin 57): Test mode select
+* BOOT0 (Pin 58): Boot mode select
+* BOOT1 (Pin 59): Boot mode select

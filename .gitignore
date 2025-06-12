@@ -1,0 +1,8 @@
+release/*.png
+release/*.svg
+release/*.png.cache
+docs/*.zip
+release/.asciidoctor/
+build/*
+build
+.idea

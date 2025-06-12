@@ -1,0 +1,268 @@
+== Debugging, testing and simulation
+== Enhanced Debug and Monitoring Architecture
+
+=== Advanced Debug Capabilities
+
+The VTX1 debug system implements a sophisticated debugging and monitoring architecture with comprehensive system visibility and non-intrusive debugging capabilities.
+
+==== Enhanced JTAG Debug Interface
+
+**Debug Master Integration:**
+- **Bus Matrix Integration**: Dedicated debug master with 36-bit ternary interface
+- **25MHz Operation**: Independent debug clock domain for system debugging
+- **Non-Intrusive Access**: Debug operations do not interfere with normal system operation
+- **Comprehensive Access**: Full system memory, register, and peripheral access
+
+**JTAG Implementation Features:**
+
+[cols="2,2,3", options="header"]
+|===
+|Feature |Implementation |Debug Capabilities
+
+|**Boundary Scan** |IEEE 1149.1 compliant |Pin-level testing, interconnect verification
+|**Debug Transport** |Custom VTX1 protocol |Register access, memory inspection, breakpoint control
+|**Trace Interface** |Embedded trace buffer |Real-time instruction and data trace capture
+|**Performance Monitoring** |Hardware counters |Cycle-accurate performance analysis
+|===
+
+**Debug Register Interface:**
+
+[cols="2,1,1,3", options="header"]
+|===
+|Register |Address |Access |Description
+
+|DBG_CTRL |0x00 |R/W |Debug control - enable, mode selection, trace control
+|DBG_STATUS |0x04 |R |Debug status - system state, breakpoint hits, trace buffer
+|DBG_BP_ADDR[0:7] |0x08-0x24 |R/W |Breakpoint address registers (8 hardware breakpoints)
+|DBG_BP_CTRL[0:7] |0x28-0x44 |R/W |Breakpoint control - enable, type, conditions
+|DBG_WP_ADDR[0:3] |0x48-0x54 |R/W |Watchpoint address registers (4 hardware watchpoints)
+|DBG_WP_CTRL[0:3] |0x58-0x64 |R/W |Watchpoint control - enable, type, data matching
+|DBG_TRACE_CTRL |0x68 |R/W |Trace control - enable, filter, trigger conditions
+|DBG_TRACE_STATUS |0x6C |R |Trace status - buffer level, trigger events
+|DBG_PERF_CTRL |0x70 |R/W |Performance counter control and configuration
+|DBG_PERF_COUNT[0:7] |0x74-0x90 |R |Performance counter values (8 counters)
+|===
+
+==== Advanced Breakpoint and Watchpoint System
+
+**Hardware Breakpoint Implementation:**
+- **8 Hardware Breakpoints**: Configurable instruction breakpoints with conditions
+- **Address Range Support**: Breakpoints can cover address ranges for complex debugging
+- **Conditional Breakpoints**: Support for register value and flag-based conditions
+- **Execution Modes**: Breakpoints active in user, supervisor, or both modes
+
+**Watchpoint Capabilities:**
+- **4 Hardware Watchpoints**: Data access monitoring with read/write/both detection
+- **Data Value Matching**: Watchpoints can trigger on specific data values
+- **Address Range Monitoring**: Watchpoint coverage of memory regions
+- **Access Size Filtering**: Byte, word, or long word access detection
+
+**Breakpoint/Watchpoint Configuration:**
+```verilog
+// Breakpoint Control Register Format
+typedef struct {
+    logic        enable;      // Breakpoint enable
+    logic [1:0]  type;        // 00=disabled, 01=exec, 10=read, 11=write
+    logic [1:0]  mode;        // 00=any, 01=user, 10=supervisor, 11=both
+    logic [3:0]  condition;   // Conditional breakpoint flags
+    logic [7:0]  count;       // Breakpoint hit count threshold
+} bp_ctrl_t;
+```
+
+==== Comprehensive Trace System
+
+**Embedded Trace Buffer:**
+- **Buffer Size**: 4KB trace buffer for real-time trace capture
+- **Trace Depth**: Up to 1024 trace entries with timestamp information
+- **Circular Buffer**: Continuous trace capture with configurable overwrite policy
+- **Trigger System**: Sophisticated trigger conditions for trace start/stop
+
+**Trace Data Capture:**
+
+[cols="2,2,3", options="header"]
+|===
+|Trace Type |Data Captured |Implementation Features
+
+|**Instruction Trace** |PC, instruction, execution status |Full pipeline visibility, branch prediction accuracy
+|**Data Trace** |Address, data, access type |Memory access patterns, cache hit/miss analysis
+|**Bus Trace** |Bus transactions, arbitration |Bus utilization, transaction latency analysis
+|**Exception Trace** |Exception type, handler address |Interrupt latency, exception frequency analysis
+|===
+
+**Trace Filter Configuration:**
+- **Address Filtering**: Trace capture for specific memory regions
+- **Instruction Filtering**: Trace specific instruction types or opcodes
+- **Data Filtering**: Trace specific data values or access patterns
+- **Performance Filtering**: Trace only performance-critical events
+
+==== Real-Time Performance Monitoring
+
+**Hardware Performance Counters:**
+
+The debug system implements 8 configurable performance counters for real-time system analysis:
+
+[cols="1,2,3", options="header"]
+|===
+|Counter |Measured Event |Configuration Options
+
+|PERF0 |CPU Clock Cycles |Total cycles, active cycles, idle cycles
+|PERF1 |Instructions Executed |Total instructions, VLIW utilization, microcode cycles
+|PERF2 |Cache Performance |Cache hits, misses, evictions per cache level
+|PERF3 |Memory Transactions |Memory reads, writes, burst transfers
+|PERF4 |Bus Utilization |Bus busy cycles, arbitration conflicts, wait states
+|PERF5 |Pipeline Stalls |Hazard stalls, resource conflicts, branch mispredictions
+|PERF6 |Interrupt Activity |Interrupt count, latency, nesting depth
+|PERF7 |Power Events |Clock gating events, power mode transitions
+|===
+
+**Performance Analysis Features:**
+- **Cycle-Accurate Timing**: Nanosecond resolution timing measurement
+- **Statistical Analysis**: Min/max/average calculations with standard deviation
+- **Trend Analysis**: Performance trend tracking over configurable time windows
+- **Threshold Monitoring**: Configurable performance threshold alerts
+
+==== System-Wide Error Detection and Diagnostics
+
+**Enhanced Error Detection Framework:**
+
+The debug system provides comprehensive error detection across all system components:
+
+**Error Classification Matrix:**
+
+[cols="2,2,2,3", options="header"]
+|===
+|Error Category |Detection Method |System Scope |Debug Capabilities
+
+|**Hardware Errors** |ECC, parity, CRC |Memory, bus, peripherals |Error injection, fault isolation, recovery testing
+|**Protocol Errors** |State machines, timeouts |Bus matrix, peripherals |Protocol analysis, timing verification
+|**Performance Errors** |Threshold monitoring |CPU, cache, memory |Performance profiling, bottleneck analysis
+|**Power Errors** |Voltage monitoring |System-wide |Power profiling, efficiency analysis
+|===
+
+**Advanced Diagnostic Tools:**
+- **Error Injection**: Controllable error injection for system resilience testing
+- **Fault Isolation**: Automatic fault localization with component-level granularity
+- **Recovery Testing**: Automated recovery mechanism verification
+- **System Health Monitoring**: Continuous system health assessment with predictive analysis
+
+==== Debug Integration with Bus Matrix
+
+**Debug Master Bus Interface:**
+- **Priority Level**: Lowest priority to minimize system impact during debugging
+- **Access Capabilities**: Full system access including memory, peripherals, and internal registers
+- **Transaction Types**: Read, write, burst transfers with debug-specific commands
+- **Error Handling**: Comprehensive error detection with debug-specific error codes
+
+**Non-Intrusive Debugging:**
+- **Shadow Registers**: Debug register access without affecting system state
+- **Atomic Operations**: Debug operations complete atomically to prevent system disruption
+- **Background Operation**: Debug operations execute in background without blocking system
+- **System Checkpoint**: Ability to save/restore complete system state for debugging
+
+==== Simulation Environment
+==== Testbench Structure
+
+[system, verilog]
+  ----
+  module vtx1_tb;
+    // Clock generation
+    reg clk;
+    initial begin
+      clk = 0;
+      forever #5 clk = ~clk;
+    end
+
+    // Reset generation
+    reg rst_n;
+    initial begin
+      rst_n = 0;
+      #100 rst_n = 1;
+    end
+
+    // DUT instantiation
+    vtx1_top dut (
+      .clk(clk),
+      .rst_n(rst_n),
+      // ... other ports
+    );
+
+    // Test sequence
+    initial begin
+      // Test sequence here
+    end
+  endmodule
+  ----
+
+- Verification Methodology
+- Unit testing framework
+- Test case organization
+- Coverage collection
+- Results analysis
+
+==== Debug Environment
+
+JTAG Configuration:
+
+JTAG Interface:
+- TCK: 25MHz max
+- TMS: Pull-up required
+- TDI: Pull-up required
+- TDO: 3-state output
+- TRST: Optional
+
+Debug Tools:
+- GDB configuration
+- Trace setup
+- Performance profiling
+- Memory inspection
+
+==== Verification Methodology
+
+   Formal Verification:
+
+- Property Checking
+- Safety properties
+- Liveness properties
+- Protocol compliance
+- Model Checking
+- State space exploration
+- Deadlock detection
+- Reachability analysis
+- Simulation Framework
+
+----
+Test Environment:
+├── Unit Tests
+│   ├── Component verification
+│   └── Interface testing
+├── System Tests
+│   ├── Integration testing
+│   └── Performance testing
+└── Power Tests
+    ├── Static power
+    └── Dynamic power
+----
+
+==== Test Coverage Requirements
+
+- Functional Coverage
+- Instruction Coverage: 100%
+- Register Coverage: 100%
+- Memory Coverage: 100%
+- Peripheral Coverage: 95%
+- Structural Coverage
+- Line Coverage: >95%
+- Branch Coverage: >90%
+- Expression Coverage: >90%
+- Toggle Coverage: >85%
+
+==== Performance Validation
+
+- Timing Validation
+- Setup/Hold: ±0.5ns margin
+- Clock: 100MHz ±0.1%
+- Path: 10ns max delay
+- Interface: 25MHz max
+- Power Validation
+- Power consumption: See Power Consumption Specifications for complete dual-voltage specifications (3.3V/5.0V)
+- Debug domain specific: 4mA active, 1mA sleep per voltage level

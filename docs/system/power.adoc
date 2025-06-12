@@ -1,0 +1,551 @@
+=== Power Consumption Specifications
+
+**Authoritative Definition**: This section provides the complete specification for power consumption used throughout the VTX1 SoC. All other references in the documentation refer to this definition.
+
+==== Dual Voltage Operation
+
+**Supported Supply Voltages:**
+
+[cols="2,2,2,2,2"]
+|===
+|Supply Voltage |Operating Range |Active Current |Sleep Current |Deep Sleep Current
+
+|**3.3V ±5%** |3.1V to 3.5V |135mA |13mA |1.8mA
+|**5.0V ±5%** |4.5V to 5.5V |150mA |15mA |2.0mA
+|===
+
+**Voltage Selection:**
+- **3.3V Operation:** Lower power consumption, compatible with modern I/O standards
+- **5.0V Operation:** Maximum performance, optimal ternary logic margins
+- **Level Translation:** Automatic internal level shifting for 3.3V operation
+- **Detection:** Hardware voltage detection and configuration
+
+==== Power States and Consumption
+
+**Complete Power State Matrix:**
+
+[cols="2,2,2,2,2,2"]
+|===
+|Power State |3.3V Current |3.3V Power |5.0V Current |5.0V Power |Description
+
+|**Active Mode** |135mA |445mW |150mA |750mW |Full operation @ 100MHz
+|**Sleep Mode** |13mA |43mW |15mA |75mW |Clock gated, state retained
+|**Deep Sleep** |1.8mA |6mW |2.0mA |10mW |Power gated, minimal retention
+|**Power Off** |<1μA |<3μW |<1μA |<5μW |Complete shutdown
+|===
+
+**Power State Transitions:**
+- Active to Sleep: 12 cycles (120ns @ 100MHz)
+- Sleep to Active: 8 cycles (80ns @ 100MHz)  
+- Active to Deep Sleep: 16 cycles (160ns @ 100MHz)
+- Deep Sleep to Active: 24 cycles (240ns @ 100MHz)
+- Power Down to Off: 100μs
+
+==== Per-Domain Power Distribution
+
+**3.3V Operation:**
+
+[cols="2,2,2,2,2"]
+|===
+|Power Domain |Active Current |Sleep Current |Voltage |Power Gating
+
+|**Core Domain** |72mA |5mA |3.3V ±5% |Sleep mode support
+|**Memory Domain** |36mA |3mA |3.3V ±5% |Retention mode  
+|**I/O Domain** |18mA |1mA |3.3V ±5% |Per-peripheral gating
+|**Analog Domain** |5mA |3mA |3.3V ±2% |Limited (clocks always-on)
+|**Debug Domain** |4mA |1mA |3.3V ±5% |Deep sleep gating only
+|===
+
+**5.0V Operation:**
+
+[cols="2,2,2,2,2"]
+|===
+|Power Domain |Active Current |Sleep Current |Voltage |Power Gating
+
+|**Core Domain** |80mA |6mA |5.0V ±5% |Sleep mode support
+|**Memory Domain** |40mA |3mA |5.0V ±5% |Retention mode
+|**I/O Domain** |20mA |1mA |5.0V ±5% |Per-peripheral gating  
+|**Analog Domain** |6mA |4mA |5.0V ±2% |Limited (clocks always-on)
+|**Debug Domain** |4mA |1mA |5.0V ±5% |Deep sleep gating only
+|===
+
+==== Brown-out Protection and Voltage Monitoring
+
+**3.3V Brown-out Thresholds:**
+- Brown-out threshold: 3.0V
+- Power-off threshold: 2.7V
+- Hysteresis: 0.2V
+- Detection time: 1μs
+- Recovery time: 8 cycles
+
+**5.0V Brown-out Thresholds:**
+- Brown-out threshold: 4.2V  
+- Power-off threshold: 3.0V
+- Hysteresis: 0.3V
+- Detection time: 1μs
+- Recovery time: 8 cycles
+
+**Voltage Monitoring:**
+- Automatic voltage detection on power-up
+- Real-time supply monitoring during operation
+- Voltage change notification to software
+- Emergency shutdown on critical under-voltage
+
+=== Power Management System
+
+1. **Power Sequencing**
+   - Power-Up Sequence
+     - VCC rise time (t_rise): 100μs maximum
+     - Voltage detection and configuration: 2 cycles
+     - Oscillator startup (t_osc_stable): 1ms
+     - Reset duration: 8 cycles  
+     - Total power-up time: 1.1ms + 10 cycles
+   - Power-Down Sequence
+     - Clock stop time (t_clock_stop): 4 cycles
+     - State save time (t_state_save): 8 cycles
+     - Oscillator stop time (t_osc_stop): 1ms
+     - VCC fall time (t_fall): 100μs maximum
+     - Total power-down time: 1.1ms + 12 cycles
+
+2. **Power Management Features**
+
+   - Dynamic frequency scaling
+   - Clock gating per domain
+   - Power gating for sleep modes
+   - State retention in sleep modes
+   - Wake-up sources
+   - Power monitoring
+   - Thermal protection
+
+== Bus Architecture and Interconnects
+
+The VTX1 SoC implements a hierarchical bus architecture optimized for ternary operations and VLIW execution requirements. The interconnect system balances performance, power, and area constraints while supporting the unique requirements of balanced ternary logic.
+
+=== Bus Architecture Overview
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph MASTERS["Bus Masters"]
+        CPU["CPU/TCU<br/>96-bit VLIW"]
+        DMA["DMA Controller<br/>64-bit transfers"]
+        DBG["Debug/JTAG<br/>32-bit access"]
+    end
+    
+    subgraph CORE_BUS["Core Bus (TCU-CB)<br/>96-bit @ 100MHz"]
+        ARB_CORE["Priority Arbitration<br/>Fixed + Round Robin"]
+        XBAR_CORE["Crossbar Switch<br/>3×3 Matrix"]
+    end
+    
+    subgraph BRIDGES["Bus Bridges"]
+        BRIDGE_MEM["Memory Bridge<br/>96→64 bit"]
+        BRIDGE_PERI["Peripheral Bridge<br/>32→32 bit"]
+        BRIDGE_DBG["Debug Bridge<br/>32→32 bit"]
+    end
+    
+    subgraph MEM_BUS["Memory Bus (MEM-Bus)<br/>64-bit @ 100MHz"]
+        ARB_MEM["Weighted Round Robin<br/>CPU:70% DMA:20% DBG:10%"]
+        XBAR_MEM["Memory Crossbar<br/>3×4 Matrix"]
+    end
+    
+    subgraph PERI_BUS["Peripheral Bus (PERI-Bus)<br/>32-bit @ 50MHz"]
+        ARB_PERI["Simple Round Robin"]
+        BRIDGE_CLK["Clock Domain Bridge<br/>100MHz→50MHz"]
+    end
+    
+    subgraph DBG_BUS["Debug Bus (DBG-Bus)<br/>32-bit @ 25MHz"]
+        CDC_DBG["Clock Domain Crossing<br/>100MHz→25MHz"]
+        TAP["JTAG TAP Controller"]
+    end
+    
+    subgraph SLAVES["Bus Slaves"]
+        subgraph MEM_SLAVES["Memory Subsystem"]
+            L1_ICACHE["L1 I-Cache<br/>8KB"]
+            L1_DCACHE["L1 D-Cache<br/>8KB"]
+            RAM["Internal RAM<br/>144KB"]
+            FLASH["Internal Flash<br/>432KB"]
+        end
+        
+        subgraph PERI_SLAVES["Peripherals"]
+            GPIO["GPIO Controller"]
+            UART["UART"]
+            SPI["SPI Controller"]
+            I2C["I2C Controller"]
+            TIMERS["System Timers"]
+            INTC["Interrupt Controller"]
+        end
+        
+        subgraph DBG_SLAVES["Debug Components"]
+            TRACE["Trace Buffer"]
+            BKPT["Breakpoint Unit"]
+            WATCH["Watchpoint Unit"]
+            PROF["Performance Counters"]
+        end
+    end
+    
+    %% Bus Connections
+    CPU --> CORE_BUS
+    DMA --> CORE_BUS
+    DBG --> CORE_BUS
+    
+    CORE_BUS --> BRIDGE_MEM
+    CORE_BUS --> BRIDGE_PERI
+    CORE_BUS --> BRIDGE_DBG
+    
+    BRIDGE_MEM --> MEM_BUS
+    MEM_BUS --> MEM_SLAVES
+    
+    BRIDGE_PERI --> PERI_BUS
+    PERI_BUS --> PERI_SLAVES
+    
+    BRIDGE_DBG --> DBG_BUS
+    DBG_BUS --> DBG_SLAVES
+    
+    %% Direct Cache Connections
+    CPU -.->|"Direct Path"| L1_ICACHE
+    CPU -.->|"Direct Path"| L1_DCACHE
+....
+
+=== System Bus Topology
+
+The VTX1 uses a multi-layer bus architecture with the following hierarchy:
+
+1. **Core Bus (TCU-CB)**
+   - Width: 96-bit VLIW instruction + 32-bit data paths
+   - Protocol: Ternary-optimized AXI4-Lite derivative
+   - Clock: 100MHz synchronous
+   - Arbitration: Fixed priority with round-robin for equal priority requests
+   - Masters: TCU Execute Stage, Memory Controller, DMA Controller
+   - Slaves: L1 Cache, Register File, Microcode Unit
+
+2. **Memory Bus (MEM-Bus)**
+   - Width: 64-bit data, 32-bit address
+   - Protocol: Custom ternary-aware memory interface
+   - Clock: 100MHz synchronous with Core Bus
+   - Features: Burst transfer support, ECC interface, Bank interleaving
+   - Arbitration: Weighted round-robin (CPU:70%, DMA:20%, Debug:10%)
+
+3. **Peripheral Bus (PERI-Bus)**
+   - Width: 32-bit data, 16-bit address
+   - Protocol: APB4-compatible for peripheral access
+   - Clock: 50MHz (derived from core clock)
+   - Features: Single-cycle access, error response support
+   - Masters: CPU, DMA Controller
+   - Slaves: GPIO, UART, SPI, I2C, Timers, Interrupt Controller
+
+4. **Debug Bus (DBG-Bus)**
+   - Width: 32-bit data, 16-bit address  
+   - Protocol: JTAG/DAP-based debug interface
+   - Clock: 25MHz asynchronous to core
+   - Features: Non-intrusive access, real-time trace capability
+   - Masters: JTAG Controller, Trace Unit
+   - Slaves: All system components
+
+   
+== Power Distribution Network
+
+The VTX1 power distribution network is designed to provide clean, stable power to all chip components while minimizing IR drop, noise, and electromagnetic interference. The design supports the 5V operation requirement while maintaining compatibility with modern low-power techniques.
+
+=== Power Domain Architecture
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph EXT_PWR["External Power"]
+        VDD_EXT["5V ±5% External Supply"]
+        GND_EXT["Ground Reference"]
+        
+        subgraph FILTER["Input Filtering"]
+            LC_FILT["LC Filter<br/>L=1μH, C=10μF"]
+            BULK_CAP["Bulk Capacitor<br/>100μF Electrolytic"]
+            CMC["Common Mode Choke"]
+        end
+    end
+    
+    subgraph PWR_GRID["On-Chip Power Grid"]
+        subgraph METAL_LAYERS["Metal Layer Distribution"]
+            M6["Metal 6 (Top)<br/>Primary 5V Distribution<br/>50μm wide traces"]
+            M5["Metal 5<br/>Domain Distribution<br/>20μm wide traces"]
+            M4["Metal 4<br/>Local Distribution<br/>10μm wide traces"]
+            M3["Metal 3<br/>Ground Return<br/>20μm wide traces"]
+            M2["Metal 2<br/>Local Ground<br/>10μm wide traces"]
+            M1["Metal 1<br/>Device Connections<br/>1μm wide traces"]
+        end
+        
+        subgraph POWER_DOMAINS["Power Domains"]            
+        subgraph CORE_DOM["Core Domain<br/>VDD_CORE (5V)"]
+                TCU_PWR["TCU: 40mA"]
+                PIPE_PWR["Pipeline: 20mA"]
+                REG_PWR["Register File: 10mA"]
+                CACHE_PWR["L1 Cache: 10mA"]
+                
+                CORE_DECP["Decoupling:<br/>100μF bulk + 1μF ceramic"]
+                CORE_PG["Power Gating:<br/>Sleep mode support"]
+            end
+            
+            subgraph MEM_DOM["Memory Domain<br/>VDD_MEM (5V)"]
+                MEM_CTRL["Memory Controller: 50mA"]
+                MEM_ARR["Memory Arrays: 80mA"]
+                
+                MEM_DECP["Decoupling:<br/>47μF bulk + 0.47μF ceramic"]
+                MEM_PG["Power Gating:<br/>Retention mode"]
+            end
+            
+            subgraph IO_DOM["I/O Domain<br/>VDD_IO (5V)"]
+                GPIO_PWR["GPIO: 20mA"]
+                COMM_PWR["Communication: 30mA"]
+                
+                IO_DECP["Decoupling:<br/>22μF bulk + 0.22μF ceramic"]
+                IO_PG["Power Gating:<br/>Per-peripheral"]
+            end
+            
+            subgraph ANA_DOM["Analog Domain<br/>VDD_ANA (5V ±2%)"]
+                PLL_PWR["PLL: 10mA"]
+                OSC_PWR["Oscillator: 3mA"]
+                REF_PWR["References: 2mA"]
+                
+                ANA_DECP["Decoupling:<br/>10μF tantalum + 0.1μF ceramic"]
+                ANA_FILT["Ferrite Beads + LC Filters"]
+            end
+            
+            subgraph DBG_DOM["Debug Domain<br/>VDD_DBG (5V)"]
+                JTAG_PWR["JTAG: 8mA"]
+                TRACE_PWR["Trace: 2mA"]
+                
+                DBG_DECP["Decoupling:<br/>10μF + 0.1μF ceramic"]
+                DBG_PG["Power Gating:<br/>Deep sleep only"]
+            end
+        end
+        
+        subgraph PWR_MGMT["Power Management"]
+            PMU["Power Management Unit"]
+            PWR_SW["Power Switches<br/>PMOS Headers<br/>NMOS Footers"]
+            VOLT_MON["Voltage Monitoring<br/>Brown-out Detection"]
+            TEMP_MON["Temperature Monitoring<br/>Thermal Protection"]
+        end
+    end
+    
+    subgraph PACKAGE_DECP["Package-Level Decoupling"]
+        HF_DECP["High-Freq Decoupling<br/>0.1μF-1μF X7R<br/>8 caps per domain"]
+        MF_DECP["Mid-Freq Decoupling<br/>1μF-10μF X5R<br/>4 caps per domain"]
+        LF_DECP["Low-Freq Decoupling<br/>10μF-100μF Electrolytic<br/>2 caps per domain"]
+    end
+    
+    subgraph EMC_MEAS["EMC Measures"]
+        GUARD_RINGS["Guard Rings<br/>Analog isolation"]
+        GROUND_PLANE["Solid Ground Plane<br/>Via stitching every 100μm"]
+        SS_CLOCK["Spread Spectrum<br/>±0.5% modulation"]
+        EDGE_CTRL["Edge Rate Control<br/><1V/ns transitions"]
+    end
+    
+    %% Power Flow Connections
+    VDD_EXT --> FILTER
+    FILTER --> PWR_GRID
+    PWR_GRID --> POWER_DOMAINS
+    PWR_MGMT --> PWR_SW
+    PWR_SW --> POWER_DOMAINS
+    
+    %% External Decoupling
+    VDD_EXT --> PACKAGE_DECP
+    PACKAGE_DECP --> PWR_GRID
+    
+    %% EMC Integration
+    PWR_GRID --> EMC_MEAS
+    POWER_DOMAINS --> EMC_MEAS
+....
+
+**Primary Power Domains:**
+
+1. **Core Domain (VDD_CORE):** 5.0V ±5%
+   - Supplies: TCU, Pipeline, Register File, L1 Cache
+   - Current: 80mA active, 6mA sleep
+   - Power gating: Supported for sleep modes
+   - Decoupling: 100μF bulk + 1μF ceramic per power pin
+
+2. **Memory Domain (VDD_MEM):** 5.0V ±5%  
+   - Supplies: Memory Controller, Cache Tags, Memory Arrays
+   - Current: 40mA active, 3mA sleep
+   - Power gating: Retention mode for cache data
+   - Decoupling: 47μF bulk + 0.47μF ceramic per power pin
+
+3. **I/O Domain (VDD_IO):** 5.0V ±5%
+   - Supplies: GPIO, Communication interfaces, I/O buffers
+   - Current: 20mA active, 1mA sleep
+   - Power gating: Per-peripheral gating available
+   - Decoupling: 22μF bulk + 0.22μF ceramic per power pin
+
+4. **Analog Domain (VDD_ANA):** 5.0V ±2%
+   - Supplies: PLL, Oscillator, Analog references, Level converters
+   - Current: 6mA active, 4mA sleep
+   - Power gating: Limited (clock generation always-on)
+   - Decoupling: 10μF tantalum + 0.1μF ceramic + ferrite beads
+
+5. **Debug Domain (VDD_DBG):** 5.0V ±5%
+   - Supplies: JTAG, Debug logic, Trace buffers
+   - Current: 4mA active, 1mA standby
+   - Power gating: Supported in deep sleep only
+   - Decoupling: 10μF ceramic + 0.1μF ceramic
+
+=== Power Grid Design
+
+==== Grid Topology
+
+**Hierarchical Power Grid:**
+- **Level 1 (Primary):** 50μm wide copper traces, 5V backbone distribution
+- **Level 2 (Secondary):** 20μm wide copper traces, domain-specific distribution  
+- **Level 3 (Local):** 10μm wide copper traces, functional block supply
+- **Via Arrays:** High-density via connections between metal layers
+
+**Grid Spacing:**
+- Primary grid: 500μm pitch across entire die
+- Secondary grid: 100μm pitch within power domains
+- Local grid: 20μm pitch for fine-grain supply
+
+**Metal Layer Assignment:**
+- **Metal 6 (Top):** Primary 5V distribution, bond pad connections
+- **Metal 5:** Secondary domain distribution, power switching
+- **Metal 4:** Local power distribution, power gating switches
+- **Metal 3:** Return path (GND) distribution
+- **Metal 2:** Local ground distribution
+- **Metal 1:** Device-level power/ground connections
+
+==== IR Drop Analysis
+
+**Design Targets:**
+- Maximum IR drop: <100mV (2% of 5V supply)
+- RMS IR drop: <50mV across typical operating conditions
+- Dynamic IR drop: <150mV during worst-case switching
+
+**Analysis Results:**
+- **Core Domain:** 78mV worst-case, 35mV typical
+- **Memory Domain:** 65mV worst-case, 28mV typical  
+- **I/O Domain:** 45mV worst-case, 20mV typical
+- **Analog Domain:** 25mV worst-case, 12mV typical
+- **Debug Domain:** 30mV worst-case, 15mV typical
+
+**Grid Resistance Analysis:**
+- Primary grid resistance: <1mΩ between any two points
+- Secondary grid resistance: <5mΩ within power domains
+- Local grid resistance: <20mΩ for functional blocks
+- Via resistance: <0.1mΩ per via, with 100+ vias per connection
+
+==== Power Switching and Gating
+
+**Header Switches (PMOS):**
+- Used for VDD power gating in sleep modes
+- Switch resistance: <100Ω when ON  
+- Leakage current: <1nA per switch when OFF
+- Sizing: 10μm/0.18μm minimum, scaled by current requirement
+- Control: Dedicated power management unit
+
+**Footer Switches (NMOS):**
+- Used for ground path gating  
+- Switch resistance: <50Ω when ON
+- Leakage current: <0.5nA per switch when OFF
+- Sizing: 5μm/0.18μm minimum, scaled by current requirement
+- Control: Synchronized with header switches
+
+**Power Gating Domains:**
+1. **TCU Execution Units:** Individual ALU, FPU, SIMD units
+2. **Cache Ways:** Per-way power gating in L1 cache
+3. **Peripheral Blocks:** Per-peripheral power control
+4. **Memory Banks:** 3-way bank power gating
+5. **Debug Functions:** Complete debug subsystem gating
+
+==== Power State Transitions
+
+**Active → Sleep Transition:**
+1. Save critical state to retention registers (2 cycles)
+2. Isolate outputs to prevent glitching (1 cycle)
+3. Assert power gate control signals (1 cycle)  
+4. Disable clocks to power-gated domains (1 cycle)
+5. Switch off power gates (8 cycles settling)
+6. **Total transition time:** 13 cycles + 80ns
+
+**Sleep → Active Transition:**  
+1. Assert power gate enable (1 cycle)
+2. Wait for power stabilization (8 cycles)
+3. Release output isolation (1 cycle)
+4. Enable clocks (1 cycle)
+5. Restore state from retention registers (2 cycles)
+6. **Total transition time:** 13 cycles + 80ns
+
+**Power Gating Efficiency:**
+- Leakage reduction: >99% in power-gated domains
+- Active power reduction: 0% (no dynamic power when gated)
+- Area overhead: <5% for power switching infrastructure
+- Power gating efficiency: >90% power reduction in gated blocks
+
+=== Electromagnetic Compatibility (EMC)
+==== EMI Reduction Techniques
+
+**Power Supply Filtering:**
+- LC filters on each power domain (L=1μH, C=10μF)
+- Common-mode chokes for external power connections
+- Ferrite beads on sensitive analog supplies
+- Ground plane isolation between digital and analog domains
+
+**Clock Distribution EMI:**
+- Spread spectrum clocking: ±0.5% frequency modulation
+- Clock edge rate control: <1V/ns rise/fall times
+- Differential signaling for high-speed clocks
+- Clock domain isolation and filtering
+
+**Package-Level EMI:**
+- Solid ground plane on package substrate
+- Via stitching between ground layers (every 100μm)
+- Guard rings around sensitive analog circuits
+- Controlled impedance for all signal traces
+
+==== EMC Compliance Targets
+
+**Conducted Emissions:**
+- CISPR 25 Class 5 compliance for automotive applications
+- FCC Part 15 Class B for consumer electronics
+- Frequency range: 150kHz - 30MHz
+- Measurement: 50Ω LISN, peak and average detection
+
+**Radiated Emissions:**
+- CISPR 25 Class 5: <40dBμV/m @ 3m (30MHz-1GHz)
+- FCC Part 15 Class B: <40dBμV/m @ 3m (30MHz-1GHz)
+- Measurement: Semi-anechoic chamber, calibrated antennas
+
+**Immunity Requirements:**
+- ESD immunity: ±8kV contact, ±15kV air discharge
+- EFT/burst immunity: ±4kV, 5/50ns pulses
+- Surge immunity: ±2kV line-to-line, ±4kV line-to-ground
+- Conducted immunity: 10V/m @ 80MHz-1GHz
+
+=== Thermal Management
+==== Thermal Design
+
+**Power Dissipation:**
+- Total chip power: 750mW maximum @ 5V, 100MHz
+- Power density: 30mW/mm² average, 75mW/mm² peak (TCU)
+- Junction temperature: 85°C maximum, 25°C typical ambient
+- Thermal resistance: 40°C/W junction-to-ambient (QFP-64)
+
+**Thermal Distribution:**
+- Core domain: 400mW (53% of total)
+- Memory domain: 200mW (27% of total)
+- I/O domain: 100mW (13% of total)
+- Analog domain: 30mW (4% of total)
+- Debug domain: 20mW (3% of total)
+
+**Cooling Requirements:**
+- Natural convection: Adequate for typical operation
+- Forced convection: Recommended for sustained high-performance operation
+- Heat sink: Optional, 20°C/W thermal resistance
+- Thermal interface material: Optional, <0.5°C·cm²/W

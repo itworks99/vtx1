@@ -1,0 +1,23 @@
+=== System Performance Monitoring
+
+**Comprehensive Performance Metrics:**
+
+The VTX1 provides extensive performance monitoring capabilities:
+
+**System-Level Metrics:**
+
+[cols="2,2,3", options="header"]
+|===
+|Metric Category |Measurement Scope |Implementation Features
+
+|**Bus Performance** |Bus matrix utilization |Transaction counting, latency measurement, bandwidth analysis
+|**CPU Performance** |Pipeline efficiency |Instruction throughput, hazard analysis, microcode utilization
+|**Memory Performance** |Cache and memory access |Hit/miss ratios, access patterns, bandwidth utilization
+|**Peripheral Performance** |I/O operations |Transfer rates, error rates, utilization analysis
+|===
+
+**Real-Time Monitoring:**
+- **Hardware Counters**: 32-bit performance counters with overflow protection
+- **Sampling Windows**: Configurable measurement periods for trend analysis
+- **Threshold Alerts**: Configurable performance threshold monitoring
+- **Debug Integration**: Performance data available through debug interface

@@ -1,0 +1,6 @@
+== Addendums
+include::addendums/glossary.adoc[]
+include::addendums/instructions.adoc[]
+include::addendums/microcode.adoc[]
+include::addendums/microcode_implementation.adoc[]
+include::addendums/pins.adoc[]

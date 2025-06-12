@@ -1,0 +1,763 @@
+== Enhanced Memory System Architecture
+
+=== Integrated Memory Subsystem with Bus Matrix
+
+The VTX1 memory subsystem implements a sophisticated architecture integrated with the multi-master bus matrix system. The design uses standardized 36-bit ternary interfaces with 288-bit cache lines optimized for balanced ternary operations and VLIW instruction execution.
+
+==== Memory System Integration Architecture
+
+**Bus Matrix Integration:**
+
+The memory subsystem integrates seamlessly with the enhanced bus matrix through standardized VTX1 interfaces:
+
+[cols="2,2,2,3", options="header"]
+|===
+|Interface |Data Width |Purpose |Implementation Features
+
+|**CPU Memory Interface** |36-bit ternary |Direct CPU access |Pipeline integration, burst support, error reporting
+|**Cache Line Interface** |288-bit (8 words) |Cache line transfers |Efficient cache fill/writeback, MESI protocol support
+|**DMA Interface** |36-bit ternary |DMA controller access |High-bandwidth transfers, peripheral data movement
+|**Debug Interface** |36-bit ternary |Debug system access |Non-intrusive memory inspection, breakpoint support
+|===
+
+**Standardized Interface Implementation:**
+
+All memory interfaces implement the VTX1 standardized memory interface:
+
+[source,verilog]
+----
+// VTX1 Memory Interface Standard - From vtx1_interfaces.v
+input  wire                         req,        // Request active
+input  wire                         wr,         // Write enable (1=write, 0=read)
+input  wire [1:0]                   size,       // Transfer size (00=byte, 01=word, 10=dword)
+input  wire [`VTX1_ADDR_WIDTH-1:0] addr,       // 36-bit ternary address
+input  wire [`VTX1_WORD_WIDTH-1:0] wdata,      // 36-bit ternary write data
+output wire [`VTX1_WORD_WIDTH-1:0] rdata,      // 36-bit ternary read data
+output wire                         ready,      // Operation complete
+output wire                         error,      // Error occurred
+output wire [3:0]                   error_code, // Specific error code
+output wire                         timeout,    // Operation timeout
+input  wire                         error_clear // Clear error state
+----
+
+**Enhanced Cache Interface:**
+
+Cache operations use the specialized 288-bit cache line interface for optimal performance:
+
+[source,verilog]
+----
+// VTX1 Cache Interface Standard - 288-bit cache lines
+input  wire                               req,         // Cache line request
+input  wire                               wr,          // Write enable (0=read, 1=write)
+input  wire [`VTX1_CACHE_ADDR_WIDTH-1:0] addr,        // Cache line address
+input  wire [`VTX1_CACHE_LINE_WIDTH-1:0] wdata,       // 288-bit cache line data
+output wire [`VTX1_CACHE_LINE_WIDTH-1:0] rdata,       // 288-bit cache line data
+output wire                               ready,       // Cache operation complete
+output wire                               hit,         // Cache hit indication
+output wire                               miss,        // Cache miss indication
+output wire                               dirty,       // Cache line dirty status
+output wire                               error,       // Cache error occurred
+output wire [3:0]                         error_code,  // Specific error classification
+----
+
+==== Advanced Memory Controller Implementation
+
+**Standardized Memory Controller Architecture:**
+
+The memory controller implements comprehensive interface standardization with advanced features:
+
+**Interface Capabilities:**
+- **36-bit Ternary Addressing**: Native ternary address encoding for optimal balanced ternary operations
+- **288-bit Cache Line Support**: Efficient cache line transfers (8 × 36-bit words per line)
+- **Burst Transfer Optimization**: Up to 16-beat bursts for high-bandwidth operations
+- **Error Correction Integration**: ECC support with single-bit correction, double-bit detection
+- **Performance Monitoring**: Real-time bandwidth utilization and latency tracking
+
+**Memory Banking and Interleaving:**
+- **3-Way Interleaving**: Optimal for ternary operations (Bank selection via addr[1:0])
+- **Bank Configuration**: Fixed 3-bank configuration optimized for ternary architecture
+- **Ternary Alignment**: Memory addresses aligned to 3-byte boundaries for efficiency
+- **Bank Switching**: 1-cycle bank selection with concurrent access capability
+
+**VTX1 Memory Interface Implementation:**
+[source,verilog]
+----
+// VTX1 Ternary Memory Controller Interface
+output wire [`VTX1_ADDR_WIDTH-1:0] phy_addr;    // 36-bit ternary address
+output wire [`VTX1_WORD_WIDTH-1:0] phy_wdata;   // 36-bit ternary write data
+output wire                         phy_wr;      // Write enable
+output wire                         phy_req;     // Request active
+input  wire [`VTX1_WORD_WIDTH-1:0] phy_rdata;   // 36-bit ternary read data
+input  wire                         phy_ready;   // Operation ready
+input  wire                         phy_error;   // Error occurred
+// Bank selection (3 banks for ternary optimization)
+output wire [1:0]                   bank_select; // Bank selection (00, 01, 10 for 3 banks)
+----
+
+==== Comprehensive Cache Controller Architecture
+
+**MESI Protocol Implementation:**
+
+The cache controller implements a sophisticated MESI (Modified, Exclusive, Shared, Invalid) coherency protocol:
+
+**Cache States:**
+- **Modified (M)**: Cache line is dirty and exclusively owned
+- **Exclusive (E)**: Cache line is clean and exclusively owned  
+- **Shared (S)**: Cache line is clean and may be shared with other caches
+- **Invalid (I)**: Cache line is not valid
+
+**Cache Configuration:**
+- **L1 Instruction Cache**: 8KB, direct-mapped, 128-bit cache lines
+- **L1 Data Cache**: 8KB, 2-way set associative, 256-bit cache lines  
+- **Unified L2 Cache**: 256KB, 4-way associative, 256-bit cache lines
+- **VTX1 Cache Line Interface**: 288-bit standardized interface (8 × 36-bit words)
+- **Replacement Policy**: LRU (L1 D-Cache, L2), direct-mapped (L1 I-Cache)
+
+**Advanced Cache Features:**
+- **Write-Through/Write-Back**: Configurable write policies per cache level
+- **Cache Locking**: Critical code/data locking capability
+- **Performance Counters**: Hit/miss ratios, access patterns, bandwidth utilization
+- **Coherency Bus**: Snooping capability for multi-core configurations
+- **Prefetching**: Intelligent prefetch engine with pattern recognition
+
+==== Cache Interface Specification
+[source,verilog]
+----
+// VTX1 Cache Interface Standard - 288-bit interface with local cache line sizes
+input  wire                               req,        // Cache line request
+input  wire                               wr,         // Write enable (1=write, 0=read)
+input  wire [1:0]                         size,       // Transfer size (00=byte, 01=word, 10=dword)
+input  wire [`VTX1_ADDR_WIDTH-1:0]       addr,       // Address
+input  wire [`VTX1_CACHE_LINE_WIDTH-1:0] wdata,      // 288-bit VTX1 cache line interface
+output wire [`VTX1_CACHE_LINE_WIDTH-1:0] rdata,      // 288-bit VTX1 cache line interface
+output wire                               hit,        // Cache hit
+output wire                               ready,      // Operation ready
+output wire                               error,      // Error occurred
+output wire [3:0]                         error_code, // Specific error code
+output wire                               timeout,    // Cache operation timeout
+input  wire                               error_clear,// Clear error state
+output wire [31:0]                        hit_count,  // Cache hit counter
+output wire [31:0]                        miss_count  // Cache miss counter
+----
+
+**Note:** The VTX1 uses a standardized 288-bit cache line interface (`VTX1_CACHE_LINE_WIDTH = 288`) for all cache operations, while individual cache levels may use different internal line sizes (L1 I-Cache: 128-bit, L1 D-Cache: 256-bit, L2: 256-bit) that are converted to/from the standard interface.
+
+==== Cache Architecture Overview
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph CPU_CORE["CPU Core"]
+        FETCH["Instruction Fetch"]
+        DECODE["VLIW Decoder"]
+        EXEC["TCU Execute"]
+        LOAD_STORE["Load/Store Unit"]
+    end
+    
+    subgraph L1_CACHE["L1 Cache Subsystem"]
+        subgraph I_CACHE["L1 Instruction Cache (8KB)"]
+            I_CACHE_CTRL["I-Cache Controller"]
+            subgraph I_CACHE_STRUCT["Cache Structure"]
+                I_TAG_RAM["Tag RAM (512×18-bit)"]
+                I_DATA_RAM["Data RAM (512×128-bit)"]
+                I_VALID["Valid Bits (512)"]
+                I_PARITY["Parity Bits"]
+            end
+            I_REPLACEMENT["Replacement Logic<br/>Direct-Mapped"]
+            I_PREFETCH["Prefetch Logic<br/>Sequential + Branch"]
+        end
+        
+        subgraph D_CACHE["L1 Data Cache (8KB)"]
+            D_CACHE_CTRL["D-Cache Controller"]
+            subgraph D_CACHE_STRUCT["Cache Structure"]
+                D_TAG_RAM["Tag RAM (256×20-bit)"]
+                D_DATA_RAM["Data RAM (256×256-bit)"]
+                D_VALID["Valid Bits (256)"]
+                D_DIRTY["Dirty Bits (256)"]
+                D_LRU["LRU Bits (256×2-bit)"]
+            end
+            D_REPLACEMENT["Replacement Logic<br/>2-Way Set-Associative LRU"]
+            D_WRITEBACK["Write-back Logic"]
+        end
+        
+        subgraph COHERENCY["Cache Coherency"]
+            SNOOP["Snoop Controller"]
+            MESI["MESI Protocol Logic"]
+            INVALIDATE["Invalidation Queue"]
+        end
+    end
+    
+    subgraph MEM_INTERFACE["Memory Interface"]
+        MEM_CTRL["Memory Controller"]
+        BUS_INTERFACE["Bus Interface Unit"]
+        MISS_HANDLER["Miss Handling Unit"]
+    end
+    
+    %% Connections
+    FETCH --> I_CACHE_CTRL
+    LOAD_STORE --> D_CACHE_CTRL
+    
+    I_CACHE_CTRL --> I_CACHE_STRUCT
+    I_CACHE_CTRL --> I_REPLACEMENT
+    I_CACHE_CTRL --> I_PREFETCH
+    
+    D_CACHE_CTRL --> D_CACHE_STRUCT
+    D_CACHE_CTRL --> D_REPLACEMENT
+    D_CACHE_CTRL --> D_WRITEBACK
+    
+    I_CACHE_CTRL <--> COHERENCY
+    D_CACHE_CTRL <--> COHERENCY
+    
+    L1_CACHE <--> MEM_INTERFACE
+....
+
+==== L1 Instruction Cache Specification
+
+**Cache Organization:**
+- **Size:** 8KB total (7KB regular + 1KB microcode dedicated)
+- **Line Size:** 128 bits (4 VLIW instructions or 16 bytes)
+- **Associativity:** Direct-mapped (1-way)
+- **Sets:** 512 sets (8KB ÷ 16 bytes per line)
+- **Address Mapping:** Physical address bits [12:4] select set
+
+**Cache Structure:**
+- **Tag Array:** 512 entries × 18 bits (16-bit tag + 1 valid + 1 parity)
+- **Data Array:** 512 entries × 128 bits (VLIW instruction width)
+- **Hit Detection:** Single cycle tag comparison
+- **Access Latency:** 1 cycle for hit, 8 cycles for miss
+
+**Replacement Policy:**
+- **Algorithm:** Direct-mapped (no replacement choice)
+- **Allocation:** Read allocation on miss
+- **Write Policy:** Write-through to L2/Memory
+- **Prefetching:** Sequential prefetch + taken branch target prefetch
+
+**Performance Characteristics:**
+- **Hit Rate:** >95% for typical workloads
+- **Miss Penalty:** 8 cycles to main memory
+- **Throughput:** 1 instruction fetch per cycle on hit
+- **Power:** 2mW active, 0.2mW standby
+
+==== L1 Data Cache Specification
+
+**Cache Organization:**
+- **Size:** 8KB
+- **Line Size:** 256 bits (32 bytes, ternary-aligned)
+- **Associativity:** 2-way set-associative
+- **Sets:** 128 sets (8KB ÷ 2 ways ÷ 32 bytes per line)
+- **Address Mapping:** Physical address bits [12:5] select set
+
+**Cache Structure:**
+- **Tag Array:** 256 entries × 20 bits per way (17-bit tag + 1 valid + 1 dirty + 1 parity)
+- **Data Array:** 256 entries × 256 bits per way
+- **LRU Array:** 128 entries × 2 bits (per set)
+- **Access Latency:** 1 cycle for hit, 8-12 cycles for miss
+
+**Replacement Policy:**
+- **Algorithm:** Least Recently Used (LRU) per set
+- **Allocation:** Write-allocate on write miss, read-allocate on read miss
+- **Write Policy:** Write-back with dirty bit tracking
+- **Victim Buffer:** 4-entry victim cache for recently evicted lines
+
+**Coherency Protocol:**
+- **Protocol:** Modified MESI (MOESI without Owned state)
+- **States:** Modified, Exclusive, Shared, Invalid
+- **Snooping:** Bus snooping for external coherency
+- **Invalidation:** Precise invalidation with acknowledgment
+
+**Write-Back Buffer:**
+- **Depth:** 4 entries for pending write-backs
+- **Merging:** Write combining for same cache line
+- **Priority:** Write-back has lower priority than demand requests
+
+==== Cache Performance Metrics
+
+**Hit Rate Analysis:**
+- **Instruction Cache Hit Rate:** 96-98% typical, >95% guaranteed
+- **Data Cache Hit Rate:** 93-96% typical, >90% guaranteed
+- **Combined Hit Rate:** 95% average across typical workloads
+- **Miss Rate Breakdown:** 60% compulsory, 25% capacity, 15% conflict
+
+**Latency Breakdown:**
+- **Cache Hit:** 1 cycle (10ns @ 100MHz)
+- **Cache Miss to RAM:** 8 cycles (80ns @ 100MHz)
+- **Cache Miss to Flash:** 12 cycles (120ns @ 100MHz)
+- **Write-back Latency:** 4 cycles (40ns @ 100MHz)
+
+**Bandwidth Utilization:**
+- **Peak Read Bandwidth:** 1.6GB/s (128-bit × 100MHz)
+- **Peak Write Bandwidth:** 3.2GB/s (256-bit × 100MHz)
+- **Sustained Bandwidth:** 85% of peak under typical load
+- **Bus Utilization:** <50% average, <80% peak
+
+=== Memory Architecture
+==== Complete Memory Map
+
+The VTX1 SoC implements a unified 32-bit address space with clear separation between memory regions and peripheral address spaces to prevent conflicts.
+
+**Memory Hierarchy:**
+   - L1 Instruction Cache: 8KB (hardware-transparent)
+   - L1 Data Cache: 8KB (hardware-transparent) 
+   - Internal RAM: 144KB
+   - Internal Flash: 432KB
+
+**Complete Address Map:**
+
+**Complete Address Map:**
+
+[cols="2,2,2,2"]
+|===
+|Address Range |Size |Type |Description
+
+|**Main Memory Space** | | |
+|0x00000000 - 0x0006BFFF |432KB |Flash ROM |Internal Flash Memory
+|0x00000000 - 0x00000FFF |4KB |Flash ROM |Microcode Storage
+|0x00001000 - 0x0006BFFF |428KB |Flash ROM |Application Code Space
+|0x0006C000 - 0x0008FFFF |144KB |SRAM |Internal RAM
+|0x0006C000 - 0x0006CFFF |4KB |SRAM |Microcode Execution RAM
+|0x0006D000 - 0x0008FFFF |140KB |SRAM |Application RAM Space
+|0x00090000 - 0x3FFFFFFF |~1GB |Reserved |Reserved for External Memory
+|**Peripheral Address Space** | | |
+|0x40000000 - 0x4FFFFFFF |256MB |Peripheral |Complete Peripheral Region
+|0x4000_1000 - 0x4000_1FFF |4KB |Peripheral |Interrupt Controller
+|0x4000_2000 - 0x4000_2FFF |4KB |Peripheral |GPIO Controller  
+|0x4000_3000 - 0x4000_3FFF |4KB |Peripheral |UART Controller
+|0x4000_4000 - 0x4000_4FFF |4KB |Peripheral |SPI Controller
+|0x4000_5000 - 0x4000_5FFF |4KB |Peripheral |I2C Controller
+|0x4000_6000 - 0x4000_6FFF |4KB |Peripheral |Timer Controllers
+|0x4000_7000 - 0x4000_7FFF |4KB |Peripheral |DMA Controller
+|0x4000_8000 - 0x4FFFFFFF |~256MB |Reserved |Future Peripheral Expansion
+|**System/Debug Space** | | |
+|0x50000000 - 0x5FFFFFFF |256MB |Reserved |System/Debug Reserved
+|0x60000000 - 0xFFFFFFFF |2.5GB |Reserved |Future Expansion
+|===
+
+**Address Space Conflict Resolution:**
+- L1 Caches are **hardware-transparent** and do not consume address space
+- Cache control is performed through dedicated instructions (CACHE, FLUSH, MEMBAR)
+- No memory-mapped cache control registers exist
+- Clear separation between memory (0x0000_0000-0x3FFF_FFFF) and peripherals (0x4000_0000-0x4FFF_FFFF)
+
+==== Memory Interfaces
+- CPU-Memory Interface
+- DMA-Memory Interface
+- Peripheral-Memory Interface
+- External Memory Interface
+
+=== Memory Timing and Performance
+==== Access Timing
+- Cache Hit: 1 cycle
+- Cache Miss: 8 cycles
+- RAM Read: 2 cycles
+- RAM Write: 1 cycle
+- Flash Read: 3 cycles
+- Flash Write: 100μs
+- Burst Transfer: 4 cycles
+- Bank Switching: 1 cycle
+
+==== Bandwidth
+- CPU to Cache: 400MB/s peak, 300MB/s sustained
+- Cache to RAM: 200MB/s peak, 150MB/s sustained
+- RAM to Flash: 100MB/s peak, 50MB/s sustained
+- DMA to Memory: 100MB/s peak, 50MB/s sustained
+
+==== Performance Metrics
+- Cache Hit Rate: > 95%
+- Cache Miss Rate: < 5%
+- Burst Efficiency: > 80%
+- Memory Access Latency: 2-3 cycles
+
+=== Memory Access Patterns
+==== CPU Access
+- 32-bit aligned access
+- Burst mode support
+- Write-back policy
+- Write-allocate policy
+
+==== DMA Access
+- Burst transfer: 4-16 bytes
+- Scatter-gather support
+- Priority-based arbitration
+- Bandwidth control
+
+==== Peripheral Access
+- Byte/halfword/word access
+- Direct memory access
+- Buffered access
+- Priority-based access
+
+=== Memory Protection and Power Management
+==== Protection Features
+- ECC for RAM (SEC-DED)
+- Parity for cache
+- Address range checking
+- Access permission checking
+- Region-based protection
+- Execute protection
+- Write protection
+
+==== Power Modes
+
+**Active Mode**
+- Full performance
+- All banks active
+- Normal power consumption
+- Zero-wait state access
+
+**Sleep Mode**
+- Clock gating
+- Data retention
+- Reduced power
+- Wake-up latency: 4 cycles
+
+**Deep Sleep Mode**
+- Power gating
+- State retention
+- Minimum power
+- Wake-up latency: 8 cycles
+
+=== Memory Access Sequences
+
+
+=== Memory Controller Architecture
+==== VTX1 Memory Controller Specification
+
+The VTX1 integrates a ternary-optimized memory controller designed for balanced ternary data patterns and efficient 3-way bank interleaving.
+
+**Controller Architecture:**
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph VTX1_MEM_CTRL["VTX1 Memory Controller"]
+        CTRL_CORE["Controller Core"]
+        ADDR_GEN["Address Generator"]
+        CMD_QUEUE["Command Queue (8-deep)"]
+        BANK_MGR["3-Bank Manager"]
+        
+        subgraph TIMING["Timing Control"]
+            TIMING_FSM["Timing FSM"]
+            TERNARY_ALIGN["Ternary Alignment"]
+            ACCESS_SCHED["Access Scheduler"]
+        end
+        
+        subgraph DATA_PATH["Data Path"]
+            WRITE_BUFF["Write Buffer (3×36-bit)"]
+            READ_BUFF["Read Buffer (3×36-bit)"]
+            ECC_CTRL["ECC Controller"]
+            TERNARY_CONV["Ternary Converter"]
+        end
+        
+        subgraph BANK_INTERFACE["3-Bank Interface"]
+            BANK0["Bank 0 Interface"]
+            BANK1["Bank 1 Interface"]
+            BANK2["Bank 2 Interface"]
+        end
+    end
+    
+    subgraph EXTERNAL["External Memory"]
+        MEM_BANK0["Memory Bank 0<br/>48KB"]
+        MEM_BANK1["Memory Bank 1<br/>48KB"]
+        MEM_BANK2["Memory Bank 2<br/>48KB"]
+    end
+    
+    CTRL_CORE --> ADDR_GEN
+    CTRL_CORE --> CMD_QUEUE
+    CTRL_CORE --> BANK_MGR
+    CTRL_CORE --> TIMING
+    
+    TIMING --> DATA_PATH
+    DATA_PATH --> BANK_INTERFACE
+    BANK_INTERFACE --> EXTERNAL
+....
+
+**VTX1 Memory Specifications:**
+- **Type:** VTX1 Ternary SRAM (3-bank configuration)
+- **Data Width:** 36-bit ternary words
+- **Total Capacity:** 144KB (3 × 48KB banks)
+- **Bank Configuration:** 3 banks optimized for ternary operations
+- **Bank Size:** 48KB each (4096 × 36-bit words per bank)
+- **Access Pattern:** Ternary-aligned interleaved access
+
+**Timing Parameters:**
+```
+Access Time: 10ns (single cycle @ 100MHz)
+Bank Switch Time: 1 cycle
+Ternary Word Access: 1 cycle
+Cache Line Fill: 8 cycles (288-bit / 36-bit = 8 words)
+Refresh: Not required (SRAM)
+Standby Current: <1mA per bank
+Active Current: 15mA per bank
+```
+
+**3-Bank Management:**
+- **Bank Selection:** Based on address bits [1:0] → bank mapping (00→Bank0, 01→Bank1, 10→Bank2)
+- **Concurrent Access:** All 3 banks can be accessed simultaneously for different operations
+- **Ternary Optimization:** Address mapping aligned with ternary word boundaries
+- **Load Balancing:** Even distribution of memory accesses across 3 banks
+
+**Memory Access Patterns:**
+- **Sequential Access:** Automatic bank rotation for optimal throughput
+- **Random Access:** Dynamic bank selection based on address
+- **Cache Line Access:** 288-bit cache lines span across banks for parallel access
+- **Power Management:** Individual bank power-down for unused regions
+
+==== Flash Controller Specification
+
+The internal Flash controller provides high-performance access to the 432KB embedded Flash memory with error correction and wear leveling.
+
+**Flash Controller Features:**
+- **Interface:** 128-bit parallel Flash interface
+- **Access Time:** 25ns random access, 10ns sequential
+- **Error Correction:** Single Error Correction, Double Error Detection (SEC-DED)
+- **Wear Leveling:** Dynamic wear leveling with >100K erase cycles
+- **Bad Block Management:** Hardware-assisted bad block replacement
+
+**Flash Memory Organization:**
+```
+Total Capacity: 432KB (54 blocks × 8KB each)
+Block Size: 8KB (32 pages × 256 bytes)
+Page Size: 256 bytes (minimal write unit)
+Sector Size: 4KB (erase unit)
+Spare Area: 16 bytes per page (ECC + metadata)
+```
+
+**Flash Timing Characteristics:**
+```
+Random Read: 25ns
+Sequential Read: 10ns (after first access)
+Page Program: 200μs typical, 700μs maximum
+Block Erase: 1.5ms typical, 3ms maximum
+Chip Erase: 100ms typical
+Data Retention: 20 years minimum
+Endurance: 100K program/erase cycles minimum
+```
+
+**Error Correction Implementation:**
+- **ECC Algorithm:** BCH with 8-bit correction capability
+- **Syndrome Calculation:** Hardware-accelerated syndrome generation
+- **Error Location:** Hardware polynomial root finding
+- **Correction Latency:** 3 cycles for single error, 8 cycles for multiple errors
+
+=== DMA Architecture
+==== DMA Controller Overview
+
+The VTX1 DMA controller provides high-throughput data transfers with minimal CPU intervention, supporting multiple concurrent channels and advanced scatter-gather operations.
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph DMA_SYSTEM["DMA Controller System"]
+        DMA_CORE["DMA Core Controller"]
+        ARB["Channel Arbitrator"]
+        
+        subgraph CHANNELS["DMA Channels (8 total)"]
+            CH0["Channel 0<br/>Memory-to-Memory"]
+            CH1["Channel 1<br/>Memory-to-Peripheral"]
+            CH2["Channel 2<br/>Peripheral-to-Memory"]
+            CH3["Channel 3<br/>UART/SPI"]
+            CH4["Channel 4<br/>ADC/DAC"]
+            CH5["Channel 5<br/>GPIO"]
+            CH6["Channel 6<br/>Crypto Engine"]
+            CH7["Channel 7<br/>Debug/Trace"]
+        end
+        
+        subgraph DESCRIPTORS["Descriptor Management"]
+            DESC_CACHE["Descriptor Cache<br/>(16 entries)"]
+            SG_ENGINE["Scatter-Gather Engine"]
+            LINKED_LIST["Linked List Walker"]
+        end
+        
+        subgraph BUS_INTERFACE["Bus Interface"]
+            READ_ENGINE["Read Engine"]
+            WRITE_ENGINE["Write Engine"]
+            ADDR_GEN["Address Generator"]
+            BURST_CTRL["Burst Controller"]
+        end
+    end
+    
+    subgraph MEMORY_SYSTEM["Memory System"]
+        L1_CACHE["L1 Cache"]
+        MAIN_MEM["Main Memory"]
+        PERIPHERALS["Peripherals"]
+    end
+    
+    DMA_CORE --> ARB
+    ARB --> CHANNELS
+    CHANNELS --> DESCRIPTORS
+    DESCRIPTORS --> BUS_INTERFACE
+    BUS_INTERFACE <--> MEMORY_SYSTEM
+....
+
+**DMA Channel Configuration:**
+
+Each DMA channel supports flexible configuration for various transfer scenarios:
+
+[cols="2,2,2,3", options="header"]
+|===
+|Channel |Type |Bandwidth |Usage
+
+|**Channel 0** |Memory-to-Memory |200MB/s |General purpose transfers, memory copy operations
+|**Channel 1** |Memory-to-Peripheral |100MB/s |UART, SPI, I2C transmit operations
+|**Channel 2** |Peripheral-to-Memory |100MB/s |UART, SPI, I2C receive operations
+|**Channel 3** |Dedicated UART/SPI |80MB/s |High-speed serial communication
+|**Channel 4** |ADC/DAC Support |150MB/s |Analog signal processing (reserved for future)
+|**Channel 5** |GPIO Bulk Operations |50MB/s |GPIO pattern generation and capture
+|**Channel 6** |Crypto Engine Support |120MB/s |Hardware encryption/decryption (reserved)
+|**Channel 7** |Debug/Trace |75MB/s |Non-intrusive debug data capture
+|===
+
+**DMA Channel Configuration Registers:**
+[source,verilog]
+----
+// DMA Channel Configuration Interface
+input  wire [7:0]  dma_channel_select;     // Select active channel (0-7)
+input  wire [`VTX1_ADDR_WIDTH-1:0] dma_src_addr;    // Source address (36-bit ternary)
+input  wire [`VTX1_ADDR_WIDTH-1:0] dma_dest_addr;   // Destination address (36-bit ternary)
+input  wire [15:0] dma_transfer_count;     // Transfer count in words
+input  wire [2:0]  dma_transfer_mode;      // Transfer mode (000=single, 001=burst, 010=block)
+input  wire [1:0]  dma_priority;           // Channel priority (00=low, 11=high)
+input  wire        dma_enable;             // Channel enable
+input  wire        dma_start;              // Start transfer
+output wire        dma_complete;           // Transfer complete
+output wire        dma_error;              // Transfer error
+output wire [3:0]  dma_error_code;         // Specific error code
+----
+
+**Implementation Note:** Current VTX1 implementation provides a simplified single-channel DMA controller as a baseline. The full 8-channel architecture documented above represents the target implementation for Phase 4 development.
+
+=== Flash Memory Management
+==== Advanced Flash Features
+
+**Wear Leveling Implementation:**
+- **Algorithm:** Dynamic wear leveling with background garbage collection
+- **Block Management:** Hardware-assisted bad block detection and replacement
+- **Endurance:** 100,000 program/erase cycles minimum per block
+- **Data Retention:** 20+ years at 85°C junction temperature
+
+**Error Correction Enhanced Implementation:**
+- **Primary ECC:** BCH (8,4) code with 8-bit correction capability
+- **Syndrome Calculation:** 2-cycle hardware syndrome generation
+- **Error Correction Latency:** 
+  - Single-bit errors: 3 cycles correction
+  - Multi-bit errors: 8 cycles correction + retry
+  - Uncorrectable errors: 12 cycles detection + error reporting
+
+**Flash Controller Performance Metrics:**
+* Sequential Read Performance: 45MB/s sustained
+* Random Read Performance: 35MB/s average
+* Program Performance: 12MB/s (page-based)
+* Erase Performance: 8MB/s (block-based)
+* Read Latency: 25ns first access, 10ns sequential
+* Program Latency: 200μs typical, 700μs worst-case
+* Erase Latency: 1.5ms typical, 3ms worst-case
+
+=== Memory System Performance Analysis
+==== Bandwidth Utilization
+
+**Theoretical vs. Achieved Performance:**
+
+[cols="3,2,2,2,2"]
+|===
+|Component |Theoretical BW |Achieved BW |Efficiency |Typical Load
+
+|**CPU-L1 Cache** |3.6GB/s |3.1GB/s |86% |60-75%
+|**L1-L2 Cache** |1.8GB/s |1.5GB/s |83% |45-60%
+|**L2-Main Memory** |800MB/s |650MB/s |81% |30-45%
+|**DMA-Memory** |400MB/s |320MB/s |80% |20-35%
+|**Flash-Memory** |100MB/s |85MB/s |85% |10-20%
+|===
+
+**Performance Optimization Recommendations:**
+* **Cache Line Prefetching:** Implement intelligent prefetch for sequential access patterns
+* **Memory Interleaving:** Utilize 3-way bank interleaving for optimal ternary alignment
+* **Burst Optimization:** Prioritize burst transfers over single-word operations
+* **Write Combining:** Merge consecutive write operations to reduce bus overhead
+
+=== Memory Error Handling and Recovery
+==== Comprehensive Error Management
+
+**Memory Error Classification:**
+* **Correctable Errors:** Single-bit ECC errors, automatically corrected
+* **Uncorrectable Errors:** Multi-bit errors requiring retry or remapping
+* **Timeout Errors:** Memory operations exceeding configured timeout thresholds
+* **Protocol Errors:** Bus protocol violations or invalid access patterns
+
+**Error Recovery Mechanisms:**
+* **Automatic Retry:** Up to 3 retry attempts for transient errors
+* **Bad Block Remapping:** Hardware-assisted remapping for Flash memory failures
+* **Error Logging:** 16-entry error log with timestamp and address information
+* **Graceful Degradation:** System continues operation with reduced performance on partial failures
+
+**Error Reporting Interface:**
+[source,verilog]
+----
+// Memory Error Reporting - Enhanced VTX1 Standard
+output wire [3:0]  mem_error_code;         // Error classification code
+output wire [31:0] mem_error_addr;         // Address where error occurred
+output wire [31:0] mem_error_count;        // Total error count since reset
+output wire [15:0] mem_correctable_count;  // Correctable error count
+output wire [15:0] mem_uncorrectable_count; // Uncorrectable error count
+output wire        mem_error_critical;     // Critical error requiring attention
+input  wire        mem_error_clear;        // Clear error status registers
+----
+
+=== Memory Power Management
+==== Advanced Power Optimization
+
+**Power States and Transitions:**
+* **Active State:** Full performance, all banks active, ~45mW total power
+* **Standby State:** Reduced refresh, data retention, ~15mW power
+* **Sleep State:** Minimal refresh, slow wake-up, ~5mW power
+* **Deep Sleep:** Power-gated with state save, <1mW power
+
+**Dynamic Power Management:**
+* **Adaptive Bank Power:** Unused memory banks automatically enter low-power mode
+* **Frequency Scaling:** Memory clock reduced based on bandwidth utilization
+* **Thermal Management:** Automatic throttling at high junction temperatures
+* **Wake-up Optimization:** Predictive wake-up based on access patterns
+
+**Power Management Configuration:**
+* Default Active Timeout: 10ms (no access → standby)
+* Standby to Sleep Timeout: 100ms
+* Deep Sleep Entry: Manual control only
+* Wake-up Latency: 4 cycles (standby), 12 cycles (sleep), 50 cycles (deep sleep)
+* Power Savings: 70% (standby), 90% (sleep), 98% (deep sleep)
+
+=== Integration with VTX1 Ternary Architecture
+==== Ternary-Optimized Memory Operations
+
+**Ternary Alignment Optimization:**
+* **Address Alignment:** All memory operations aligned to 3-byte boundaries where possible
+* **Bank Selection:** 3-way memory interleaving using ternary address encoding
+* **Cache Line Structure:** 288-bit lines optimized for ternary word boundaries (8 × 36-bit words)
+* **ECC Implementation:** Ternary-aware error correction reducing overhead
+
+**VLIW Integration Benefits:**
+* **Parallel Memory Access:** VLIW instruction slots can trigger independent memory operations
+* **Prefetch Coordination:** Memory controller coordinates with VLIW instruction fetch patterns
+* **Bandwidth Matching:** Memory bandwidth matched to VLIW execution requirements
+
+**Future Enhancement Opportunities:**
+* **Ternary DDR Interface:** Native ternary memory controller for specialized memory devices
+* **Multi-Level Memory:** Integration of ternary-native storage technologies
+* **AI/ML Acceleration:** Memory layout optimized for ternary neural network operations
+

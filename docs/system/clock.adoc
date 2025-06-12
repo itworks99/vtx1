@@ -1,0 +1,861 @@
+=== Clock System Architecture
+
+The VTX1 clock system provides a robust, flexible, and power-efficient clocking infrastructure for the entire ternary system-on-chip. The architecture supports multiple clock domains, dynamic frequency scaling, hierarchical clock gating, and reliable clock domain crossing mechanisms.
+
+==== Clock System Overview
+
+**Key Features:**
+- Multi-domain clock architecture with 5 primary domains
+- Dynamic frequency scaling from 25MHz to 100MHz
+- Hierarchical clock gating for power efficiency
+- Low-jitter PLL with multiple output frequencies
+- Robust clock domain crossing circuits
+- Comprehensive clock quality monitoring
+
+**Architecture Principles:**
+- Minimal clock skew across all domains (<100ps)
+- High clock tree efficiency (>95% gating efficiency)
+- Reliable synchronization between clock domains
+- Low power consumption (<5% of total chip power)
+- Industrial-grade timing specifications
+
+
+==== Clock Architecture Overview
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph CLK_SOURCE["Clock Sources"]
+        XTAL["25MHz Crystal<br/>±50ppm<br/>18pF Load<br/>1ms Startup"]
+        BACKUP["Backup Ring Oscillator<br/>25MHz ±5%<br/>Low Power Mode"]
+    end
+    
+    subgraph PLL_GEN["PLL Generation"]
+        PLL["Phase-Locked Loop<br/>VCO: 400-800MHz<br/>Lock Time: 100μs<br/>Jitter: <50ps RMS"]
+        
+        subgraph PLL_OUT["PLL Outputs"]
+            CLK_400["400MHz VCO"]
+            CLK_200["200MHz (÷2)"]
+            CLK_100["100MHz (÷4)"]
+            CLK_50["50MHz (÷8)"]
+            CLK_25["25MHz (÷16)"]
+        end
+    end
+    
+    subgraph CLK_DIST["Clock Distribution Tree"]
+        subgraph CPU_CLK_TREE["CPU Clock Tree (100MHz)"]
+            CPU_ROOT["Root Buffer<br/>Low Skew Driver"]
+            CPU_L1["Level 1 Buffers<br/>H-Tree Distribution"]
+            CPU_L2["Level 2 Buffers<br/>Load Balancing"]
+            CPU_GATES["Clock Gates<br/>Fine/Coarse Gating"]
+            
+            subgraph CPU_ENDPOINTS["CPU Endpoints"]
+                TCU_CLK["TCU Units"]
+                PIPE_CLK["Pipeline Stages"]
+                REG_CLK["Register File"]
+                L1_CLK["L1 Cache"]
+            end
+        end
+        
+        subgraph MEM_CLK_TREE["Memory Clock Tree (100MHz)"]
+            MEM_ROOT["Root Buffer<br/>Phase Aligned"]
+            MEM_L1["Level 1 Buffers"]
+            MEM_L2["Level 2 Buffers"]
+            MEM_GATES["Clock Gates"]
+            
+            subgraph MEM_ENDPOINTS["Memory Endpoints"]
+                MEM_CTRL_CLK["Memory Controller"]
+                CACHE_TAG_CLK["Cache Tags"]
+                MEM_ARR_CLK["Memory Arrays"]
+                ECC_CLK["ECC Logic"]
+            end
+        end
+        
+        subgraph PERI_CLK_TREE["Peripheral Clock Tree (50MHz)"]
+            PERI_DIV["÷2 Divider<br/>Synchronous"]
+            PERI_ROOT["Root Buffer"]
+            PERI_L1["Level 1 Buffers"]
+            PERI_GATES["Clock Gates<br/>Per-peripheral"]
+            
+            subgraph PERI_ENDPOINTS["Peripheral Endpoints"]
+                GPIO_CLK["GPIO Controller"]
+                UART_CLK["UART"]
+                SPI_CLK["SPI Controller"]
+                I2C_CLK["I2C Controller"]
+                TIMER_CLK["System Timers"]
+                INT_CLK["Interrupt Controller"]
+            end
+        end
+        
+        subgraph DBG_CLK_TREE["Debug Clock Tree (25MHz)"]
+            DBG_DIV["÷4 Divider<br/>Asynchronous"]
+            DBG_ROOT["Root Buffer"]
+            DBG_L1["Level 1 Buffers"]
+            
+            subgraph DBG_ENDPOINTS["Debug Endpoints"]
+                JTAG_CLK["JTAG Controller"]
+                TRACE_CLK["Trace Buffer"]
+                BKPT_CLK["Breakpoints"]
+                PERF_CLK["Performance Counters"]
+            end
+        end
+        
+        subgraph ANA_CLK["Analog Clocks"]
+            ANA_DIST["Analog Distribution<br/>Filtered & Isolated"]
+            ADC_CLK["ADC Clock"]
+            DAC_CLK["DAC Clock"]
+            SER_CLK["Serializer Clocks"]
+        end
+    end
+    
+    subgraph CDC_BLOCKS["Clock Domain Crossing"]
+        subgraph CPU_PERI_CDC["CPU ↔ Peripheral (100→50MHz)"]
+            CP_SYNC["Clock Enable Sync<br/>2:1 Rational"]
+            CP_FIFO["4-entry FIFO<br/>Each Direction"]
+        end
+        
+        subgraph CPU_DBG_CDC["CPU ↔ Debug (100→25MHz)"]
+            CD_ASYNC["Asynchronous Crossing"]
+            CD_FIFO["8-entry FIFO<br/>Gray Code Pointers"]
+            CD_HANDSHAKE["4-phase Handshake"]
+        end
+        
+        subgraph PERI_DBG_CDC["Peripheral ↔ Debug (50→25MHz)"]
+            PD_SYNC["Level Synchronizers<br/>2:1 Rational"]
+            PD_ENABLE["Enable Strobes"]
+        end
+    end
+    
+    subgraph CLK_MGMT["Clock Management"]
+        DFS["Dynamic Frequency Scaling<br/>25-100MHz in 25MHz steps"]
+        CLK_GATE_CTRL["Clock Gating Control<br/>Hierarchical Gating"]
+        SKEW_CTRL["Skew Management<br/>Route Matching ±10%"]
+        DUTY_CTRL["Duty Cycle Control<br/>50% ±5%"]
+    end
+    
+    %% Clock Generation Flow
+    XTAL --> PLL
+    BACKUP -.->|"Failover"| PLL
+    PLL --> PLL_OUT
+    
+    %% Distribution Connections
+    CLK_100 --> CPU_ROOT
+    CLK_100 --> MEM_ROOT
+    CLK_100 --> PERI_DIV
+    CLK_25 --> DBG_ROOT
+    CLK_100 --> ANA_DIST
+    
+    %% CPU Tree
+    CPU_ROOT --> CPU_L1 --> CPU_L2 --> CPU_GATES --> CPU_ENDPOINTS
+    
+    %% Memory Tree  
+    MEM_ROOT --> MEM_L1 --> MEM_L2 --> MEM_GATES --> MEM_ENDPOINTS
+    
+    %% Peripheral Tree
+    PERI_DIV --> PERI_ROOT --> PERI_L1 --> PERI_GATES --> PERI_ENDPOINTS
+    
+    %% Debug Tree
+    DBG_ROOT --> DBG_L1 --> DBG_ENDPOINTS
+    
+    %% Analog Distribution
+    ANA_DIST --> ADC_CLK
+    ANA_DIST --> DAC_CLK
+    ANA_DIST --> SER_CLK
+    
+    %% CDC Connections
+    CPU_ENDPOINTS <--> CP_SYNC
+    PERI_ENDPOINTS <--> CP_SYNC
+    
+    CPU_ENDPOINTS <--> CD_ASYNC
+    DBG_ENDPOINTS <--> CD_ASYNC
+    
+    PERI_ENDPOINTS <--> PD_SYNC
+    DBG_ENDPOINTS <--> PD_SYNC
+    
+    %% Management Connections
+    CLK_MGMT --> CPU_CLK_TREE
+    CLK_MGMT --> MEM_CLK_TREE
+    CLK_MGMT --> PERI_CLK_TREE
+....
+
+==== Clock Domain Architecture
+
+**Primary Clock Domains:**
+
+[cols="2,2,2,3,3", options="header"]
+|===
+|Domain |Frequency |Purpose |Components |Characteristics
+
+|**CPU Domain** |100MHz |Core Processing |TCU, Pipeline, Register File, L1 Cache |High performance, low latency
+|**Memory Domain** |100MHz |Memory System |Memory Controller, Cache Tags, ECC Logic |Phase-aligned with CPU
+|**Peripheral Domain** |50MHz |I/O Controllers |GPIO, UART, SPI, I2C, Timers |Power optimized, rational CDC
+|**Debug Domain** |25MHz |Debug/Test |JTAG, Trace, Breakpoints, Counters |Isolated, always-on capability
+|**Analog Domain** |Variable |Analog Functions |ADC, DAC, Serializers |Low noise, filtered distribution
+|===
+
+**Clock Domain Relationships:**
+- CPU ↔ Memory: Synchronous (1:1 phase-aligned)
+- CPU ↔ Peripheral: Rational synchronous (2:1)
+- CPU ↔ Debug: Asynchronous crossing
+- Peripheral ↔ Debug: Rational synchronous (2:1)
+
+==== Clock Generation and Sources
+
+===== Primary Clock Sources
+
+**Crystal Oscillator (25MHz):**
+- Frequency accuracy: ±50ppm over temperature
+- Load capacitance: 18pF ±1pF
+- Drive level: 100μW nominal
+- Startup time: 1ms maximum
+- Long-term stability: ±5ppm over 10 years
+- Temperature coefficient: ±30ppm over -40°C to +85°C
+
+**Backup Ring Oscillator:**
+- Frequency: 25MHz ±5% (uncalibrated)
+- Low power consumption: <10μA
+- Fast startup: <1μs
+- Automatic failover on crystal failure
+- Calibration capability for improved accuracy
+
+===== Phase-Locked Loop (PLL)
+
+**PLL Specifications:**
+- Input frequency: 25MHz (crystal reference)
+- VCO frequency range: 400MHz - 800MHz
+- Output frequencies: 400MHz, 200MHz, 100MHz, 50MHz, 25MHz
+- Lock time: 100μs maximum from power-on
+- Lock detection: Hardware lock indicator with programmable timeout
+- Phase noise: -120dBc/Hz at 1kHz offset
+- RMS jitter: <50ps (12kHz-20MHz bandwidth)
+
+**PLL Configuration:**
+- Multiplication factors: Software programmable
+- Fast frequency switching: <10μs settling time
+- Low-power mode: VCO shutdown with backup oscillator
+- Clock output enable/disable per domain
+- Spread spectrum capability for EMI reduction
+
+==== Clock Distribution Architecture
+
+===== Clock Tree Design Methodology
+
+**H-Tree Distribution Strategy:**
+- Balanced routing ensures equal path lengths (±5% variation)
+- Minimum clock skew target: <100ps within domain
+- Clock buffer insertion every 2mm of routing
+- Dedicated clock routing layers with shielding
+- Matched impedance traces (50Ω ±10%)
+
+**Buffer Hierarchy:**
+- Root buffers: High-drive strength, low skew
+- Level 1 buffers: H-tree distribution points
+- Level 2 buffers: Load balancing and fan-out
+- Leaf buffers: Final drive to clock gates
+
+**Skew Management:**
+- Route length matching: ±10% variation maximum
+- Buffer sizing: Matched rise/fall times (±20ps)
+- Load balancing: Equal capacitive loading per branch
+- Process compensation: Corner-aware buffer sizing
+- Post-silicon trimming capability
+
+===== Clock Tree Structure
+
+[mermaid]
+....
+flowchart TB
+    subgraph CLK_GEN["Clock Generation"]
+        XTAL["25MHz Crystal<br/>±50ppm accuracy"]
+        PLL["PLL System<br/>VCO: 400-800MHz<br/>Multiple outputs"]
+        BACKUP["Backup Oscillator<br/>25MHz ±5%<br/>Low power"]
+        
+        subgraph CLK_DIST["Clock Distribution"]
+            CLK_100["100MHz Core"]
+            CLK_50["50MHz Peripheral"]
+            CLK_25["25MHz Debug"]
+        end
+    end
+    
+    subgraph CLK_TREES["Clock Distribution Trees"]
+        subgraph CPU_CLK_TREE["CPU Clock Tree (100MHz)"]
+            CPU_ROOT["Root Buffer"]
+            CPU_L1["Level 1 Buffers"]
+            CPU_L2["Level 2 Buffers"]
+            CPU_GATES["Clock Gates"]
+            
+            subgraph CPU_ENDPOINTS["CPU Endpoints"]
+                FETCH_CLK["Fetch Unit"]
+                DECODE_CLK["Decode Unit"]
+                EXEC_CLK["Execute Unit"]
+                WB_CLK["Writeback Unit"]
+                REG_CLK["Register File"]
+            end
+        end
+        
+        subgraph MEM_TREE["Memory Clock Tree (100MHz)"]
+            MEM_BUF["Memory Root Buffer<br/>Phase Aligned to CPU"]
+            MEM_H1["H-Tree Level 1"]
+            MEM_H2["H-Tree Level 2"]
+            MEM_GATE["Memory Clock Gates"]
+            
+            subgraph MEM_LEAVES["Memory Clock Endpoints"]
+                MC_CLK["Memory Controller<br/>DDR3 Interface"]
+                CACHE_CLK["Cache Controller<br/>Unified L1 Management"]
+                ECC_CLK["ECC Logic<br/>Error Correction"]
+                BUS_CLK["Bus Matrix<br/>Multi-master arbitration"]
+            end
+        end
+        
+        subgraph PERI_TREE["Peripheral Clock Tree (50MHz)"]
+            PERI_DIV["÷2 Divider<br/>Synchronous to CPU"]
+            PERI_BUF["Peripheral Root Buffer"]
+            PERI_H1["H-Tree Level 1"]
+            PERI_GATE["Peripheral Clock Gates<br/>Per-device control"]
+            
+            subgraph PERI_LEAVES["Peripheral Clock Endpoints"]
+                GPIO_CLK["GPIO Controller<br/>24-pin enhanced"]
+                UART_CLK["UART Controller<br/>Enhanced with DMA"]
+                SPI_CLK["SPI Controller<br/>Master/Slave modes"]
+                I2C_CLK["I2C Controller<br/>Multi-master support"]
+                DMA_CLK["DMA Controller<br/>8-channel operation"]
+            end
+        end
+        
+        subgraph DBG_TREE["Debug Clock Tree (25MHz)"]
+            DBG_DIV["÷4 Divider<br/>Asynchronous"]
+            DBG_BUF["Debug Root Buffer"]
+            DBG_H1["Debug Distribution"]
+            
+            subgraph DBG_LEAVES["Debug Clock Endpoints"]
+                JTAG_CLK["JTAG Controller<br/>IEEE 1149.1"]
+                TRACE_CLK["Trace Buffer<br/>Real-time capture"]
+                PERF_CLK["Performance Counters<br/>System monitoring"]
+                DEBUG_CLK["Debug Interface<br/>Breakpoints & stepping"]
+            end
+        end
+    end
+    
+    %% Clock flow connections
+    PLL --> ROOT
+    ROOT --> CPU_BUF
+    ROOT --> MEM_BUF
+    ROOT --> PERI_DIV
+    ROOT --> DBG_DIV
+    
+    %% CPU tree hierarchy
+    CPU_BUF --> CPU_H1 --> CPU_H2 --> CPU_GATE --> CPU_LEAVES
+    
+    %% Memory tree hierarchy
+    MEM_BUF --> MEM_H1 --> MEM_H2 --> MEM_GATE --> MEM_LEAVES
+    
+    %% Peripheral tree hierarchy
+    PERI_DIV --> PERI_BUF --> PERI_H1 --> PERI_GATE --> PERI_LEAVES
+    
+    %% Debug tree hierarchy
+    DBG_DIV --> DBG_BUF --> DBG_H1 --> DBG_LEAVES
+....
+
+**Clock Tree Implementation:**
+- **Balanced H-tree distribution** ensures equal path lengths (±5% variation)
+- **Hierarchical buffering** provides proper signal integrity at each level
+- **Domain-specific optimization** with appropriate drive strengths
+- **Clock gating integration** at multiple hierarchy levels
+- **Load balancing** across all distribution points
+
+===== Hierarchical Clock Gating
+
+**Gating Hierarchy Levels:**
+
+[cols="2,2,2,2,2", options="header"]
+|===
+|Level |Granularity |Control |Power Savings |Gating Latency
+
+|**Coarse** |Functional Block |Manual/Software |90-95% |100-200ns
+|**Medium** |Pipeline Stage |Automatic/Hardware |70-85% |20-50ns
+|**Fine** |Register/Latch |Automatic |50-70% |5-10ns
+|**Ultra-Fine** |Individual Flops |Conditional |30-50% |<5ns
+|===
+
+**Clock Gating Features:**
+- Glitch-free enable/disable sequences
+- Automatic dependency tracking
+- Power domain isolation support
+- Debug override capability
+- Gating efficiency monitoring
+
+**Gating Control Logic:**
+- Enable signal synchronization
+- Minimum pulse width guarantee
+- Safe state during transitions
+- Error detection and recovery
+
+===== Dynamic Frequency Scaling (DFS)
+
+**Frequency Scaling Capabilities:**
+
+[cols="2,2,2,2,2", options="header"]
+|===
+|Domain |Base Frequency |Scaling Range |Steps |Settling Time
+
+|**CPU** |100MHz |25-100MHz |25MHz increments |<10μs
+|**Memory** |100MHz |Locked to CPU |1:1 ratio |Same as CPU
+|**Peripheral** |50MHz |CPU ÷ 2 or ÷ 4 |Fixed ratios |<5μs
+|**Debug** |25MHz |Fixed or CPU ÷ 4 |Static/Dynamic |<1μs
+|===
+
+**DFS Implementation:**
+- Software-controlled frequency selection
+- Hardware-assisted voltage scaling coordination
+- Automatic dependency management
+- Performance monitoring integration
+- Power-performance optimization algorithms
+
+**Voltage-Frequency Coordination:**
+- Voltage scaling precedes frequency increases
+- Frequency scaling precedes voltage decreases
+- Hardware voltage monitoring and validation
+- Emergency frequency reduction on voltage droop
+
+==== Clock Domain Crossing (CDC) Architecture
+===== CDC Design Principles
+
+**Synchronization Methodology:**
+- All CDC circuits follow proven design patterns
+- Metastability resolution with >1000 year MTBF
+- Comprehensive simulation and verification
+- Built-in error detection and recovery
+- Performance monitoring and optimization
+
+**CDC Circuit Types:**
+
+[cols="2,2,2,3", options="header"]
+|===
+|CDC Type |Application |Latency |Reliability
+
+|**Two-Flop Sync** |Control signals |2-3 cycles |>1000 year MTBF
+|**FIFO-based** |Data transfer |4-8 cycles |Gray code pointers
+|**Handshake** |Critical control |6-12 cycles |4-phase protocol
+|**Level Sync** |Status signals |1-2 cycles |Edge-free design
+|===
+
+===== Synchronization Circuits Implementation
+
+**Two-Flop Synchronizers:**
+- Input register in source domain for stability
+- Two synchronizing registers in destination domain
+- Reset synchronization: Asynchronous assert, synchronous release
+- Enable signal conditioning for proper setup/hold
+- Metastability detection for debug purposes
+
+**FIFO-Based Crossing:**
+- Dual-clock FIFO with independent read/write domains
+- Gray code pointers for reliable full/empty generation
+- Configurable depth: 4-16 entries based on throughput requirements
+- Almost-full/almost-empty flags for flow control
+- Built-in overflow/underflow protection
+
+**Handshake Protocols:**
+- Four-phase handshaking for critical control transfers
+- Request-acknowledge-complete-idle sequence
+- Configurable timeout detection for error handling
+- Back-pressure support for data flow control
+- Priority-based arbitration for multiple sources
+
+===== Domain Crossing Specifications
+
+**CPU ↔ Memory Domain (100MHz → 100MHz):**
+- Type: Synchronous (same frequency, phase-aligned)
+- Phase relationship: 0° skew target, <50ps actual
+- Latency: 0 cycles additional delay
+- Method: Direct connection with matched clock trees
+- Bandwidth: Full rate (100MHz × 36-bit data width)
+
+**CPU ↔ Peripheral Domain (100MHz → 50MHz):**
+- Type: Rational synchronous (2:1 frequency ratio)
+- Phase relationship: Peripheral clock edge aligned to even CPU edges
+- Latency: 1-2 peripheral clock cycles
+- Method: Clock enable-based synchronization with 4-entry FIFO
+- Bandwidth: 25MHz effective (50% duty cycle)
+- Flow control: Hardware back-pressure and ready signaling
+
+**CPU ↔ Debug Domain (100MHz → 25MHz):**
+- Type: Asynchronous crossing (no frequency relationship)
+- Latency: 4-8 cycles worst case (average 6 cycles)
+- Method: Dual-clock FIFO with gray code pointers
+- FIFO depth: 8 entries each direction
+- Bandwidth: 12.5MHz effective with burst capability
+- Error handling: Timeout detection and overflow protection
+
+**Peripheral ↔ Debug Domain (50MHz → 25MHz):**
+- Type: Rational synchronous (2:1 frequency ratio)
+- Phase relationship: Debug clock edge aligned to even peripheral edges
+- Latency: 2-3 clock cycles
+- Method: Level synchronizers with enable strobes
+- Bandwidth: 12.5MHz effective
+- Control: Simple enable/acknowledge protocol
+
+==== Clock Quality and Timing Specifications
+
+===== Clock Signal Quality
+
+**Timing Specifications:**
+
+[cols="2,2,2,2,2", options="header"]
+|===
+|Parameter |CPU/Memory |Peripheral |Debug |Specification
+
+|**Jitter (RMS)** |<50ps |<100ps |<150ps |12kHz-20MHz BW
+|**Duty Cycle** |50% ±3% |50% ±5% |50% ±5% |Measured at 50% VDD
+|**Rise/Fall Time** |<1ns |<2ns |<3ns |20%-80% transition
+|**Overshoot** |<10% VDD |<15% VDD |<15% VDD |Above VDD level
+|**Undershoot** |<10% VDD |<15% VDD |<15% VDD |Below GND level
+|===
+
+**Clock Tree Specifications:**
+- Clock skew within domain: <100ps (target <50ps)
+- Clock skew across domains: <200ps where relevant
+- Clock-to-output delay: <5ns (register to pad)
+- Setup time margin: >500ps after clock tree delays
+- Hold time margin: >200ps accounting for process variation
+
+===== Power Consumption Analysis
+
+**Clock Power Distribution:**
+
+[cols="2,2,2,2", options="header"]
+|===
+|Component |Static Power |Dynamic Power |Percentage
+
+|**PLL and Oscillator** |2mW |1mW |15%
+|**Clock Distribution** |0.5mW |8mW |42%
+|**Clock Gates** |0.2mW |4mW |21%
+|**Endpoint Registers** |0.3mW |4.5mW |22%
+|===
+
+**Power Optimization Features:**
+- Clock tree power: <5% of total chip power target
+- Dynamic power scaling with frequency
+- Automatic clock gating when blocks are idle
+- Power domain isolation during deep sleep
+- Voltage scaling coordination for optimal efficiency
+
+**Power Gating Efficiency:**
+- Coarse-grained gating: >95% power reduction
+- Medium-grained gating: 80-90% power reduction  
+- Fine-grained gating: 60-75% power reduction
+- Leakage reduction: >99% in power-gated domains
+
+===== Clock Domain Crossing Timing Analysis
+
+[wavedrom]
+....
+{
+  signal: [
+    {name: 'CPU_CLK (100MHz)', wave: 'p..........p..........p..........p..........'},
+    {name: 'PERI_CLK (50MHz)', wave: 'P.....P.....P.....P.....P.....P.....P.....P.....'},
+    {name: 'DBG_CLK (25MHz)', wave: 'n.........n.........n.........n.........n.......'},
+    {},
+    {name: 'CPU→PERI Request', wave: 'x3.....4.....x...................', data: ['REQ1', 'REQ2']},
+    {name: 'PERI Clock Enable', wave: 'x.....3.....4.....x.............', data: ['EN1', 'EN2']},
+    {name: 'PERI→CPU Response', wave: 'x.......3.....4.....x...........', data: ['RESP1', 'RESP2']},
+    {},
+    {name: 'CPU→DBG Request', wave: 'x3...........4...........x.......', data: ['DBG_REQ1', 'DBG_REQ2']},
+    {name: 'DBG FIFO Write', wave: 'x..3...........4...........x.....', data: ['WR1', 'WR2']},
+    {name: 'DBG FIFO Read', wave: 'x........3...........4...........', data: ['RD1', 'RD2']},
+    {name: 'DBG→CPU Response', wave: 'x..........3...........4.........', data: ['DBG_RESP1', 'DBG_RESP2']},
+    {},
+    {name: 'Gray Code Pointer', wave: 'x3..4..5..6..7..8..9..a..b..c....', 
+     data: ['000', '001', '011', '010', '110', '111', '101', '100', '000']},
+    {name: 'FIFO Full', wave: 'x................3...............', data: ['FULL']},
+    {name: 'FIFO Empty', wave: '3................x...............', data: ['EMPTY']}
+  ],
+  head: {
+    text: 'Clock Domain Crossing Timing Relationships',
+    tick: 0
+  },
+  foot: {
+    text: 'Rational CDC (CPU→PERI) vs Asynchronous CDC (CPU→DBG)',
+    tock: 9
+  },
+  config: { hscale: 2 }
+}
+....
+
+==== Clock Management and Control
+
+===== Clock Control Registers
+
+**Clock Management Unit (CMU) Registers:**
+- PLL control and status registers
+- Frequency selection and divider controls
+- Clock gate enable/disable controls
+- Clock domain crossing configuration
+- Power management and gating controls
+- Clock quality monitoring registers
+
+**Dynamic Control Features:**
+- Software-controlled frequency scaling
+- Automatic clock gating based on activity
+- Power domain coordination
+- Emergency frequency reduction on thermal/voltage events
+- Clock failure detection and failover
+
+===== Monitoring and Debug
+
+**Clock Monitoring Capabilities:**
+- Real-time frequency measurement
+- Clock duty cycle monitoring
+- Jitter and phase noise measurement
+- Clock skew detection and reporting
+- Power consumption tracking
+- CDC error detection and counting
+
+**Debug and Test Features:**
+- Clock domain isolation for debug
+- Test clock injection capability
+- Clock tree observability points
+- Boundary scan clock control
+- Performance counter integration
+- Timing violation reporting
+
+===== Implementation Guidelines
+
+**Design Rules:**
+- All clock crossings must use approved CDC circuits
+- Clock gating must use standard clock gate cells
+- Clock tree synthesis with verified timing constraints
+- Power domain boundaries require isolation
+- Clock domain assignments must be verified
+
+**Verification Strategy:**
+- Static timing analysis across all corners
+- Dynamic timing simulation with realistic workloads
+- CDC metastability analysis and MTBF calculation
+- Power analysis and optimization verification
+- Clock tree quality verification
+
+==== Clock System Integration
+
+The VTX1 clock system integrates seamlessly with the overall system architecture, providing:
+
+- **Reliable multi-domain operation** with proven CDC techniques
+- **Power-efficient design** through hierarchical clock gating
+- **High-performance timing** with minimal skew and jitter
+- **Robust error handling** and recovery mechanisms
+- **Comprehensive monitoring** and debug capabilities
+
+This clock architecture ensures the VTX1 system operates reliably across all operating conditions while maintaining optimal power efficiency and performance characteristics.
+
+==== Advanced System Clock Architecture
+
+**Multi-Domain Clock System:**
+
+The VTX1 implements a sophisticated clock distribution system optimized for different system components:
+
+[cols="2,2,2,3", options="header"]
+|===
+|Clock Domain |Frequency |Components |Purpose
+
+|**Core Clock** |100MHz |CPU, Cache, Memory Controller |High-performance computation and memory access
+|**Peripheral Clock** |50MHz |GPIO, UART, SPI, I2C, DMA |Peripheral operations and I/O processing
+|**Debug Clock** |25MHz |JTAG, Debug System |Independent debug operations
+|**System Clock** |100MHz |Bus Matrix, Arbitration |System-wide coordination and control
+|===
+
+**Clock Management Features:**
+- **Clock Gating**: Individual component clock gating for power management
+- **Dynamic Frequency Scaling**: Runtime frequency adjustment based on workload
+- **Clock Domain Crossing**: Proper CDC handling with synchronizer chains
+- **Phase-Locked Loop**: On-chip PLL for precise clock generation
+
+==== Advanced Clock Distribution Architecture
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph CLK_GEN["Clock Generation"]
+        XTAL["20MHz Crystal<br/>±20ppm"]
+        BACKUP["Backup Ring OSC<br/>1MHz ±5%"]
+        PLL["Main PLL<br/>20MHz → 100MHz"]
+        PLL_OUT["PLL Output<br/>100MHz ±0.1%"]
+        
+        subgraph CLK_DIST["Clock Distribution"]
+            CLK_100["100MHz Core"]
+            CLK_50["50MHz Peripheral"]
+            CLK_25["25MHz Debug"]
+        end
+    end
+    
+    subgraph CLK_TREES["Clock Distribution Trees"]
+        subgraph CPU_CLK_TREE["CPU Clock Tree (100MHz)"]
+            CPU_ROOT["Root Buffer"]
+            CPU_L1["Level 1 Buffers"]
+            CPU_L2["Level 2 Buffers"]
+            CPU_GATES["Clock Gates"]
+            
+            subgraph CPU_ENDPOINTS["CPU Endpoints"]
+                FETCH_CLK["Fetch Unit"]
+                DECODE_CLK["Decode Unit"]
+                EXEC_CLK["Execute Unit"]
+                WB_CLK["Writeback Unit"]
+                REG_CLK["Register File"]
+            end
+        end
+        
+        subgraph MEM_CLK_TREE["Memory Clock Tree (100MHz)"]
+            MEM_ROOT["Root Buffer"]
+            MEM_L1["Level 1 Buffers"]
+            MEM_L2["Level 2 Buffers"]
+            MEM_GATES["Clock Gates"]
+            
+            subgraph MEM_ENDPOINTS["Memory Endpoints"]
+                MEM_CTRL_CLK["Memory Controller"]
+                CACHE_TAG_CLK["Cache Tags"]
+                MEM_ARR_CLK["Memory Arrays"]
+                ECC_CLK["ECC Logic"]
+            end
+        end
+        
+        subgraph PERI_CLK_TREE["Peripheral Clock Tree (50MHz)"]
+            PERI_DIV["÷2 Divider<br/>Synchronous"]
+            PERI_ROOT["Root Buffer"]
+            PERI_L1["Level 1 Buffers"]
+            PERI_GATES["Clock Gates<br/>Per-peripheral"]
+            
+            subgraph PERI_ENDPOINTS["Peripheral Endpoints"]
+                GPIO_CLK["GPIO Controller"]
+                UART_CLK["UART"]
+                SPI_CLK["SPI Controller"]
+                I2C_CLK["I2C Controller"]
+                TIMER_CLK["System Timers"]
+                INT_CLK["Interrupt Controller"]
+            end
+        end
+        
+        subgraph DBG_CLK_TREE["Debug Clock Tree (25MHz)"]
+            DBG_DIV["÷4 Divider<br/>Asynchronous"]
+            DBG_ROOT["Root Buffer"]
+            DBG_L1["Level 1 Buffers"]
+            
+            subgraph DBG_ENDPOINTS["Debug Endpoints"]
+                JTAG_CLK["JTAG Controller"]
+                TRACE_CLK["Trace Buffer"]
+                BKPT_CLK["Breakpoints"]
+                PERF_CLK["Performance Counters"]
+            end
+        end
+        
+        subgraph ANA_CLK["Analog Clocks"]
+            ANA_DIST["Analog Distribution<br/>Filtered & Isolated"]
+            ADC_CLK["ADC Clock"]
+            DAC_CLK["DAC Clock"]
+            SER_CLK["Serializer Clocks"]
+        end
+    end
+    
+    subgraph CDC_BLOCKS["Clock Domain Crossing"]
+        subgraph CPU_PERI_CDC["CPU ↔ Peripheral (100→50MHz)"]
+            CP_SYNC["Clock Enable Sync<br/>2:1 Rational"]
+            CP_FIFO["4-entry FIFO<br/>Each Direction"]
+        end
+        
+        subgraph CPU_DBG_CDC["CPU ↔ Debug (100→25MHz)"]
+            CD_ASYNC["Asynchronous Crossing"]
+            CD_FIFO["8-entry FIFO<br/>Gray Code Pointers"]
+            CD_HANDSHAKE["4-phase Handshake"]
+        end
+        
+        subgraph PERI_DBG_CDC["Peripheral ↔ Debug (50→25MHz)"]
+            PD_SYNC["Level Synchronizers<br/>2:1 Rational"]
+            PD_ENABLE["Enable Strobes"]
+        end
+    end
+    
+    subgraph CLK_MGMT["Clock Management"]
+        DFS["Dynamic Frequency Scaling<br/>25-100MHz in 25MHz steps"]
+        CLK_GATE_CTRL["Clock Gating Control<br/>Hierarchical Gating"]
+        SKEW_CTRL["Skew Management<br/>Route Matching ±10%"]
+        DUTY_CTRL["Duty Cycle Control<br/>50% ±5%"]
+    end
+    
+    %% Clock Generation Flow
+    XTAL --> PLL
+    BACKUP -.->|"Failover"| PLL
+    PLL --> PLL_OUT
+    
+    %% Distribution Connections
+    CLK_100 --> CPU_ROOT
+    CLK_100 --> MEM_ROOT
+    CLK_100 --> PERI_DIV
+    CLK_25 --> DBG_ROOT
+    CLK_100 --> ANA_DIST
+    
+    %% CPU Tree
+    CPU_ROOT --> CPU_L1 --> CPU_L2 --> CPU_GATES --> CPU_ENDPOINTS
+    
+    %% Memory Tree  
+    MEM_ROOT --> MEM_L1 --> MEM_L2 --> MEM_GATES --> MEM_ENDPOINTS
+    
+    %% Peripheral Tree
+    PERI_DIV --> PERI_ROOT --> PERI_L1 --> PERI_GATES --> PERI_ENDPOINTS
+    
+    %% Debug Tree
+    DBG_ROOT --> DBG_L1 --> DBG_ENDPOINTS
+    
+    %% Analog Distribution
+    ANA_DIST --> ADC_CLK
+    ANA_DIST --> DAC_CLK
+    ANA_DIST --> SER_CLK
+    
+    %% CDC Connections
+    CPU_ENDPOINTS <--> CP_SYNC
+    PERI_ENDPOINTS <--> CP_SYNC
+    
+    CPU_ENDPOINTS <--> CD_ASYNC
+    DBG_ENDPOINTS <--> CD_ASYNC
+    
+    PERI_ENDPOINTS <--> PD_SYNC
+    DBG_ENDPOINTS <--> PD_SYNC
+    
+    %% Management Connections
+    CLK_MGMT --> CPU_CLK_TREE
+    CLK_MGMT --> MEM_CLK_TREE
+    CLK_MGMT --> PERI_CLK_TREE
+....
+
+**Clock Domains:**
+1. **Core Domain (100MHz):** CPU, pipeline, caches, memory controller
+2. **Peripheral Domain (50MHz):** All communication and I/O peripherals
+3. **Debug Domain (25MHz):** JTAG, trace, debug infrastructure
+4. **Analog Domain (Various):** PLL, ADC, DAC, serializers
+
+**Dynamic Frequency Scaling:**
+- CPU clock: 25MHz - 100MHz in 25MHz steps
+- Memory clock: Locked to CPU clock (1:1 ratio)
+- Peripheral clock: CPU clock ÷ 2 or ÷ 4
+- Debug clock: Fixed 25MHz or CPU clock ÷ 4
+
+**Clock Gating Hierarchy:**
+- Coarse-grained: Per functional block (manual control)
+- Medium-grained: Per pipeline stage (automatic)
+- Fine-grained: Per register/latch (automatic)
+- Gating efficiency: >95% clock edge reduction in gated blocks
+
+**PLL Configuration:**
+- Multiple output frequencies from single VCO
+- Software-configurable multiplication factors
+- Fast frequency switching: <10μs settling time
+- Low-power mode: VCO shutdown, backup ring oscillator

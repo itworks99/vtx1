@@ -1,0 +1,445 @@
+=== Enhanced Bus Matrix Architecture
+
+==== Implementation Overview
+The VTX1 bus architecture implements a sophisticated multi-master bus matrix system based on standardized 36-bit ternary interfaces. The implementation supports three masters (CPU, DMA, Debug) and three slaves (Memory Controller, MMIO Router, Cache Controller) with advanced arbitration, comprehensive error handling, and performance monitoring capabilities.
+
+**Key Implementation Features:**
+- **Standardized VTX1 Interfaces**: All components use consistent 36-bit ternary data paths with standardized error handling
+- **Advanced Arbitration**: Round-robin and priority-based arbitration with configurable weights and deadlock detection  
+- **Performance Monitoring**: Real-time transaction counting, latency tracking, and utilization metrics
+- **Error Management**: Comprehensive 4-bit error classification with automatic recovery mechanisms
+- **MMIO Integration**: Unified address decoding for 24-pin GPIO, enhanced UART/SPI/I2C controllers
+
+**Multi-Master Architecture:**
+
+[cols="2,2,2,3", options="header"]
+|===
+|Master |Data Width |Capabilities |Implementation Features
+
+|**CPU Core** |36-bit ternary |Instruction + Data Access |Pipeline integration, burst support, error reporting
+|**DMA Controller** |36-bit ternary |8-Channel Transfers |Peripheral integration, burst capability, interrupt generation
+|**Debug Controller** |36-bit ternary |System Inspection |JTAG interface, 25MHz operation, non-intrusive access
+|===
+
+**Multi-Slave Architecture:**
+
+[cols="2,2,3", options="header"]
+|===
+|Slave |Interface |Enhanced Capabilities
+
+|**Memory Controller** |36-bit + 288-bit cache |External DDR interface, cache coherency, performance optimization
+|**MMIO Router** |36-bit unified |Peripheral address decoding, error aggregation, unified response handling
+|**Cache Controller** |288-bit cache lines |L1 I/D unified management, MESI protocol, performance counters
+|===
+
+==== Bus Transaction Timing Diagrams
+
+[wavedrom]
+....
+{
+  signal: [
+    {name: 'Core_CLK (100MHz)', wave: 'p...........'},
+    {name: 'Mem_CLK (100MHz)', wave: 'p...........'},
+    {name: 'Peri_CLK (50MHz)', wave: 'P...........'},
+    {},
+    {name: 'Core Bus Transaction', wave: 'x3.4.5.x....', data: ['Addr', 'Data', 'Resp'],
+     node: '.a.b.c....'},
+    {name: 'TVALID', wave: '03...0......'},
+    {name: 'TREADY', wave: '0.3..0......'},
+    {name: 'TADDR[31:0]', wave: 'x3...x......', data: ['0x1000']},
+    {name: 'TWDATA[95:0]', wave: 'x.3..x......', data: ['VLIW_INST']},
+    {name: 'TRESP[1:0]', wave: 'x..3.x......', data: ['OK']},
+    {},
+    {name: 'Memory Bus Transaction', wave: 'x..3.4.5.6.x', data: ['Addr', 'Arb', 'Access', 'Data'],
+     node: '...d.e.f.g.'},
+    {name: 'MEM_REQ', wave: '0..3...0....'},
+    {name: 'MEM_GNT', wave: '0...3..0....'},
+    {name: 'MEM_ADDR[31:0]', wave: 'x..3....x...', data: ['0x8000']},
+    {name: 'MEM_WDATA[63:0]', wave: 'x....3..x...', data: ['DATA_64']},
+    {name: 'MEM_RDATA[63:0]', wave: 'x.....3.x...', data: ['READ_64']},
+    {name: 'MEM_ACK', wave: '0......30...'},
+    {},
+    {name: 'Peripheral Bus Transaction', wave: 'x....3.4.5.x', data: ['Setup', 'Access', 'Hold'],
+     node: '.....h.i.j.'},
+    {name: 'PERI_ADDR[15:0]', wave: 'x....3..x...', data: ['0x40']},
+    {name: 'PERI_WDATA[31:0]', wave: 'x.....3.x...', data: ['CONFIG']},
+    {name: 'PERI_RDATA[31:0]', wave: 'x......3x...', data: ['STATUS']},
+    {name: 'PERI_READY', wave: '0......30...'},
+    {},
+    {name: 'Debug Bus Transaction', wave: 'x......3456x', data: ['Sync', 'Addr', 'Data', 'Resp'],
+     node: '.......klmn'},
+    {name: 'DBG_REQ', wave: '0......3.0..'},
+    {name: 'DBG_SYNC', wave: '0.......30..'},
+    {name: 'DBG_ADDR[15:0]', wave: 'x.......3x..', data: ['0x10']},
+    {name: 'DBG_DATA[31:0]', wave: 'x........3x.', data: ['TRACE']},
+    {name: 'DBG_ACK', wave: '0.........30'}
+  ],
+  head: {
+    text: 'VTX1 Bus Protocol Timing',
+    tick: 0
+  },
+  foot: {
+    text: 'Core(1cyc) → Memory(3cyc) → Peripheral(3cyc) → Debug(4cyc)',
+    tock: 9
+  },
+  edge: [
+    'a~b Setup 2ns', 'b~c Hold 1ns',
+    'd~e Arbitration 1cyc', 'e~f Memory Access 2cyc', 'f~g Response 1cyc',
+    'h~i Setup 1cyc', 'i~j Access 2cyc',
+    'k~l CDC Sync 2cyc', 'l~m Access 1cyc', 'm~n Response 1cyc'
+  ],
+  config: { hscale: 3 }
+}
+....
+
+==== Core Bus Protocol (TCU-CB)
+
+The Core Bus implements a ternary-optimized protocol based on AXI4-Lite with extensions for balanced ternary operations:
+
+**Address Phase:**
+- TADDR[31:0]: Ternary-encoded address (each trit uses 2 bits)
+- TVALID: Transfer valid signal
+- TREADY: Slave ready signal
+- TPROT[2:0]: Protection attributes (secure/non-secure, privileged/user, instruction/data)
+
+**Data Phase:**
+- TWDATA[95:0]: 96-bit VLIW instruction or 32-bit data with ternary encoding
+- TWSTRB[11:0]: Write strobes for byte-level writes
+- TRDATA[95:0]: Read data with same encoding as write data
+- TRESP[1:0]: Transfer response (OK, ERROR, RETRY, DECODE_ERROR)
+
+**Timing Characteristics:**
+- Setup time: 2ns before clock edge
+- Hold time: 1ns after clock edge
+- Maximum combinational delay: 8ns
+- Pipeline stages: Address and Data phases can overlap
+
+==== Memory Bus Protocol (MEM-Bus)
+
+**Transaction Types:**
+1. **Single Transfer:** Basic read/write operations (1-4 cycles)
+2. **Burst Transfer:** Sequential access for cache line fills (4-8 cycles)
+3. **Atomic Operations:** Read-modify-write for semaphores (3 cycles)
+4. **Bank Switch:** Memory bank selection for ternary interleaving (1 cycle)
+
+**Address Mapping:**
+- Physical Address: 32-bit byte-addressable
+- Ternary Alignment: Addresses aligned to 3-byte boundaries for optimal ternary access
+- Bank Selection: Address[1:0] determines memory bank (3-way interleaving)
+- ECC Address: Separate 7-bit address space for ECC metadata
+
+**Performance Characteristics:**
+- Throughput: 400MB/s peak, 300MB/s sustained
+- Latency: 2 cycles for cache hit, 8 cycles for memory access
+- Efficiency: >85% bus utilization under typical workloads
+
+=== Bus Arbitration Schemes
+==== Core Bus Arbitration
+
+**Fixed Priority Arbitration:**
+1. **Priority 0 (Highest):** Exception/Interrupt handling
+2. **Priority 1:** TCU Execute Stage memory access
+3. **Priority 2:** Instruction Fetch from cache miss
+4. **Priority 3:** DMA transfers
+5. **Priority 4 (Lowest):** Debug access
+
+**Round-Robin Within Priority Levels:**
+- Equal priority requests served in round-robin fashion
+- Arbitration decision latency: 1 clock cycle
+- Maximum starvation time: 4 cycles (one round through all equal-priority masters)
+
+==== Advanced Memory Bus Arbitration
+
+**Arbitration Modes (Configurable):**
+1. **Round-Robin Mode:** Fair allocation with configurable weights per master
+2. **Priority-Based Mode:** Strict priority ordering with preemption capability  
+3. **Weighted Round-Robin:** Dynamic weight adjustment based on transaction history
+4. **Adaptive Mode:** Real-time switching between modes based on system load
+
+**Deadlock Detection and Recovery:**
+- **Detection Window:** 16-cycle timeout for outstanding transactions
+- **Recovery Mechanisms:** Automatic transaction retry, master reset, system recovery
+- **Performance Impact:** < 1% overhead under normal conditions
+
+**Performance Monitoring Integration:**
+- **Transaction Counting:** Per-master transaction counters with overflow handling
+- **Latency Tracking:** Min/max/average latency measurement with 1ns resolution  
+- **Utilization Metrics:** Real-time bus utilization percentage with trend analysis
+- **Error Statistics:** Comprehensive error classification and frequency tracking
+
+**Implementation Features:**
+- **Master IDs:** 2-bit master identification for tracking and debugging
+- **Burst Support:** Up to 16-beat bursts for cache line transfers
+- **Out-of-Order:** Limited reordering capability for performance optimization
+- **Quality of Service:** Bandwidth allocation and latency guarantees per master
+
+==== Memory Bus Arbitration
+
+**Weighted Round-Robin Algorithm:**
+- CPU Access: 70% bandwidth allocation
+- DMA Transfers: 20% bandwidth allocation  
+- Debug Access: 10% bandwidth allocation
+- Time slice: 16 clock cycles
+- Preemption: Higher priority requests can interrupt lower priority transfers
+
+**Quality of Service (QoS):**
+- Guaranteed minimum bandwidth for each master
+- Configurable urgency levels (0-3)
+- Deadline-aware scheduling for real-time requirements
+- Bandwidth throttling to prevent bus monopolization
+
+==== Advanced Arbitration Implementation
+
+**Dual-Mode Arbitration System:**
+
+The bus matrix supports sophisticated arbitration with configurable modes:
+
+[source,verilog]
+----
+// Arbitration configuration from bus_matrix.v implementation
+input wire [1:0] arbitration_mode;     // 00=fixed, 01=round-robin, 10=priority, 11=weighted
+input wire [7:0] priority_config;      // Priority weights for weighted arbitration
+input wire [15:0] timeout_config;      // Configurable timeout thresholds
+input wire deadlock_enable;            // Enable deadlock detection
+input wire performance_enable;         // Enable performance monitoring
+----
+
+**Round-Robin Arbitration:**
+- Fair bandwidth allocation across all masters with configurable rotation
+- Prevents master starvation under heavy load conditions
+- Automatic priority escalation for timeout prevention
+- 1-cycle arbitration decision latency with pipeline support
+
+**Priority-Based Arbitration:**
+- Configurable priority levels (0-7) per master interface
+- Real-time deadline support for critical system operations
+- Emergency priority escalation for timeout and deadlock prevention
+- Priority inheritance for dependent transaction sequences
+
+**Deadlock Detection and Recovery:**
+
+The implementation includes hardware deadlock prevention with automatic recovery:
+
+[source,verilog]
+----
+// Advanced deadlock detection logic
+output wire deadlock_detected;         // Hardware deadlock detection flag
+output wire deadlock_recovery;         // Automatic recovery in progress
+output wire [31:0] deadlock_count;     // Deadlock occurrence counter
+output wire [31:0] timeout_count;      // Transaction timeout counter
+----
+
+**Recovery Mechanisms:**
+- Automatic transaction retry for transient failures
+- Configurable timeout thresholds with escalation
+- Master disconnection for persistent protocol violations
+- Emergency arbitration override for critical system recovery
+
+==== Comprehensive Error Handling Framework
+
+**Standardized Error Interface:**
+
+All bus matrix interfaces implement the VTX1 standardized error handling framework:
+
+[cols="2,1,3", options="header"]
+|===
+|Signal |Width |Implementation Purpose
+
+|`error` |1 bit |Boolean error flag - active high when error condition detected
+|`error_code[3:0]` |4 bits |Standardized error classification with module-specific extensions
+|`timeout` |1 bit |Timeout detection flag - independent monitoring capability
+|`error_count[31:0]` |32 bits |Cumulative error counter for system reliability analysis
+|`error_clear` |1 bit |Error acknowledgment and counter reset functionality
+|===
+
+**Error Code Classification:**
+
+[cols="1,2,3", options="header"]
+|===
+|Code |Error Type |Bus Matrix Implementation
+
+|0x0 |VTX1_ERROR_NONE |Normal operation - no error condition
+|0x1 |VTX1_ERROR_TIMEOUT |Transaction timeout exceeded configured threshold
+|0x2 |VTX1_ERROR_INVALID_ADDR |Address validation failure - slave decode error
+|0x3 |VTX1_ERROR_PROTOCOL |Bus protocol violation - invalid transaction sequence
+|0x4 |VTX1_ERROR_RESOURCE |Resource conflict - simultaneous access to single slave
+|0xA |VTX1_ERROR_BUS_FAULT |Bus transaction fault - hardware-level failure detection
+|0xF |VTX1_ERROR_FATAL |Fatal system error - requires bus matrix reset
+|===
+
+==== Performance Monitoring and Analytics
+
+**Real-Time Performance Metrics:**
+
+The bus matrix provides comprehensive system visibility through hardware performance counters:
+
+[cols="2,2,3", options="header"]
+|===
+|Metric Category |Signals |Implementation Details
+
+|**Transaction Counting** |total_transactions, cpu_transactions, dma_transactions, debug_transactions |32-bit counters with overflow protection and selective reset capability
+|**Latency Measurement** |avg_latency, max_latency, min_latency |Cycle-accurate timing measurement with configurable sampling windows
+|**Utilization Tracking** |bus_utilization, cpu_wait_cycles, dma_wait_cycles, debug_wait_cycles |Real-time percentage calculation with moving averages for efficiency analysis
+|**Error Analytics** |error_count, timeout_count, deadlock_count |Comprehensive error tracking with recovery time measurement and trend analysis
+|===
+
+**Performance Optimization Features:**
+- Real-time bus utilization monitoring (>90% efficiency under typical workloads)
+- Individual master wait cycle tracking for bottleneck identification
+- Configurable performance counter sampling windows
+- Hardware-based latency measurement with microsecond accuracy
+
+==== Enhanced MMIO Integration
+
+**Unified Address Decoding:**
+
+The MMIO router provides sophisticated address decoding for enhanced peripherals:
+
+[cols="2,2,2,3", options="header"]
+|===
+|Peripheral |Base Address |Address Range |Enhanced Implementation Features
+
+|**Enhanced GPIO** |0x1000 |256 bytes |24-pin controller, interrupt vectors, alternate functions, power management
+|**Enhanced UART** |0x1001 |256 bytes |DMA integration, FIFO management, flow control, comprehensive error detection
+|**Enhanced SPI** |0x1002 |256 bytes |Master/slave modes, 8 chip selects, DMA support, interrupt vectors
+|**Enhanced I2C** |0x1003 |256 bytes |Multi-master capability, clock stretching, DMA interface, SMBus compatibility
+|**Timer Controller** |0x1004 |256 bytes |Multiple timers, PWM generation, interrupt support, power management
+|**Flash Controller** |0x1005 |256 bytes |SPI flash interface, boot management, wear leveling, error correction
+|===
+
+**Advanced MMIO Features:**
+- Centralized error aggregation across all peripheral controllers
+- Unified response multiplexing with intelligent routing
+- Default pass-through to memory controller for unmapped addresses
+- Comprehensive address validation with range checking
+
+== Bus Architecture and Interconnects
+
+The VTX1 SoC implements a hierarchical bus architecture optimized for ternary operations and VLIW execution requirements. The interconnect system balances performance, power, and area constraints while supporting the unique requirements of balanced ternary logic.
+
+=== Bus Architecture Overview
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph MASTERS["Bus Masters"]
+        CPU["CPU/TCU<br/>96-bit VLIW"]
+        DMA["DMA Controller<br/>64-bit transfers"]
+        DBG["Debug/JTAG<br/>32-bit access"]
+    end
+    
+    subgraph CORE_BUS["Core Bus (TCU-CB)<br/>96-bit @ 100MHz"]
+        ARB_CORE["Priority Arbitration<br/>Fixed + Round Robin"]
+        XBAR_CORE["Crossbar Switch<br/>3×3 Matrix"]
+    end
+    
+    subgraph BRIDGES["Bus Bridges"]
+        BRIDGE_MEM["Memory Bridge<br/>96→64 bit"]
+        BRIDGE_PERI["Peripheral Bridge<br/>32→32 bit"]
+        BRIDGE_DBG["Debug Bridge<br/>32→32 bit"]
+    end
+    
+    subgraph MEM_BUS["Memory Bus (MEM-Bus)<br/>64-bit @ 100MHz"]
+        ARB_MEM["Weighted Round Robin<br/>CPU:70% DMA:20% DBG:10%"]
+        XBAR_MEM["Memory Crossbar<br/>3×4 Matrix"]
+    end
+    
+    subgraph PERI_BUS["Peripheral Bus (PERI-Bus)<br/>32-bit @ 50MHz"]
+        ARB_PERI["Simple Round Robin"]
+        BRIDGE_CLK["Clock Domain Bridge<br/>100MHz→50MHz"]
+    end
+    
+    subgraph DBG_BUS["Debug Bus (DBG-Bus)<br/>32-bit @ 25MHz"]
+        CDC_DBG["Clock Domain Crossing<br/>100MHz→25MHz"]
+        TAP["JTAG TAP Controller"]
+    end
+    
+    subgraph SLAVES["Bus Slaves"]
+        subgraph MEM_SLAVES["Memory Subsystem"]
+            L1_ICACHE["L1 I-Cache<br/>8KB"]
+            L1_DCACHE["L1 D-Cache<br/>8KB"]
+            RAM["Internal RAM<br/>144KB"]
+            FLASH["Internal Flash<br/>432KB"]
+        end
+        
+        subgraph PERI_SLAVES["Peripherals"]
+            GPIO["GPIO Controller"]
+            UART["UART"]
+            SPI["SPI Controller"]
+            I2C["I2C Controller"]
+            TIMERS["System Timers"]
+            INTC["Interrupt Controller"]
+        end
+        
+        subgraph DBG_SLAVES["Debug Components"]
+            TRACE["Trace Buffer"]
+            BKPT["Breakpoint Unit"]
+            WATCH["Watchpoint Unit"]
+            PROF["Performance Counters"]
+        end
+    end
+    
+    %% Bus Connections
+    CPU --> CORE_BUS
+    DMA --> CORE_BUS
+    DBG --> CORE_BUS
+    
+    CORE_BUS --> BRIDGE_MEM
+    CORE_BUS --> BRIDGE_PERI
+    CORE_BUS --> BRIDGE_DBG
+    
+    BRIDGE_MEM --> MEM_BUS
+    MEM_BUS --> MEM_SLAVES
+    
+    BRIDGE_PERI --> PERI_BUS
+    PERI_BUS --> PERI_SLAVES
+    
+    BRIDGE_DBG --> DBG_BUS
+    DBG_BUS --> DBG_SLAVES
+    
+    %% Direct Cache Connections
+    CPU -.->|"Direct Path"| L1_ICACHE
+    CPU -.->|"Direct Path"| L1_DCACHE
+....
+
+=== System Bus Topology
+
+The VTX1 uses a multi-layer bus architecture with the following hierarchy:
+
+1. **Core Bus (TCU-CB)**
+   - Width: 96-bit VLIW instruction + 32-bit data paths
+   - Protocol: Ternary-optimized AXI4-Lite derivative
+   - Clock: 100MHz synchronous
+   - Arbitration: Fixed priority with round-robin for equal priority requests
+   - Latency: 1-2 cycles for local access, 3-8 cycles for memory
+   - Throughput: 800MB/s peak (VLIW), 400MB/s sustained
+
+2. **Memory Bus (MEM-Bus)**
+   - Width: 64-bit data path optimized for ternary word transfers
+   - Protocol: Custom protocol with ternary extensions
+   - Clock: 100MHz synchronous with Core Bus
+   - Arbitration: Weighted round-robin (CPU:70%, DMA:20%, Debug:10%)
+   - Latency: 2-4 cycles for cache, 8-16 cycles for external memory
+   - Throughput: 640MB/s peak, 450MB/s sustained
+
+3. **Peripheral Bus (PERI-Bus)**
+   - Width: 32-bit APB4-compatible interface
+   - Protocol: APB4 with VTX1 extensions for ternary data
+   - Clock: 50MHz (100MHz ÷ 2)
+   - Arbitration: Simple round-robin
+   - Latency: 2-4 cycles typical
+   - Throughput: 200MB/s peak, adequate for all peripherals
+
+4. **Debug Bus (DBG-Bus)**
+   - Width: 32-bit data, 16-bit address  
+   - Protocol: JTAG/DAP-based debug interface
+   - Clock: 25MHz asynchronous to core
+   - Features: Non-intrusive access, real-time trace capability
+   - Masters: JTAG Controller, Trace Unit
+   - Slaves: All system components

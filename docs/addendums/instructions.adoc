@@ -1,0 +1,241 @@
+=== Complete Instruction Set Reference
+
+**ARCHITECTURAL SOLUTION: Two-Level Instruction Encoding**
+
+The VTX1 uses a two-level instruction encoding scheme to support 78 total instructions:
+- **Operation Type** (3 bits): Specifies instruction category (ALU/MEM/CTRL/VEC/FPU/SYS/μCODE)  
+- **Opcode** (6 bits): Specifies operation within category (000000-111111)
+- **Total Encoding Space**: 7 categories × 64 opcodes = 448 possible instructions
+
+This eliminates the previous mathematical impossibility of fitting 78 instructions into 64 6-bit opcodes.
+
+==== Native Hardware Instructions (52 Instructions)
+===== ALU Operations (Type: 000)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|NEG      |000000 |1      |ALU  |Negate register                      |Rd = -Rs1
+|ADD      |000001 |1      |ALU  |Add two registers                    |Rd = Rs1 + Rs2
+|SUB      |000010 |1      |ALU  |Subtract two registers               |Rd = Rs1 - Rs2  
+|MUL      |000011 |2      |ALU  |Multiply two registers               |Rd = Rs1 * Rs2
+|AND      |000100 |1      |ALU  |Bitwise AND                          |Rd = Rs1 & Rs2
+|OR       |000101 |1      |ALU  |Bitwise OR                           |Rd = Rs1 | Rs2
+|NOT      |000110 |1      |ALU  |Bitwise NOT                          |Rd = ~Rs1
+|XOR      |000111 |1      |ALU  |Bitwise XOR                          |Rd = Rs1 ^ Rs2
+|SHL      |001000 |1      |ALU  |Shift left logical                   |Rd = Rs1 << Rs2
+|SHR      |001001 |1      |ALU  |Shift right logical                  |Rd = Rs1 >> Rs2
+|ROL      |001010 |1      |ALU  |Rotate left                          |Rd = ROL(Rs1, Rs2)
+|ROR      |001011 |1      |ALU  |Rotate right                         |Rd = ROR(Rs1, Rs2)
+|CMP      |001100 |1      |ALU  |Compare registers                    |Flags = Rs1 - Rs2
+|TEST     |001101 |1      |ALU  |Test register                        |Flags = Rs1 & Rs2
+|INC      |001110 |1      |ALU  |Increment register                   |Rd = Rs1 + 1
+|DEC      |001111 |1      |ALU  |Decrement register                   |Rd = Rs1 - 1
+|===
+
+===== Memory Operations (Type: 001)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+|LD       |000000 |2      |MEM  |Load from memory                     |Rd = [Rs1 + offset]
+|ST       |000001 |2      |MEM  |Store to memory                      |[Rs1 + offset] = Rs2
+|VLD      |000010 |3      |MEM  |Vector load from memory              |Vd = [Rs1 + offset]
+|VST      |000011 |3      |MEM  |Vector store to memory               |[Rs1 + offset] = Vs2
+|FLD      |000100 |2      |MEM  |Floating-point load                  |Fd = [Rs1 + offset]
+|FST      |000101 |2      |MEM  |Floating-point store                 |[Rs1 + offset] = Fs2
+|LEA      |000110 |1      |MEM  |Load effective address               |Rd = Rs1 + offset
+|PUSH     |000111 |2      |MEM  |Push to stack                        |[TB--] = Rs1
+|===
+
+===== Control Operations (Type: 010)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|JMP      |000000 |1      |CTRL |Unconditional jump                   |TC = TC + offset
+|JAL      |000001 |2      |CTRL |Jump and link                        |T3 = TC+1; TC = TC + offset
+|JR       |000010 |1      |CTRL |Jump register                        |TC = Rs1
+|JALR     |000011 |2      |CTRL |Jump and link register               |T3 = TC+1; TC = Rs1
+|BEQ      |000100 |1      |CTRL |Branch if equal                      |if(Rs1==Rs2) TC += offset
+|BNE      |000101 |1      |CTRL |Branch if not equal                  |if(Rs1!=Rs2) TC += offset
+|BLT      |000110 |1      |CTRL |Branch if less than (signed)         |if(Rs1<Rs2) TC += offset
+|BGE      |000111 |1      |CTRL |Branch if greater/equal (signed)     |if(Rs1>=Rs2) TC += offset
+|BLTU     |001000 |1      |CTRL |Branch if less than (unsigned)       |if(Rs1<Rs2) TC += offset
+|BGEU     |001001 |1      |CTRL |Branch if greater/equal (unsigned)   |if(Rs1>=Rs2) TC += offset
+|CALL     |001010 |3      |CTRL |Function call                        |[TB--]=TC+1; TC=target
+|RET      |001011 |2      |CTRL |Function return                      |TC=[++TB]
+|===
+
+===== Vector Operations (Type: 011)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|VADD     |000000 |2      |VEC  |Vector add                           |Vd = Vs1 + Vs2
+|VSUB     |000001 |2      |VEC  |Vector subtract                      |Vd = Vs1 - Vs2
+|VMUL     |000010 |3      |VEC  |Vector multiply                      |Vd = Vs1 * Vs2
+|VAND     |000011 |1      |VEC  |Vector bitwise AND                   |Vd = Vs1 & Vs2
+|VOR      |000100 |1      |VEC  |Vector bitwise OR                    |Vd = Vs1 | Vs2
+|VNOT     |000101 |1      |VEC  |Vector bitwise NOT                   |Vd = ~Vs1
+|VSHL     |000110 |2      |VEC  |Vector shift left                    |Vd = Vs1 << imm
+|VSHR     |000111 |2      |VEC  |Vector shift right                   |Vd = Vs1 >> imm
+|===
+
+===== FPU Operations (Type: 100)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+|FADD     |000000 |3      |FPU  |Floating-point add                   |Fd = Fs1 + Fs2
+|FSUB     |000001 |3      |FPU  |Floating-point subtract              |Fd = Fs1 - Fs2
+|FMUL     |000010 |3      |FPU  |Floating-point multiply              |Fd = Fs1 * Fs2
+|FCMP     |000011 |2      |FPU  |Floating-point compare               |Flags = Fs1 - Fs2
+|FMOV     |000100 |1      |FPU  |Floating-point move                  |Fd = Fs1
+|FNEG     |000101 |1      |FPU  |Floating-point negate                |Fd = -Fs1
+|===
+
+===== System Operations (Type: 101)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|NOP      |000000 |1      |SYS  |No operation                         |None
+|WFI      |000001 |1      |SYS  |Wait for interrupt                   |None
+|===
+
+==== Microcode Instructions (26 Instructions)
+===== Complex Arithmetic (Type: 110)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|DIV      |000000 |12     |μCODE |Divide (signed)                      |Rd = Rs1 / Rs2
+|MOD      |000001 |12     |μCODE |Modulo (signed)                      |Rd = Rs1 % Rs2
+|UDIV     |000010 |10     |μCODE |Divide (unsigned)                    |Rd = Rs1 / Rs2
+|UMOD     |000011 |10     |μCODE |Modulo (unsigned)                    |Rd = Rs1 % Rs2
+|SQRT     |000100 |16     |μCODE |Square root                          |Rd = sqrt(Rs1)
+|ABS      |000101 |4      |μCODE |Absolute value                       |Rd = |Rs1|
+|===
+
+===== Transcendental Functions (Type: 110 continued)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+|SIN      |001000 |14     |μCODE |Sine function                        |Fd = sin(Fs1)
+|COS      |001001 |14     |μCODE |Cosine function                      |Fd = cos(Fs1)
+|TAN      |001010 |16     |μCODE |Tangent function                     |Fd = tan(Fs1)
+|ASIN     |001011 |16     |μCODE |Arcsine function                     |Fd = asin(Fs1)
+|ACOS     |001100 |16     |μCODE |Arccosine function                   |Fd = acos(Fs1)
+|ATAN     |001101 |14     |μCODE |Arctangent function                  |Fd = atan(Fs1)
+|EXP      |001110 |12     |μCODE |Exponential function                 |Fd = exp(Fs1)
+|LOG      |001111 |12     |μCODE |Natural logarithm                    |Fd = log(Fs1)
+|===
+
+===== Advanced Vector Operations (Type: 110 continued)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|VDOT     |010000 |6      |μCODE |Vector dot product                   |Rd = Vs1 · Vs2
+|VREDUCE  |010001 |8      |μCODE |Vector reduction operation           |Rd = reduce(Vs1, op)
+|VMAX     |010010 |5      |μCODE |Vector maximum                       |Vd = max(Vs1, Vs2)
+|VMIN     |010011 |5      |μCODE |Vector minimum                       |Vd = min(Vs1, Vs2)
+|VSUM     |010100 |4      |μCODE |Vector sum                           |Rd = sum(Vs1)
+|VPERM    |010101 |10     |μCODE |Vector permutation                   |Vd = permute(Vs1, Vs2)
+|===
+
+===== Memory Management (Type: 110 continued)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|CACHE    |011000 |6      |μCODE |Cache control operation              |Control cache based on Rs1
+|FLUSH    |011001 |8      |μCODE |Cache flush operation                |Flush cache lines
+|MEMBAR   |011010 |4      |μCODE |Memory barrier                       |Synchronize memory access
+|===
+
+===== System Control (Type: 110 continued)
+
+[cols="2,1,1,1,4,2", options="header"]
+|===
+|Mnemonic |Opcode |Cycles |Type |Description |Register Usage
+
+|SYSCALL  |100000 |Variable |μCODE |System call                       |Software interrupt
+|BREAK    |100001 |4      |μCODE |Debug breakpoint                     |Debug trap
+|HALT     |100010 |1      |μCODE |System halt                          |Stop execution
+|===
+
+==== Instruction Encoding Format
+
+**32-bit Instruction Format (for VLIW)**
+----
+[31:26] Opcode (6 bits)         - Operation code within type (000000-111111)
+[25:23] Rd (3 bits)             - Destination register  
+[22:20] Rs1 (3 bits)            - Source register 1
+[19:17] Rs2 (3 bits)            - Source register 2
+[16:6]  Immediate (11 bits)      - Immediate value/offset
+[5:3]   Operation Type (3 bits)  - ALU/MEM/CTRL/VEC/FPU/SYS/μCODE
+[2:0]   Parallel Flags (3 bits)  - Parallel execution control
+----
+
+**Operation Type Encoding**
+----
+000: ALU Operation    - Arithmetic and logical operations
+001: MEM Operation    - Memory load/store operations  
+010: CTRL Operation   - Control flow operations
+011: VEC Operation    - Vector/SIMD operations
+100: FPU Operation    - Floating-point operations
+101: SYS Operation    - System control operations
+110: μCODE Operation  - Microcode complex operations
+111: Reserved         - Future expansion
+----
+
+**Two-Level Instruction Encoding**
+The VTX1 uses Operation Type + Opcode to create a 9-bit instruction space:
+- 7 operation types × 64 opcodes = 448 possible instructions
+- Current usage: 78 instructions (17% utilization)
+- Expansion capacity: 370 additional instructions available
+
+**Register Encoding**
+----
+000: T0    001: T1    010: T2    011: T3
+100: T4    101: T5    110: T6    111: Special Context
+----
+
+**Special Register Context (when Rs/Rd = 111)**
+----
+000: TA (Accumulator)         001: TB (Base Pointer)
+010: TC (Program Counter)     011: TS (Status Register)  
+100: TI (Instruction Register) 101: VA (Vector A)
+110: VT (Vector T)            111: VB (Vector B)
+----
+
+==== Performance Summary
+
+[cols="3,1,1,1,1", options="header"]
+|===
+|Instruction Category |Count |Min Cycles |Max Cycles |Typical Usage
+
+|ALU Operations       |16    |1          |2          |High frequency
+|Memory Operations    |8     |1          |3          |Medium frequency  
+|Control Operations   |12    |1          |3          |Medium frequency
+|Vector Operations    |8     |1          |3          |Medium frequency
+|FPU Operations       |6     |1          |3          |Low frequency
+|System Operations    |2     |1          |1          |Low frequency
+|Complex Arithmetic   |6     |4          |16         |Low frequency
+|Transcendental       |8     |12         |16         |Very low frequency
+|Advanced Vector      |6     |4          |10         |Low frequency
+|Memory Management    |3     |4          |8          |Very low frequency
+|System Control       |3     |1          |Variable   |Very low frequency
+|===
+
+**Total: 78 Instructions (52 Native + 26 Microcode)**

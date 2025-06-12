@@ -1,0 +1,22 @@
+extends: default
+base:
+  font-family: Fira
+  page: A4
+font:
+  catalog:
+    merge: true
+    Fira:
+      normal: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Regular.ttf
+      italic: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Italic.ttf
+      bold: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Bold.ttf
+      bold-italic: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-BoldItalic.ttf
+    FiraCode:
+      normal: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Regular.ttf
+      bold: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Bold.ttf
+heading:
+  font-family: Fira
+code:
+  font-family: FiraCode
+  font-size: 8
+table:
+  font-size: 8

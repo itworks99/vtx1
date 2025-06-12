@@ -1,0 +1,382 @@
+=== Reset and Interrupt System
+
+==== Reset Architecture
+
+**Reset Sources:**
+1. **External Reset (RST_N):** Active-low external pin
+2. **Power-On Reset (POR):** Automatic on power application
+3. **Brown-Out Reset (BOR):** Voltage supervisor triggered
+4. **Watchdog Reset (WDT):** Software timeout protection
+5. **Software Reset (SWR):** Processor-initiated reset
+6. **Debug Reset (DBG):** JTAG-initiated reset
+
+**Reset Distribution:**
+- Asynchronous assertion: Immediate reset activation
+- Synchronous deassertion: Clock-synchronized reset release
+- Reset tree: Balanced distribution to all flip-flops
+- Reset sequencing: Controlled startup order for complex blocks
+
+**Reset Timing:**
+- External reset pulse width: 100ns minimum
+- Internal reset duration: 8 clock cycles minimum
+- Power-on reset duration: 1ms + 8 cycles
+- Brown-out reset response: <1μs detection + 8 cycles
+
+==== Interrupt Controller
+The VTX1 interrupt controller provides comprehensive interrupt management for all system components with hardware-assisted priority resolution, automatic context switching, and power-aware operation modes.
+
+===== Hardware Architecture
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph INTC["VTX1 Interrupt Controller"]
+        subgraph SOURCES["Interrupt Sources (32)"]
+            EXT_INT["External Interrupts<br/>GPIO[7:0]"]
+            PERI_INT["Peripheral Interrupts<br/>UART, SPI, I2C, Timers"]
+            SYS_INT["System Interrupts<br/>Memory, Cache, DMA"]
+            DBG_INT["Debug Interrupts<br/>Breakpoints, Trace"]
+        end
+        
+        subgraph CTRL_LOGIC["Control Logic"]
+            EDGE_DET["Edge/Level<br/>Detection"]
+            PRIO_ENC["Priority<br/>Encoder"]
+            MASK_LOGIC["Mask &<br/>Enable Logic"]
+            PEND_REG["Pending<br/>Registers"]
+        end
+        
+        subgraph ARBITRATION["Arbitration & Processing"]
+            ARBITER["Priority<br/>Arbitration"]
+            NEST_CTRL["Nesting<br/>Control"]
+            VEC_GEN["Vector<br/>Generation"]
+            CTX_SAVE["Context<br/>Save Logic"]
+        end
+        
+        subgraph INTERFACE["CPU Interface"]
+            IRQ_OUT["IRQ to CPU"]
+            FIQ_OUT["FIQ to CPU"]
+            NMI_OUT["NMI to CPU"]
+            ACK_IN["ACK from CPU"]
+        end
+    end
+    
+    subgraph CPU_PIPE["CPU Pipeline"]
+        FETCH["Fetch"]
+        DECODE["Decode"]
+        EXEC["Execute"]
+        WB["Writeback"]
+    end
+    
+    %% Connections
+    EXT_INT --> EDGE_DET
+    PERI_INT --> EDGE_DET
+    SYS_INT --> EDGE_DET
+    DBG_INT --> EDGE_DET
+    
+    EDGE_DET --> PRIO_ENC
+    PRIO_ENC --> MASK_LOGIC
+    MASK_LOGIC --> PEND_REG
+    PEND_REG --> ARBITER
+    
+    ARBITER --> NEST_CTRL
+    NEST_CTRL --> VEC_GEN
+    VEC_GEN --> CTX_SAVE
+    
+    CTX_SAVE --> IRQ_OUT
+    CTX_SAVE --> FIQ_OUT
+    CTX_SAVE --> NMI_OUT
+    
+    IRQ_OUT --> DECODE
+    FIQ_OUT --> DECODE
+    NMI_OUT --> FETCH
+    DECODE --> ACK_IN
+....
+
+===== Interrupt Sources and Mapping
+
+**External Interrupts (IRQ 0-7):**
+[cols="1,1,2,1,2"]
+|===
+|IRQ |GPIO Pin |Trigger Mode |Priority |Description
+
+|0 |GPIO0 |Edge/Level |Configurable |General purpose external interrupt
+|1 |GPIO1 |Edge/Level |Configurable |General purpose external interrupt  
+|2 |GPIO2 |Edge/Level |Configurable |General purpose external interrupt
+|3 |GPIO3 |Edge/Level |Configurable |General purpose external interrupt
+|4 |GPIO4 |Edge/Level |Configurable |General purpose external interrupt
+|5 |GPIO5 |Edge/Level |Configurable |General purpose external interrupt
+|6 |GPIO6 |Edge/Level |Configurable |General purpose external interrupt
+|7 |GPIO7 |Edge/Level |Configurable |General purpose external interrupt
+|===
+
+**Peripheral Interrupts (IRQ 8-19):**
+[cols="1,2,1,1,2"]
+|===
+|IRQ |Source |Type |Priority |Description
+
+|8 |UART RX |Level |4 |UART receive data available
+|9 |UART TX |Level |4 |UART transmit buffer empty
+|10 |SPI Transfer |Edge |3 |SPI transfer complete
+|11 |SPI Error |Edge |2 |SPI transmission error
+|12 |I2C Transfer |Edge |3 |I2C transfer complete
+|13 |I2C Error |Edge |2 |I2C bus error
+|14 |Timer 0 |Edge |5 |System timer overflow
+|15 |Timer 1 |Edge |6 |General purpose timer
+|16 |Watchdog |Edge |1 |Watchdog timer expiration
+|17 |RTC |Edge |7 |Real-time clock alarm
+|18 |PWM0 |Edge |6 |PWM channel 0 event
+|19 |PWM1 |Edge |6 |PWM channel 1 event
+|===
+
+**System Interrupts (IRQ 20-27):**
+[cols="1,2,1,1,2"]
+|===
+|IRQ |Source |Type |Priority |Description
+
+|20 |Memory ECC |Edge |1 |Memory ECC error detected
+|21 |Cache Miss |Level |4 |Cache miss threshold reached
+|22 |DMA Channel 0 |Edge |3 |DMA transfer complete
+|23 |DMA Channel 1 |Edge |3 |DMA transfer complete
+|24 |DMA Error |Edge |1 |DMA transfer error
+|25 |Bus Error |Edge |0 |Bus access violation
+|26 |Stack Overflow |Edge |1 |Stack pointer overflow
+|27 |Power Management |Edge |2 |Power state change
+|===
+
+**Debug Interrupts (IRQ 28-31):**
+[cols="1,2,1,1,2"]
+|===
+|IRQ |Source |Type |Priority |Description
+
+|28 |Breakpoint |Edge |0 |Hardware breakpoint hit
+|29 |Watchpoint |Edge |0 |Memory watchpoint triggered
+|30 |Trace Buffer |Level |7 |Trace buffer full
+|31 |Debug Request |Edge |0 |External debug request
+|===
+
+===== Register Map and Programming Model
+
+**Interrupt Controller Base Address:** `0x4000_1000`
+
+[cols="2,1,1,3"]
+|===
+|Register Name |Offset |Access |Description
+
+|`INTC_CTRL` |0x000 |RW |Global interrupt control
+|`INTC_STATUS` |0x004 |RO |Interrupt controller status
+|`INTC_ENABLE0` |0x008 |RW |Interrupt enable (IRQ 0-31)
+|`INTC_PENDING0` |0x00C |RO |Pending interrupts (IRQ 0-31)
+|`INTC_ACTIVE0` |0x010 |RO |Active interrupts (IRQ 0-31)
+|`INTC_PRIORITY0` |0x014 |RW |Priority config (IRQ 0-3)
+|`INTC_PRIORITY1` |0x018 |RW |Priority config (IRQ 4-7)
+|`INTC_PRIORITY2` |0x01C |RW |Priority config (IRQ 8-11)
+|`INTC_PRIORITY3` |0x020 |RW |Priority config (IRQ 12-15)
+|`INTC_PRIORITY4` |0x024 |RW |Priority config (IRQ 16-19)
+|`INTC_PRIORITY5` |0x028 |RW |Priority config (IRQ 20-23)
+|`INTC_PRIORITY6` |0x02C |RW |Priority config (IRQ 24-27)
+|`INTC_PRIORITY7` |0x030 |RW |Priority config (IRQ 28-31)
+|`INTC_CONFIG0` |0x034 |RW |Edge/Level config (IRQ 0-31)
+|`INTC_CLEAR0` |0x038 |WO |Interrupt clear (IRQ 0-31)
+|`INTC_FORCE0` |0x03C |WO |Software interrupt trigger
+|`INTC_THRESHOLD` |0x040 |RW |Priority threshold
+|`INTC_VECTOR` |0x044 |RO |Current interrupt vector
+|`INTC_EOI` |0x048 |WO |End of interrupt
+|`INTC_CONTEXT` |0x04C |RW |Context save control
+|===
+
+===== Register Specifications
+
+**INTC_CTRL (0x4000_1000) - Global Interrupt Control**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:8 |Reserved |RO |Reserved, reads as 0
+|7 |NEST_EN |RW |Enable interrupt nesting (1=enabled)
+|6 |FAST_EOI |RW |Fast EOI mode (1=enabled)
+|5:4 |IRQ_MODE |RW |IRQ mode: 00=disabled, 01=IRQ, 10=FIQ, 11=NMI
+|3 |VEC_EN |RW |Vector mode enable (1=vectored, 0=non-vectored)
+|2 |CTX_SAVE |RW |Automatic context save (1=enabled)
+|1 |FIQ_EN |RW |Fast interrupt enable (1=enabled)
+|0 |IRQ_EN |RW |Global interrupt enable (1=enabled)
+|===
+
+**INTC_STATUS (0x4000_1004) - Interrupt Controller Status**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:16 |Reserved |RO |Reserved, reads as 0
+|15:8 |ACTIVE_IRQ |RO |Currently active IRQ number (0-31)
+|7:4 |NEST_LEVEL |RO |Current nesting level (0-15)
+|3 |IRQ_PENDING |RO |Any IRQ pending (1=pending)
+|2 |FIQ_PENDING |RO |FIQ pending (1=pending)
+|1 |IRQ_ACTIVE |RO |IRQ currently being serviced
+|0 |CONTROLLER_EN |RO |Controller enabled status
+|===
+
+**INTC_PRIORITYn (0x4000_1014 + n*4) - Priority Configuration**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:24 |IRQ3_PRIO |RW |Priority for IRQ (4n+3), 0=highest, 7=lowest
+|23:16 |IRQ2_PRIO |RW |Priority for IRQ (4n+2)
+|15:8 |IRQ1_PRIO |RW |Priority for IRQ (4n+1)
+|7:0 |IRQ0_PRIO |RW |Priority for IRQ (4n+0)
+|===
+
+===== Interrupt Handling Flow
+
+**Normal Interrupt Processing:**
+
+[wavedrom]
+....
+{
+  signal: [
+    {name: 'IRQ_SOURCE', wave: '0.1.......0.', node: '.a........b'},
+    {name: 'IRQ_PENDING', wave: '0.1......0..', node: '.c.......d'},
+    {name: 'IRQ_TO_CPU', wave: '0..1....0...', node: '...e....f'},
+    {name: 'CPU_ACK', wave: '0...1.......', node: '....g'},
+    {name: 'ISR_EXEC', wave: '0....1..0...', node: '.....h.i'},
+    {name: 'EOI_WRITE', wave: '0.......1...', node: '........j'},
+    {},
+    {name: 'Clock', wave: 'p...........'}
+  ],
+  head: {
+    text: 'VTX1 Interrupt Processing Flow',
+    tick: 0
+  },
+  edge: [
+    'a~c IRQ Detection', 'c~e Priority Arbitration', 'e~g CPU Response',
+    'g~h Context Save', 'h~i ISR Execution', 'i~j End of Interrupt',
+    'j~d IRQ Clear', 'd~f Pending Clear'
+  ],
+  foot: {
+    text: 'Latency: 6-12 cycles from assertion to ISR execution',
+    tock: 9
+  }
+}
+....
+
+**Fast Interrupt (FIQ) Processing:**
+
+[wavedrom]
+....
+{
+  signal: [
+    {name: 'FIQ_SOURCE', wave: '0.1....0', node: '.a.....b'},
+    {name: 'FIQ_TO_CPU', wave: '0..1...0', node: '...c...d'},
+    {name: 'CPU_RESP', wave: '0...1...', node: '....e'},
+    {name: 'FIQ_ISR', wave: '0....1.0', node: '.....fg'},
+    {},
+    {name: 'Clock', wave: 'p.......'}
+  ],
+  head: {
+    text: 'VTX1 Fast Interrupt (FIQ) Flow',
+    tick: 0
+  },
+  edge: [
+    'a~c Fast Path (2 cycles)', 'c~e CPU Response (1 cycle)',
+    'e~f ISR Start (1 cycle)', 'f~g Fast Return'
+  ],
+  foot: {
+    text: 'FIQ Latency: 4 cycles from assertion to ISR',
+    tock: 7
+  }
+}
+....
+
+===== Interrupt Nesting and Priority Resolution
+
+**Priority Arbitration Algorithm:**
+1. **Level 0 (NMI):** Non-maskable interrupts (Bus errors, Debug requests)
+   - Cannot be disabled by software
+   - Highest priority, always processed immediately
+   - Preempts all other interrupt processing
+2. **Level 1-7 (Maskable):** Standard priority levels
+   - Level 1: Critical system errors (Memory ECC, Watchdog, Stack overflow)
+   - Level 2: System management (Power management, SPI/I2C errors)
+   - Level 3: Communication completion (SPI, I2C, DMA transfers)
+   - Level 4: Data availability (UART, Memory events)
+   - Level 5: System timing (Timer 0)
+   - Level 6: General purpose (Timer 1, PWM events)
+   - Level 7: Low priority (RTC, Trace buffer)
+
+**Nesting Rules:**
+- Higher priority interrupts can preempt lower priority ISRs
+- Same priority interrupts queue in FIFO order
+- Maximum nesting depth: 8 levels
+- Automatic stack management for nested contexts
+- Context restoration on return
+
+===== Performance Characteristics
+
+**Timing Analysis:**
+[cols="2,1,1,2"]
+|===
+|Operation |Min Cycles |Max Cycles |Notes
+
+|IRQ Detection |1 |2 |Edge detection + synchronization
+|Priority Arbitration |1 |3 |Depends on number of pending interrupts
+|Context Save |2 |4 |Automatic register save to stack
+|Vector Fetch |1 |2 |From Flash ROM vector table
+|ISR Entry |1 |1 |Jump to interrupt service routine
+|**Total Latency** |**6** |**12** |**From assertion to ISR execution**
+|EOI Processing |1 |2 |End of interrupt acknowledgment
+|Context Restore |2 |4 |Return from interrupt
+|===
+
+**Throughput Specifications:**
+- Maximum interrupt rate: 10 MHz (100ns minimum spacing)
+- Sustained interrupt rate: 5 MHz with context switching
+- Nested interrupt depth: 8 levels maximum
+- Pending interrupt capacity: 32 interrupts
+
+===== Integration with CPU Pipeline
+
+**Interrupt Injection Points:**
+1. **Fetch Stage:** NMI and debug interrupts can force immediate pipeline flush
+2. **Decode Stage:** IRQ and FIQ are checked during instruction decode
+3. **Execute Stage:** Precise exceptions and system interrupts
+4. **Writeback Stage:** Memory and cache error interrupts
+
+**Pipeline Interaction:**
+- **IRQ/FIQ:** Finish current instruction, then branch to ISR
+- **NMI:** Immediate pipeline flush and exception entry
+- **Debug:** Can interrupt at any pipeline stage
+- **System:** Precise exception at instruction boundary
+
+===== Power Management Integration
+
+**Sleep Mode Operation:**
+- Wake-up interrupts: GPIO, UART, RTC, Watchdog
+- Interrupt controller remains active in all sleep modes
+- Wake-up latency: 4 cycles + clock restart time
+- Context preservation during deep sleep
+
+**Power Gating Support:**
+- Individual interrupt source gating
+- Automatic power domain control
+- Wake-up signal routing
+- Power state transition interrupts
+
+===== Debug and Diagnostics
+
+**Debug Features:**
+- Real-time interrupt monitoring
+- Priority conflict detection  
+- Nesting depth tracking
+- Performance counters for interrupt latency
+- Trace buffer integration for interrupt flow analysis
+
+**Diagnostic Registers:**
+- Interrupt source identification
+- Timing violation detection
+- Priority inversion monitoring
+- Context save/restore verification

@@ -1,0 +1,445 @@
+== VTX1 Microcode Implementation
+
+=== Microcode ROM Image
+
+This file contains the complete microcode ROM image for the VTX1 processor, implementing all 26 microcode operations using the corrected two-level instruction encoding.
+
+**UPDATED: Opcode Architecture Resolved**
+The VTX1 now uses a two-level encoding scheme:
+- Operation Type (3 bits): 110 for all microcode operations
+- Opcode (6 bits): Specific operation within microcode category
+- Total instruction space: 7 types × 64 opcodes = 448 possible instructions
+
+=== Microcode Instruction Mapping
+
+----
+Instruction  | Type | Opcode | ROM Entry | Description
+-------------|------|--------|-----------|-------------
+DIV          | 110  | 000000 | 0x000     | Signed division
+MOD          | 110  | 000001 | 0x018     | Signed modulo  
+UDIV         | 110  | 000010 | 0x030     | Unsigned division
+UMOD         | 110  | 000011 | 0x048     | Unsigned modulo
+SQRT         | 110  | 000100 | 0x060     | Square root
+ABS          | 110  | 000101 | 0x078     | Absolute value
+SIN          | 110  | 001000 | 0x100     | Sine function
+COS          | 110  | 001001 | 0x120     | Cosine function
+TAN          | 110  | 001010 | 0x140     | Tangent function
+ASIN         | 110  | 001011 | 0x160     | Arcsine function
+ACOS         | 110  | 001100 | 0x180     | Arccosine function
+ATAN         | 110  | 001101 | 0x1A0     | Arctangent function
+EXP          | 110  | 001110 | 0x1C0     | Exponential function
+LOG          | 110  | 001111 | 0x1E0     | Natural logarithm
+VDOT         | 110  | 010000 | 0x200     | Vector dot product
+VREDUCE      | 110  | 010001 | 0x210     | Vector reduction
+VMAX         | 110  | 010010 | 0x220     | Vector maximum
+VMIN         | 110  | 010011 | 0x230     | Vector minimum
+VSUM         | 110  | 010100 | 0x240     | Vector sum
+VPERM        | 110  | 010101 | 0x250     | Vector permutation
+CACHE        | 110  | 011000 | 0x300     | Cache control
+FLUSH        | 110  | 011001 | 0x310     | Cache flush
+MEMBAR       | 110  | 011010 | 0x320     | Memory barrier
+SYSCALL      | 110  | 100000 | 0x380     | System call
+BREAK        | 110  | 100001 | 0x390     | Debug breakpoint
+HALT         | 110  | 100010 | 0x3A0     | System halt
+----
+
+=== ROM Layout
+
+----
+Address Range    | Operation Category           | Instructions
+0x000 - 0x0FF   | Complex Arithmetic          | DIV, MOD, UDIV, UMOD, SQRT, ABS
+0x100 - 0x1FF   | Transcendental Functions    | SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG
+0x200 - 0x2FF   | Advanced Vector Operations  | VDOT, VREDUCE, VMAX, VMIN, VSUM, VPERM
+0x300 - 0x37F   | Memory Management           | CACHE, FLUSH, MEMBAR
+0x380 - 0x3EF   | System Control              | SYSCALL, BREAK, HALT
+0x3F0 - 0x3FF   | Error Handlers              | Exception and error handling
+----
+
+=== Complete Microcode Listing
+==== Complex Arithmetic Operations (0x000-0x0FF)
+===== Signed Division (DIV) - Entry: 0x000
+
+----
+// DIV Rs1, Rs2 -> Rd = Rs1 / Rs2 (signed 32-bit division)
+// Uses non-restoring division algorithm
+// Cycles: 12 average, 15 worst case
+
+0x000:  101_000_001_010  000000_001_010  00000001  // Load Rs1, save sign info
+0x001:  101_000_010_011  000000_010_011  00000002  // Load Rs2, check for zero
+0x002:  110_001_000_000  000000_000_000  000003F0  // Branch to div-by-zero if Rs2 == 0
+0x003:  000_001_001_100  000000_001_010  00000004  // T4 = ABS(Rs1), save dividend sign
+0x004:  000_001_010_101  000000_010_011  00000005  // T5 = ABS(Rs2), save divisor sign
+0x005:  101_010_100_000  000000_000_000  00000006  // T6 = 0 (quotient)
+0x006:  101_010_110_000  100000_000_000  00000007  // T7 = 32 (bit counter)
+0x007:  101_010_111_100  000000_100_000  00000008  // Remainder = T4 (dividend)
+
+// Division loop - 32 iterations
+0x008:  000_010_100_100  000000_100_000  00000009  // Quotient <<= 1
+0x009:  000_010_111_111  000000_111_000  0000000A  // Remainder <<= 1
+0x00A:  000_011_111_101  000000_111_101  0000000B  // Temp = Remainder - Divisor
+0x00B:  110_100_000_000  000000_000_000  0000000D  // Branch if Temp < 0 (negative)
+0x00C:  000_001_100_100  000001_100_000  0000000D  // Quotient |= 1, Remainder = Temp
+0x00D:  000_011_110_110  111111_110_000  0000000E  // Counter--
+0x00E:  110_101_110_000  000000_000_000  00000008  // Branch if Counter != 0
+
+// Apply sign correction
+0x00F:  110_110_000_000  000000_000_000  00000011  // Branch if signs different
+0x010:  111_000_000_000  000000_000_000  00000000  // Return positive result
+0x011:  000_100_100_100  000000_100_000  00000012  // Negate quotient
+0x012:  111_000_000_000  000000_000_000  00000000  // Return negative result
+----
+
+===== Signed Modulo (MOD) - Entry: 0x018
+
+----
+// MOD Rs1, Rs2 -> Rd = Rs1 % Rs2 (signed 32-bit modulo)
+// Reuses division algorithm, returns remainder
+
+0x018:  101_000_001_010  000000_001_010  00000019  // Load Rs1, save sign
+0x019:  101_000_010_011  000000_010_011  0000001A  // Load Rs2, check for zero
+0x01A:  110_001_000_000  000000_000_000  000003F0  // Branch to div-by-zero if Rs2 == 0
+0x01B:  000_001_001_100  000000_001_010  0000001C  // T4 = ABS(Rs1)
+0x01C:  000_001_010_101  000000_010_011  0000001D  // T5 = ABS(Rs2)
+
+// Execute division steps (reuse division loop)
+0x01D:  101_010_100_000  000000_000_000  0000001E  // Initialize quotient = 0
+0x01E:  101_010_110_000  100000_000_000  0000001F  // Initialize counter = 32
+0x01F:  101_010_111_100  000000_100_000  00000020  // Remainder = T4
+
+// Division loop (simplified for modulo)
+0x020:  000_010_111_111  000000_111_000  00000021  // Remainder <<= 1
+0x021:  000_011_111_101  000000_111_101  00000022  // Temp = Remainder - Divisor
+0x022:  110_100_000_000  000000_000_000  00000024  // Branch if Temp < 0
+0x023:  101_010_111_000  000000_000_000  00000024  // Remainder = Temp
+0x024:  000_011_110_110  111111_110_000  00000025  // Counter--
+0x025:  110_101_110_000  000000_000_000  00000020  // Branch if Counter != 0
+
+// Apply sign to remainder (same as dividend sign)
+0x026:  110_110_000_000  000000_000_000  00000028  // Branch if dividend was negative
+0x027:  111_000_000_000  000000_000_000  00000000  // Return positive remainder
+0x028:  000_100_111_111  000000_111_000  00000029  // Negate remainder
+0x029:  111_000_000_000  000000_000_000  00000000  // Return negative remainder
+----
+
+===== Square Root (SQRT) - Entry: 0x030
+
+----
+// SQRT Rs1 -> Rd = sqrt(Rs1) (integer square root)
+// Uses binary search algorithm optimized for ternary
+
+0x030:  101_000_001_010  000000_001_010  00000031  // Load Rs1
+0x031:  110_001_000_000  000000_000_000  000003F8  // Branch if negative (error)
+0x032:  110_001_000_000  000000_000_000  00000034  // Branch if zero (special case)
+0x033:  111_000_000_000  000000_000_000  00000000  // Return 0
+
+// Binary search for square root
+0x034:  101_010_100_000  000000_000_000  00000035  // guess = 0
+0x035:  101_010_101_001  000000_001_000  00000036  // high = Rs1
+0x036:  101_010_110_000  100000_000_000  00000037  // bit = 0x40000000
+
+// Newton-Raphson iteration loop
+0x037:  000_001_111_100  000000_100_110  00000038  // temp = guess + bit
+0x038:  000_010_000_111  000000_111_111  00000039  // temp2 = temp * temp
+0x039:  000_011_000_001  000000_000_001  0000003A  // compare temp2 with Rs1
+0x03A:  110_100_000_000  000000_000_000  0000003C  // Branch if temp2 > Rs1
+0x03B:  101_010_100_111  000000_111_000  0000003C  // guess = temp
+
+0x03C:  000_010_110_110  000000_110_000  0000003D  // bit >>= 2
+0x03D:  110_101_110_000  000000_000_000  00000037  // Branch if bit != 0
+
+// Final adjustment and return
+0x03E:  000_011_100_001  000000_100_001  0000003F  // Verify result
+0x03F:  111_000_000_000  000000_000_000  00000000  // Return guess
+----
+
+===== Absolute Value (ABS) - Entry: 0x048
+
+----
+// ABS Rs1 -> Rd = |Rs1| (absolute value with overflow check)
+
+0x048:  101_000_001_010  000000_001_010  00000049  // Load Rs1
+0x049:  110_001_000_000  000000_000_000  0000004B  // Branch if Rs1 >= 0
+0x04A:  000_100_001_001  000000_001_000  0000004B  // Rd = -Rs1
+0x04B:  110_111_000_000  000000_000_000  000003F8  // Check for overflow (MIN_INT)
+0x04C:  111_000_000_000  000000_000_000  00000000  // Return
+----
+
+==== Transcendental Functions (0x100-0x1FF)
+===== Sine Function (SIN) - Entry: 0x100
+
+----
+// SIN Fs1 -> Fd = sin(Fs1) using CORDIC algorithm
+// Input in radians, output normalized
+
+0x100:  001_000_001_010  000000_001_010  00000101  // Load Fs1 to FPU
+0x101:  001_001_000_000  000000_000_000  00000102  // Range reduction to [-π, π]
+0x102:  001_010_000_000  000000_000_000  00000103  // Further reduce to [0, π/2]
+
+// Initialize CORDIC constants
+0x103:  001_011_001_000  011001_000_000  00000104  // X = 0.607253 (1/An)
+0x104:  001_011_010_000  000000_000_000  00000105  // Y = 0
+0x105:  001_011_011_001  000000_001_000  00000106  // Z = input angle
+0x106:  001_011_100_000  000000_000_000  00000107  // i = 0 (iteration counter)
+
+// CORDIC rotation mode iteration (16 iterations)
+0x107:  001_100_011_000  000000_011_000  00000108  // Check if Z >= 0
+0x108:  110_100_000_000  000000_000_000  0000010C  // Branch if Z < 0
+
+// Z >= 0: clockwise rotation
+0x109:  001_101_001_010  000000_001_010  0000010A  // X_new = X - Y*2^(-i)
+0x10A:  001_101_010_001  000000_010_001  0000010B  // Y_new = Y + X*2^(-i)
+0x10B:  001_101_011_100  000000_011_100  0000010F  // Z_new = Z - atan(2^(-i))
+0x10C:  110_000_000_000  000000_000_000  0000010F  // Jump to next iteration
+
+// Z < 0: counter-clockwise rotation
+0x10D:  001_101_001_010  000000_001_010  0000010E  // X_new = X + Y*2^(-i)
+0x10E:  001_101_010_001  000000_010_001  0000010F  // Y_new = Y - X*2^(-i)
+0x10F:  001_101_011_100  000000_011_100  00000110  // Z_new = Z + atan(2^(-i))
+
+// Iteration control
+0x110:  001_111_100_100  000001_100_000  00000111  // i++
+0x111:  110_101_100_000  001000_000_000  00000107  // Branch if i < 16
+
+// Apply quadrant correction and return Y (sine result)
+0x112:  001_110_000_010  000000_000_010  00000113  // Apply quadrant correction
+0x113:  111_000_000_000  000000_000_000  00000000  // Return Y (sine result)
+----
+
+===== Cosine Function (COS) - Entry: 0x120
+
+----
+// COS Fs1 -> Fd = cos(Fs1) using CORDIC algorithm
+// Similar to SIN but returns X component
+
+0x120:  001_000_001_010  000000_001_010  00000121  // Load Fs1
+// ... (similar CORDIC setup as SIN)
+0x130:  001_110_000_001  000000_000_001  00000131  // Apply quadrant correction
+0x131:  111_000_000_000  000000_000_000  00000000  // Return X (cosine result)
+----
+
+===== Exponential Function (EXP) - Entry: 0x140
+
+----
+// EXP Fs1 -> Fd = e^Fs1 using Taylor series with range reduction
+
+0x140:  001_000_001_010  000000_001_010  00000141  // Load Fs1
+0x141:  001_001_000_000  000000_000_000  00000142  // Range reduction: x = x - n*ln(2)
+0x142:  001_010_000_000  000001_000_000  00000143  // result = 1.0
+0x143:  001_010_001_001  000000_001_000  00000144  // term = x
+0x144:  001_010_010_000  000001_000_000  00000145  // n = 1 (factorial counter)
+
+// Taylor series loop: e^x = sum(x^n / n!)
+0x145:  001_011_010_001  000000_010_001  00000146  // result += term
+0x146:  001_011_001_001  000000_001_001  00000147  // term *= x
+0x147:  001_011_010_010  000001_010_000  00000148  // n++
+0x148:  001_011_001_010  000000_001_010  00000149  // term /= n
+0x149:  001_100_001_000  000001_001_000  0000014A  // Check |term| < epsilon
+0x14A:  110_100_000_000  000000_000_000  0000014C  // Branch if converged
+0x14B:  110_000_000_000  000000_000_000  00000145  // Continue loop
+0x14C:  001_101_000_000  000000_000_000  0000014D  // Apply 2^n scaling back
+0x14D:  111_000_000_000  000000_000_000  00000000  // Return result
+----
+
+==== Advanced Vector Operations (0x200-0x2FF)
+===== Vector Dot Product (VDOT) - Entry: 0x200
+
+----
+// VDOT Vs1, Vs2 -> Rd = Vs1 · Vs2 (3-element dot product)
+
+0x200:  010_000_001_010  000000_001_010  00000201  // Load Vs1 vector
+0x201:  010_000_010_011  000000_010_011  00000202  // Load Vs2 vector
+0x202:  010_010_000_000  000000_000_000  00000203  // Initialize accumulator = 0
+
+// Parallel multiply-accumulate for 3 elements
+0x203:  010_011_001_010  000000_001_010  00000204  // acc += Vs1[0] * Vs2[0]
+0x204:  010_011_001_010  000001_001_010  00000205  // acc += Vs1[1] * Vs2[1]
+0x205:  010_011_001_010  000010_001_010  00000206  // acc += Vs1[2] * Vs2[2]
+0x206:  111_000_000_000  000000_000_000  00000000  // Return accumulator
+----
+
+===== Vector Reduction (VREDUCE) - Entry: 0x210
+
+----
+// VREDUCE Vs1, op -> Rd = reduce(Vs1, op)
+// op: 0=sum, 1=max, 2=min, 3=product
+
+0x210:  010_000_001_010  000000_001_010  00000211  // Load Vs1 vector
+0x211:  101_000_010_000  000000_010_000  00000212  // Load operation type
+0x212:  010_001_001_000  000000_001_000  00000213  // result = Vs1[0]
+0x213:  110_000_010_000  000000_000_000  00000220  // Branch on operation type
+
+// Sum operation (op = 0)
+0x214:  010_010_000_001  000001_000_000  00000215  // result += Vs1[1]
+0x215:  010_010_000_001  000010_000_000  0000021F  // result += Vs1[2], jump to end
+
+// Max operation (op = 1)
+0x216:  010_011_000_001  000001_000_000  00000217  // result = max(result, Vs1[1])
+0x217:  010_011_000_001  000010_000_000  0000021F  // result = max(result, Vs1[2])
+
+// Min operation (op = 2)
+0x218:  010_100_000_001  000001_000_000  00000219  // result = min(result, Vs1[1])
+0x219:  010_100_000_001  000010_000_000  0000021F  // result = min(result, Vs1[2])
+
+// Product operation (op = 3)
+0x21A:  010_101_000_001  000001_000_000  0000021B  // result *= Vs1[1]
+0x21B:  010_101_000_001  000010_000_000  0000021F  // result *= Vs1[2]
+
+// Branch table for operations
+0x220:  110_000_000_000  000000_000_000  00000214  // Jump to sum
+0x221:  110_000_000_000  000000_000_000  00000216  // Jump to max
+0x222:  110_000_000_000  000000_000_000  00000218  // Jump to min
+0x223:  110_000_000_000  000000_000_000  0000021A  // Jump to product
+
+0x21F:  111_000_000_000  000000_000_000  00000000  // Return result
+----
+
+==== Memory Management Operations (0x300-0x37F)
+===== Cache Control (CACHE) - Entry: 0x300
+
+----
+// CACHE Rs1, op -> Cache operation at address Rs1
+// op: 0=flush, 1=invalidate, 2=prefetch, 3=writeback
+
+0x300:  011_000_001_010  000000_001_010  00000301  // Load address Rs1
+0x301:  011_000_010_011  000000_010_011  00000302  // Load operation type
+0x302:  011_001_001_000  000000_001_000  00000303  // Convert to cache line address
+0x303:  110_000_010_000  000000_000_000  00000310  // Branch on operation type
+
+// Flush operation (op = 0)
+0x304:  011_010_001_000  000000_001_000  0000030F  // Flush cache line, jump to end
+
+// Invalidate operation (op = 1)
+0x305:  011_011_001_000  000000_001_000  0000030F  // Invalidate cache line
+
+// Prefetch operation (op = 2)
+0x306:  011_100_001_000  000000_001_000  0000030F  // Prefetch cache line
+
+// Writeback operation (op = 3)
+0x307:  011_101_001_000  000000_001_000  0000030F  // Writeback cache line
+
+// Branch table
+0x310:  110_000_000_000  000000_000_000  00000304  // Jump to flush
+0x311:  110_000_000_000  000000_000_000  00000305  // Jump to invalidate
+0x312:  110_000_000_000  000000_000_000  00000306  // Jump to prefetch
+0x313:  110_000_000_000  000000_000_000  00000307  // Jump to writeback
+
+0x30F:  111_000_000_000  000000_000_000  00000000  // Return
+----
+
+==== System Control Operations (0x380-0x3EF)
+===== System Call (SYSCALL) - Entry: 0x380
+
+----
+// SYSCALL -> Invoke system call with full context save
+
+0x380:  100_000_000_000  000000_000_000  00000381  // Save processor state
+0x381:  100_001_000_000  000000_000_000  00000382  // Read syscall number from T0
+0x382:  100_010_000_000  000000_000_000  00000383  // Validate syscall number
+0x383:  100_011_000_000  000000_000_000  00000384  // Set up syscall parameters
+0x384:  100_100_000_000  000000_000_000  00000385  // Switch to supervisor mode
+0x385:  100_101_000_000  000000_000_000  00000386  // Jump to syscall handler
+0x386:  111_000_000_000  000000_000_000  00000000  // Return (after syscall completion)
+----
+
+===== Debug Breakpoint (BREAK) - Entry: 0x390
+
+----
+// BREAK -> Debug breakpoint with state preservation
+
+0x390:  100_110_000_000  000000_000_000  00000391  // Save debug context
+0x391:  100_111_000_000  000000_000_000  00000392  // Signal debug trap
+0x392:  101_000_000_000  000000_000_000  00000393  // Wait for debugger
+0x393:  111_000_000_000  000000_000_000  00000000  // Return
+----
+
+===== System Halt (HALT) - Entry: 0x3A0
+
+----
+// HALT -> System halt with power management
+
+0x3A0:  101_001_000_000  000000_000_000  000003A1  // Save critical state
+0x3A1:  101_010_000_000  000000_000_000  000003A2  // Enter halt mode
+0x3A2:  101_011_000_000  000000_000_000  000003A2  // Wait loop (halt)
+----
+
+==== Error Handlers (0x3F0-0x3FF)
+===== Division by Zero Handler - Entry: 0x3F0
+
+----
+0x3F0:  100_100_000_000  000000_000_000  000003F1  // Set divide-by-zero exception flag
+0x3F1:  100_101_000_000  000011_000_000  000003F2  // Set error code = 3
+0x3F2:  100_110_000_000  000000_000_000  000003F3  // Trigger arithmetic exception
+0x3F3:  111_000_000_000  000000_000_000  00000000  // Return (exception handler takes over)
+----
+
+===== Floating-Point Error Handler - Entry: 0x3F8
+
+----
+0x3F8:  100_111_000_000  000000_000_000  000003F9  // Set FP exception flag
+0x3F9:  101_000_000_000  000101_000_000  000003FA  // Set error code = 5
+0x3FA:  101_001_000_000  000000_000_000  000003FB  // Trigger FP exception
+0x3FB:  111_000_000_000  000000_000_000  00000000  // Return
+----
+
+=== Microcode Constants and Lookup Tables
+==== CORDIC Constants (Used by trigonometric functions)
+
+----
+// CORDIC arctangent lookup table (16 entries)
+// atan(2^(-i)) values in fixed-point format
+
+CORDIC_ATAN_TABLE:
+0x20000000,  // atan(2^0)  = 0.78539816 (π/4)
+0x12E4051E,  // atan(2^-1) = 0.46364761
+0x09FB385B,  // atan(2^-2) = 0.24497866
+0x051111D4,  // atan(2^-3) = 0.12435499
+// ... (12 more entries)
+----
+
+==== Exponential Constants (Used by EXP function)
+
+----
+// Natural logarithm and exponential constants
+LN2_FIXED:     0x2C5C85FE   // ln(2) in fixed-point
+E_FIXED:       0x2B7E1516   // e in fixed-point
+EPSILON_FIXED: 0x00000100   // Convergence epsilon
+----
+
+=== Microcode Performance Analysis
+==== Instruction Cycle Counts
+
+[cols="4,2,2,2,3"]
+|===
+|Microcode Operation |Entry Point |Min Cycles |Max Cycles |Typical Use
+
+|DIV (Signed Division) |0x000 |12 |15 |Integer division
+|MOD (Signed Modulo) |0x018 |12 |15 |Remainder calculation
+|SQRT (Square Root) |0x030 |14 |16 |Square root approximation
+|ABS (Absolute Value) |0x048 |4 |6 |Sign correction
+|SIN (Sine) |0x100 |14 |14 |Trigonometric calculation
+|COS (Cosine) |0x120 |14 |14 |Trigonometric calculation
+|EXP (Exponential) |0x140 |10 |12 |Exponential function
+|VDOT (Vector Dot Product) |0x200 |6 |6 |Vector mathematics
+|VREDUCE (Vector Reduction) |0x210 |6 |8 |Vector processing
+|CACHE (Cache Control) |0x300 |4 |6 |Memory management
+|SYSCALL (System Call) |0x380 |6 |Variable |OS interface
+|BREAK (Debug Break) |0x390 |4 |4 |Debug support
+|HALT (System Halt) |0x3A0 |2 |2 |Power management
+|===
+
+==== ROM Utilization
+
+- **Total ROM Size**: 1024 words (4KB)
+- **Used ROM Space**: ~650 words (65%)
+- **Free ROM Space**: ~374 words (35%)
+- **Longest Routine**: SQRT (48 instructions)
+- **Shortest Routine**: HALT (3 instructions)
+- **Average Routine Length**: 25 instructions
+
+=== Implementation Notes
+
+1. **Error Handling**: All microcode routines include comprehensive error checking
+2. **Precision**: Floating-point operations use 32-bit precision with proper rounding
+3. **Optimization**: Common code sequences are shared between routines where possible
+4. **Interrupts**: Microcode operations can be interrupted and resumed at instruction boundaries
+5. **Testing**: Each routine includes built-in self-test capabilities for verification

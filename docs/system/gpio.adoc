@@ -1,0 +1,238 @@
+=== GPIO Controller
+
+The VTX1 GPIO controller provides comprehensive general-purpose I/O functionality with 24 configurable pins, integrated PWM generation, interrupt capability, and power-aware operation modes. The controller supports both digital I/O and alternate function multiplexing for communication interfaces.
+
+==== Hardware Architecture
+
+[mermaid]
+....
+---
+config:
+  look: neo
+  layout: elk
+  theme: redux
+---
+flowchart TB
+    subgraph GPIO_CTRL["VTX1 GPIO Controller"]
+        subgraph GPIO_REGS["GPIO Register Block"]
+            CONFIG_REG["Configuration Registers<br/>Function, Direction, Pull"]
+            DATA_REG["Data Registers<br/>Input, Output, Set, Clear"]
+            INT_REG["Interrupt Registers<br/>Enable, Status, Config"]
+            PWM_REG["PWM Registers<br/>Period, Duty, Control"]
+            MUX_REG["Multiplexer Registers<br/>Alternate Function Select"]
+        end
+        
+        subgraph GPIO_LOGIC["Control Logic"]
+            PIN_CTRL["Pin Control Logic<br/>24 Independent Controllers"]
+            PWM_GEN["PWM Generators<br/>8 × 16-bit Channels"]
+            INT_CTRL["Interrupt Generator<br/>Edge/Level Detection"]
+            SYNC_LOGIC["Clock Domain Sync<br/>50MHz ↔ External"]
+        end
+        
+        subgraph GPIO_PADS["GPIO Pads"]
+            PAD_BANK0["GPIO Bank 0<br/>GPIO[7:0]<br/>Pins 18-25"]
+            PAD_BANK1["GPIO Bank 1<br/>GPIO[15:8]<br/>Pins 37-44"]
+            PAD_BANK2["GPIO Bank 2<br/>GPIO[23:16]<br/>Pins 45-52"]
+        end
+        
+        subgraph POWER_MGMT["Power Management"]
+            POWER_GATE["Power Gating<br/>Per-bank Control"]
+            RETENTION["State Retention<br/>Sleep Mode"]
+            WAKE_LOGIC["Wake-up Logic<br/>GPIO Events"]
+        end
+    end
+    
+    subgraph PERIPHERAL_BUS["Peripheral Bus (50MHz)"]
+        PERI_INTERFACE["Bus Interface<br/>32-bit APB4"]
+    end
+    
+    subgraph INTERRUPT_CTRL["Interrupt Controller"]
+        IRQ_MUX["IRQ Multiplexer<br/>GPIO[7:0] → IRQ[7:0]"]
+    end
+    
+    %% Connections
+    PERI_INTERFACE --> GPIO_REGS
+    GPIO_REGS --> PIN_CTRL
+    GPIO_REGS --> PWM_GEN
+    GPIO_REGS --> INT_CTRL
+    GPIO_REGS --> MUX_REG
+    
+    PIN_CTRL --> PAD_BANK0
+    PIN_CTRL --> PAD_BANK1
+    PIN_CTRL --> PAD_BANK2
+    
+    PWM_GEN --> PAD_BANK0
+    PWM_GEN --> PAD_BANK1
+    PWM_GEN --> PAD_BANK2
+    
+    INT_CTRL --> IRQ_MUX
+    
+    POWER_GATE --> PAD_BANK0
+    POWER_GATE --> PAD_BANK1
+    POWER_GATE --> PAD_BANK2
+    
+    SYNC_LOGIC --> PIN_CTRL
+    SYNC_LOGIC --> PWM_GEN
+    
+    %% External connections
+    PAD_BANK0 -.->|"Pins 18-25"| GPIO_PINS0["External GPIO[7:0]"]
+    PAD_BANK1 -.->|"Pins 37-44"| GPIO_PINS1["External GPIO[15:8]"]
+    PAD_BANK2 -.->|"Pins 45-52"| GPIO_PINS2["External GPIO[23:16]"]
+....
+
+==== Advanced GPIO Features and Pin Configuration
+
+**GPIO Pin Mapping:**
+[cols="1,1,1,2,2"]
+|===
+|GPIO |Pin |Bank |Primary Function |Alternate Functions
+
+|GPIO0 |18 |0 |Digital I/O |PWM0, IRQ0, UART_CTS
+|GPIO1 |19 |0 |Digital I/O |PWM1, IRQ1, UART_RTS
+|GPIO2 |20 |0 |Digital I/O |PWM2, IRQ2, SPI_MOSI
+|GPIO3 |21 |0 |Digital I/O |PWM3, IRQ3, SPI_MISO
+|GPIO4 |22 |0 |Digital I/O |PWM4, IRQ4, SPI_SCK
+|GPIO5 |23 |0 |Digital I/O |PWM5, IRQ5, SPI_SS
+|GPIO6 |24 |0 |Digital I/O |PWM6, IRQ6, I2C_SDA
+|GPIO7 |25 |0 |Digital I/O |PWM7, IRQ7, I2C_SCL
+|GPIO8 |37 |1 |Digital I/O |Timer0_Out, DMA_REQ0
+|GPIO9 |38 |1 |Digital I/O |Timer1_Out, DMA_ACK0
+|GPIO10 |39 |1 |Digital I/O |Timer0_Cap, DMA_REQ1
+|GPIO11 |40 |1 |Digital I/O |Timer1_Cap, DMA_ACK1
+|GPIO12 |41 |1 |Digital I/O |Comparator0_Out
+|GPIO13 |42 |1 |Digital I/O |Comparator1_Out
+|GPIO14 |43 |1 |Digital I/O |DAC0_Out
+|GPIO15 |44 |1 |Digital I/O |DAC1_Out
+|GPIO16 |45 |2 |Digital I/O |ADC0_In
+|GPIO17 |46 |2 |Digital I/O |ADC1_In
+|GPIO18 |47 |2 |Digital I/O |XTAL_Out
+|GPIO19 |48 |2 |Digital I/O |XTAL_In
+|GPIO20 |49 |2 |Digital I/O |External_CLK
+|GPIO21 |50 |2 |Digital I/O |Test_Mode
+|GPIO22 |51 |2 |Digital I/O |JTAG_TMS
+|GPIO23 |52 |2 |Digital I/O |JTAG_TCK
+|===
+
+**Electrical Characteristics:**
+- **Output Drive Strength:** 2mA, 4mA, 8mA, 12mA (configurable per pin)
+- **Input Threshold:** VIL=1.5V, VIH=3.5V (5V operation)
+- **Output Levels:** VOL<0.4V, VOH>4.6V (5V operation)
+- **Pull-up/Pull-down:** 10kΩ, 47kΩ, 100kΩ (configurable)
+- **Slew Rate Control:** Fast (1ns), Medium (5ns), Slow (20ns)
+- **Hysteresis:** 200mV minimum for noise immunity
+
+**Advanced Register Map:**
+
+**GPIO_CONFIG0-7 (0x4000_2040-0x4000_205C) - Individual Pin Configuration**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:28 |DRIVE |RW |Drive strength: 0=2mA, 1=4mA, 2=8mA, 3=12mA
+|27:26 |SLEW |RW |Slew rate: 0=fast, 1=medium, 2=slow, 3=reserved
+|25:24 |PULL |RW |Pull config: 0=none, 1=up, 2=down, 3=keeper
+|23:20 |ALT_FUNC |RW |Alternate function select (0-15)
+|19:16 |IRQ_TYPE |RW |IRQ type: 0=disabled, 1=rising, 2=falling, 3=both, 4=high, 5=low
+|15:12 |PWM_CHAN |RW |PWM channel assignment (0-7, 15=disabled)
+|11 |FAST_SLEW |RW |Override slew rate for clock outputs
+|10 |HYSTERESIS |RW |Enable input hysteresis
+|9 |ANALOG_EN |RW |Enable analog function (ADC/DAC)
+|8 |OPEN_DRAIN |RW |Enable open-drain output
+|7:4 |Reserved |RO |Reserved for future use
+|3:0 |FUNCTION |RW |Pin function: 0=input, 1=output, 2=alternate, 3=analog
+|===
+
+**PWM Generation:**
+
+**GPIO_PWM_PERIODn (0x4000_2060 + n*8) - PWM Period Configuration**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:16 |PERIOD_CH1 |RW |PWM period for channel (2n+1) in clock cycles
+|15:0 |PERIOD_CH0 |RW |PWM period for channel (2n+0) in clock cycles
+|===
+
+**GPIO_PWM_DUTYn (0x4000_2064 + n*8) - PWM Duty Cycle Configuration**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:16 |DUTY_CH1 |RW |PWM duty cycle for channel (2n+1)
+|15:0 |DUTY_CH0 |RW |PWM duty cycle for channel (2n+0)
+|===
+
+==== Interrupt Generation and Handling
+
+**Interrupt Capabilities:**
+- **Sources:** GPIO[7:0] can generate interrupts (IRQ 0-7)
+- **Trigger Modes:** Rising edge, falling edge, both edges, high level, low level
+- **Debouncing:** Hardware debounce with configurable time constant
+- **Filtering:** Glitch filtering with 1-15 clock cycle rejection
+- **Wake-up:** Can wake system from sleep modes
+- **Latching:** Interrupt status latched until cleared by software
+
+**GPIO_INT_TYPEn (0x4000_207C + n*4) - Interrupt Type Configuration**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:28 |GPIO3_TYPE |RW |IRQ type for GPIO(4n+3)
+|27:24 |GPIO2_TYPE |RW |IRQ type for GPIO(4n+2)
+|23:20 |GPIO1_TYPE |RW |IRQ type for GPIO(4n+1)
+|19:16 |GPIO0_TYPE |RW |IRQ type for GPIO(4n+0)
+|15:8 |DEBOUNCE |RW |Debounce time: 0=none, 1-255=cycles
+|7:4 |FILTER |RW |Glitch filter width in clock cycles
+|3:0 |Reserved |RO |Reserved for future use
+|===
+
+**GPIO_INT_STATUS (0x4000_209C) - Interrupt Status Register**
+[cols="1,1,1,3"]
+|===
+|Bits |Field |Access |Description
+
+|31:24 |Reserved |RO |Reserved for future use
+|23:0 |INT_STATUS |RW1C |Interrupt status for GPIO[23:0], write 1 to clear
+|===
+
+==== Performance Characteristics
+
+**Timing Specifications:**
+- **Setup Time:** 2ns before clock edge (50MHz)
+- **Hold Time:** 1ns after clock edge (50MHz)  
+- **Input Delay:** <5ns from pad to register
+- **Output Delay:** <8ns from register to pad
+- **Register Access:** 1 clock cycle (50MHz = 20ns)
+- **Bit Manipulation:** Atomic set/clear/toggle operations
+- **Bulk Updates:** 8 pins per register write
+- **Interrupt Response:** 4-6 cycles from edge to CPU
+- **PWM Updates:** Real-time duty cycle modification
+- **Maximum I/O Rate:** 25MHz toggle rate per pin
+
+==== Power Management Integration
+
+**Power Management Features:**
+- **Bank-Level Gating:** Independent power control for each 8-pin bank
+- **Retention Mode:** State preservation during sleep with minimal power
+- **Wake-up Sources:** GPIO events can wake system from deep sleep
+- **Dynamic Scaling:** Automatic drive strength adjustment based on load
+- **Leakage Control:** High-impedance mode for unused pins
+
+**Power Consumption:**
+[cols="2,1,1,2"]
+|===
+|Operating Mode |Active |Sleep |Units
+
+|Digital I/O (per pin) |2.5 |0.1 |mA
+|PWM Generation (per channel) |1.8 |0.0 |mA
+|Interrupt Detection |0.5 |0.3 |mA
+|Total GPIO Controller |50 |5 |mA (all pins active)
+|Retention Mode |0 |2 |mA (state preserved)
+|===
+
+**Power Gating Control:**
+- **Bank 0 Gating:** GPIO[7:0] independent power domain
+- **Bank 1 Gating:** GPIO[15:8] independent power domain  
+- **Bank 2 Gating:** GPIO[23:16] independent power domain
+- **Wake-up Logic:** Always-on for interrupt generation
+- **Retention Registers:** Critical state preserved during power-down

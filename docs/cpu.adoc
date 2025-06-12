@@ -1,0 +1,939 @@
+== Core Processing Unit
+=== Register Organization
+==== Register Map 
+|===
+|Register |Name |Purpose |Width |Special Behavior| Usage
+|T0-T3 |GPRs |General Purpose Registers |Trit |-|Primary computation
+|T4-T6 |Extended GPRs |Extended working registers |Trit |-|Extended computation
+|TA |Accumulator |ALU/FPU Accumulator |Trit |Implicit in some ops|Accumulator operations
+|TB |Base Pointer |Stack/frame base pointer |Trit |Used for addressing|Memory addressing
+|TC |Program Counter |Program Counter |Trit |Auto-increment/fetch|Control Register
+|TS |Status |Flags, condition codes |Trit |Affects branching|Control Register
+|TI |Instruction Register |Current instruction |Trit |Pipeline control|Control Register
+|VA |Vector Accumulator |Vector operations |3×Trit |SIMD operations|Vector operations
+|VT |Vector Temporary |Vector operations |3×Trit |SIMD operations|Vector operations
+|VB |Vector Base |Vector operations |3×Trit |SIMD operations|Vector operations
+|FA |FP Accumulator |Floating-point operations |Trit |FP operations|Floating-point
+|FT |FP Temporary |Floating-point operations |Trit |FP operations|Floating-point
+|FB |FP Base |Floating-point operations |Trit |FP operations|Floating-point
+|===
+==== Register Access
+  - 6 read ports
+  - 3 write ports
+  - Zero-wait state access
+  - Bypass paths for all ports
+  - Register file organization: 3-way interleaved
+  - Access timing: 1 cycle
+
+==== Register Features
+  - Balanced ternary representation
+  - Direct access in 1 cycle
+  - Bypass paths for pipeline
+  - Register renaming support
+  - Vector register support
+  - FPU register support
+  - Control register protection
+
+=== Enhanced Pipeline Architecture
+
+The VTX1 core implements a sophisticated 4-stage pipeline architecture optimized for balanced ternary operations and VLIW instruction processing. The pipeline integrates seamlessly with the enhanced TCU interface and microcode execution system for maximum performance and flexibility.
+
+==== Pipeline Characteristics
+- **Pipeline Depth**: 4 stages (Fetch, Decode, Execute, Writeback)
+- **VLIW Support**: 3 parallel operations per cycle with sophisticated dependency resolution
+- **Microcode Integration**: Hardware microcode sequencer for complex operations (26 microcode routines)
+- **TCU Enhanced Interface**: 7-state handshaking mechanism with adaptive timeout management
+- **Error Integration**: Comprehensive error handling with automatic recovery mechanisms
+- **Performance Monitoring**: Hardware performance counters and pipeline utilization tracking
+
+==== Enhanced TCU Interface Architecture
+
+The Ternary Control Unit (TCU) interface has been significantly enhanced with sophisticated handshaking and error management:
+
+**State Machine Architecture (7 States):**
+1. **VTX1_TCU_IDLE**: Default state - ready for new instruction requests
+2. **VTX1_TCU_FETCH_REQ**: Instruction fetch request initiated
+3. **VTX1_TCU_FETCH_WAIT**: Waiting for memory/cache response
+4. **VTX1_TCU_DECODE_WAIT**: Instruction decode and dependency analysis
+5. **VTX1_TCU_EXECUTE**: Instruction execution with microcode coordination
+6. **VTX1_TCU_WRITEBACK**: Result writeback and completion signaling
+7. **VTX1_TCU_ERROR**: Error state with recovery mechanisms
+
+**Adaptive Timeout Management:**
+- **Simple Operations**: 4-cycle timeout for register-to-register operations
+- **Memory Operations**: 16-cycle timeout for cache hits, 64-cycle for memory access
+- **Complex Operations**: 128-cycle timeout for microcode-assisted operations
+- **Microcode Execution**: 256-cycle timeout for complex microcode sequences
+
+**Enhanced Handshaking Protocol:**
+```verilog
+// TCU Enhanced Interface Signals
+input wire tcu_request;              // TCU operation request
+input wire [31:0] tcu_instruction;   // 32-bit instruction word
+input wire [1:0] tcu_op_type;        // Operation complexity classification
+output wire tcu_ready;               // TCU ready for new operation
+output wire tcu_valid;               // Operation result valid
+output wire [31:0] tcu_result;       // Operation result data
+output wire tcu_error;               // Error condition flag
+output wire [3:0] tcu_error_code;    // Standardized error classification
+```
+
+==== Microcode Integration System
+
+**Microcode ROM Implementation:**
+- **Capacity**: 1024 × 32-bit microcode storage (4KB total)
+- **Operations**: 26 complex operations with microcode assistance
+- **Sequencer**: Enhanced microcode sequencer with adaptive timeout management
+- **Integration**: Seamless handoff between pipeline and microcode execution
+
+**Microcode Operations (Examples):**
+- **Division Operations**: 32-cycle microcode sequence for integer division
+- **Multiplication**: Optimized ternary multiplication with partial products
+- **Floating-Point**: IEEE 754 compatible operations in ternary domain
+- **Vector Operations**: SIMD operations with ternary optimization
+- **System Operations**: Context switching, exception handling, cache management
+
+**Microcode Performance Characteristics:**
+- **Latency**: 8-256 cycles depending on operation complexity
+- **Throughput**: Pipeline continues with independent operations
+- **Error Handling**: Integrated with VTX1 error framework
+- **Debugging**: Full microcode visibility through debug interface
+
+==== Pipeline Operation
+
+The VTX1 pipeline is designed to efficiently execute instructions with minimal stalls and maximum throughput. The architecture supports VLIW instructions, allowing multiple operations to be executed in parallel. The pipeline stages are optimized for balanced ternary operations, with a unified Ternary Computing Unit (TCU) handling arithmetic, logic, and vector operations.
+
+==== Pipeline Stages Overview
+The VTX1 pipeline consists of four main stages, each responsible for a specific part of the instruction execution process. The stages are designed to work in parallel, allowing for high throughput and efficient execution of VLIW instructions.
+
+1. **Fetch Stage (TC, Instruction Fetch)**  
+   – Program Counter (TC) is updated.  
+   – Instruction is fetched from cache/memory.  
+   – Branch prediction (if applicable) is performed.
+
+2. **Decode Stage (VLIW Decoder)**  
+   – VLIW instruction is decoded (supports parallel operations).  
+   – Register file access (read) is performed.  
+   – Hazard detection (and forwarding) is handled.
+
+3. **Execute Stage (TCU)**  
+   – The Ternary Computing Unit (TCU) combines ALU, Ternary FPU, and SIMD operations.  
+   – Arithmetic, logic, transcendental, and SIMD/vector operations are executed in parallel (as dictated by the VLIW encoding).
+   - Microcode offload for the complex operations  
+   – Memory access (load/store) and branch resolution are also performed.
+
+4. **Writeback Stage**  
+   – Register file updates (write) are performed.  
+   – Status flag updates (e.g. condition codes) are applied.  
+   – Result forwarding (bypass) is applied if needed.
+
+=== Enhanced Ternary Computing Unit (TCU) Implementation
+
+The VTX1 CPU implements a sophisticated Ternary Computing Unit (TCU) with enhanced microcode integration and advanced handshaking mechanisms. The implementation includes adaptive timeout handling, comprehensive error management, and performance monitoring capabilities.
+
+==== Enhanced TCU Interface Architecture
+
+**Microcode Integration System:**
+
+The implementation includes a sophisticated enhanced interface for microcode operations:
+
+[source,verilog]
+----
+// Enhanced TCU Interface - Phase 4 Implementation
+input  wire                     microcode_enable,       // Enhanced microcode enable
+input  wire [3:0]               microcode_operation,    // Extended operation codes
+input  wire [VTX1_WORD_WIDTH-1:0] microcode_operand_a, // 36-bit ternary operands
+input  wire [VTX1_WORD_WIDTH-1:0] microcode_operand_b,
+input  wire [VTX1_WORD_WIDTH-1:0] microcode_operand_c,
+output reg  [VTX1_WORD_WIDTH-1:0] microcode_result,    // 36-bit ternary result
+output reg                      microcode_valid,        // Result valid flag
+output reg                      microcode_ready,        // Ready for operation
+output reg                      microcode_error,        // Error condition
+----
+
+**Advanced Handshaking State Machine:**
+
+The TCU interface implements a sophisticated 7-state handshaking mechanism with VTX1 standardized states:
+
+[cols="2,3,3", options="header"]
+|===
+|State |Purpose |Implementation Features
+
+|**IDLE** |Ready for new operations |Low power mode, monitoring for requests
+|**REQUEST** |Operation request initiated |Operand validation, resource allocation
+|**WAIT_ACK** |Waiting for TCU acknowledgment |Timeout monitoring, error detection
+|**EXECUTING** |Operation in progress |Progress tracking, intermediate monitoring
+|**WAIT_RESULT** |Waiting for completion |Result validation, error checking
+|**COMPLETE** |Operation completed successfully |Result forwarding, statistics update
+|**ERROR** |Error condition handling |Error classification, recovery initiation
+|===
+
+**Adaptive Timeout Management:**
+
+The implementation includes sophisticated timeout calculation based on operation complexity:
+
+[source,verilog]
+----
+// Adaptive timeout calculation function
+function [31:0] get_operation_timeout;
+    input [3:0] op;
+    case (op)
+        4'h0-4'h2: get_operation_timeout = VTX1_TIMEOUT_SIMPLE;        // ADD, SUB, MUL: 100 cycles
+        4'h3-4'h5: get_operation_timeout = VTX1_TIMEOUT_COMPLEX;       // DIV, MOD, SQRT: 500 cycles
+        4'h6-4'h7: get_operation_timeout = VTX1_TIMEOUT_TRANSCENDENTAL; // TRIG functions: 1000 cycles
+        4'h8-4'hA: get_operation_timeout = VTX1_TIMEOUT_VECTOR;        // Vector ops: 300 cycles
+        4'hB-4'hC: get_operation_timeout = VTX1_TIMEOUT_MEMORY;        // Memory ops: 200 cycles
+        4'hD-4'hF: get_operation_timeout = VTX1_TIMEOUT_SYSTEM;        // System ops: 150 cycles
+    endcase
+endfunction
+----
+
+**Performance Monitoring Integration:**
+
+The enhanced TCU interface provides comprehensive performance monitoring:
+
+[cols="2,2,3", options="header"]
+|===
+|Metric |Signal |Implementation Purpose
+
+|**Operation Cycles** |operation_cycles[31:0] |Cycle count for current operation execution
+|**Total Operations** |total_operations[31:0] |Cumulative operation counter for performance analysis
+|**Error Count** |error_count[31:0] |Error occurrence tracking for reliability assessment
+|**Interface State** |interface_state[3:0] |Current state machine state for debugging
+|===
+
+==== TCU Block Diagram
+
+[mermaid]
+....
+flowchart TB
+ subgraph TCU["Ternary Computing Unit"]
+ subgraph ALU["Ternary ALU"]
+ TADD["Ternary Adder"]
+ TMUL["Ternary Multiplier"]
+ TLOG["Ternary Logic Unit"]
+ TSHF["Ternary Shifter"]
+ end
+
+    subgraph FPU["Ternary FPU"]
+        TFADD["FP Adder"]
+        TFMUL["FP Multiplier"]
+        TFDIV["FP Divider"]
+        TFTRIG["Trigonometric Unit"]
+    end
+
+    subgraph SIMD["Ternary SIMD"]
+        TVADD["Vector Adder"]
+        TVMUL["Vector Multiplier"]
+        TVLOG["Vector Logic"]
+        TVSHF["Vector Shifter"]
+    end
+
+    subgraph MCU["Microcode Interface"]
+        MSEQ["Microcode Sequencer"]
+        MCTRL["Operation Controller"]
+        MBUF["Operation Buffer"]
+    end
+
+    subgraph REG["Register Interface"]
+        RF["Register File Ports"]
+        VRF["Vector Register File"]
+        FPR["FP Register File"]
+    end
+
+    subgraph BUS["Data Paths"]
+        D1["Data Bus 1"]
+        D2["Data Bus 2"]
+        D3["Data Bus 3"]
+        RB["Result Bus"]
+    end
+end
+
+%% Connections
+ALU <--> BUS
+FPU <--> BUS
+SIMD <--> BUS
+MCU <--> BUS
+REG <--> BUS
+BUS --> RB
+....
+
+==== TCU Operation Modes
+
+1. **Parallel Execution Mode**
+   - Up to 3 operations per cycle
+   - Operation combinations:
+     - 2 ALU + 1 Memory
+     - 1 ALU + 1 FPU + 1 SIMD
+     - 3 ALU (different units)
+   - Register file: 6 read ports, 3 write ports
+   - Zero-wait state for register access
+
+2. **Microcode Offload Mode**
+   - Complex operations offloaded to microcode
+   - Examples:
+     - Transcendental functions
+     - Complex vector operations
+     - Division and square root
+     - String operations
+   - Microcode routines stored in dedicated ROM
+   - Parallel execution with main TCU
+
+==== Functional Units
+
+1. **Ternary ALU**
+   - Basic Operations (1 cycle):
+     - Addition/Subtraction
+     - Multiplication
+     - Logic operations (AND, OR, NOT)
+     - Shifts and rotates
+   - Complex Operations (microcode):
+     - Division
+     - Square root
+     - Population count
+     - Bit manipulation
+
+2. **Ternary FPU**
+   - Basic Operations (2-3 cycles):
+     - Addition/Subtraction
+     - Multiplication
+     - Comparison
+   - Complex Operations (microcode):
+     - Division
+     - Square root
+     - Trigonometric functions
+     - Exponential/Logarithmic
+   - FPU Features:
+     - Ternary floating-point format
+     - 32-bit precision
+     - Rounding modes
+     - Exception handling
+
+3. **Ternary SIMD**
+   - Vector Operations (1-2 cycles):
+     - Vector add/sub
+     - Vector multiply
+     - Vector logic
+     - Vector shift
+   - Complex Operations (microcode):
+     - Vector reduction
+     - Vector permutation
+     - Vector search
+     - Vector comparison
+   - SIMD Features:
+     - 3-way parallel processing
+     - Vector length: 3, 9, or 27 elements
+     - Masked operations
+     - Scatter/gather support
+
+==== Microcode Offloading
+
+1. **Offloaded Operations**
+   - Transcendental functions
+   - Complex vector operations
+   - Division and square root
+   - String and memory operations
+   - System operations
+
+2. **Microcode Interface**
+   - Operation buffer: 4 entries
+   - Result buffer: 2 entries   - Status and control registers
+   - Interrupt handling (see `system.adoc` for complete interrupt controller architecture)
+
+3. **Performance Characteristics**
+   - Basic operations: 1-3 cycles
+   - Microcode operations: 4-16 cycles
+   - Parallel throughput: 3 ops/cycle
+   - Microcode throughput: 1 op/cycle
+
+=== Instruction Set Architecture
+
+The VTX1 implements a streamlined ternary ISA optimized for balanced ternary operations and VLIW execution. The instruction set is carefully designed to provide comprehensive functionality while maintaining implementation efficiency.
+
+==== ISA Characteristics
+
+**Instruction Count:** 78 total instructions
+- 52 Native hardware instructions (1-3 cycles)
+- 26 Microcode instructions (4-16 cycles)
+
+**Instruction Format:** 
+- VLIW 96-bit instruction word (3×32-bit operations)
+- Ternary-optimized encoding
+- Support for parallel execution
+
+**Register Set:** (See Register Organization for complete specifications)
+- 7 General purpose registers (T0-T6)
+- 2 Special registers (TA accumulator, TB base pointer)
+- 3 Control registers (TC, TS, TI)
+- 3 Vector registers (VA, VT, VB)
+- 3 FPU registers (FA, FT, FB)
+
+**Addressing Modes:**
+- Register direct
+- Immediate (11-bit)
+- Base + offset (TB relative)
+- TC relative (for branches)
+- Vector indexed
+
+==== Operation Categories
+
+1. **Arithmetic Operations**
+   - Native: ADD, SUB, MUL, INC, DEC, NEG, CMP
+   - Microcode: DIV, MOD, UDIV, UMOD, SQRT, ABS
+
+2. **Logic Operations**
+   - Native: AND, OR, NOT, XOR, TEST
+   - All operations support ternary logic natively
+
+3. **Memory Operations**  
+   - Native: LD, ST, VLD, VST, FLD, FST, LEA, PUSH
+   - Microcode: CACHE, FLUSH, MEMBAR
+
+4. **Control Operations**
+   - Native: JMP, JAL, JR, JALR, branches, CALL, RET
+   - Microcode: SYSCALL, BREAK, HALT
+
+5. **Vector Operations**
+   - Native: VADD, VSUB, VMUL, VAND, VOR, VNOT, shifts
+   - Microcode: VDOT, VREDUCE, VMAX, VMIN, VSUM, VPERM
+
+6. **Floating-Point Operations**
+   - Native: FADD, FSUB, FMUL, FCMP, FMOV, FNEG
+   - Microcode: SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG
+
+==== Design Philosophy
+
+The VTX1 ISA follows these key principles:
+
+1. **Balanced Complexity**
+   - Common operations execute in hardware (fast)
+   - Complex operations use microcode (flexible)
+   - Clear performance boundaries
+
+2. **Ternary Optimization**
+   - All operations support balanced ternary (-1, 0, +1)
+   - Efficient ternary arithmetic implementation
+   - Native ternary logic operations
+
+3. **VLIW Efficiency**
+   - Instructions designed for parallel execution
+   - Minimal resource conflicts
+   - Compiler-friendly scheduling
+
+4. **Implementation Efficiency**
+   - Streamlined instruction set reduces gate count
+   - Microcode handles complexity without hardware cost
+   - Optimal balance of performance vs. area
+
+==== Instruction Set Statistics
+
+[cols="2,1,1,1,2"]
+|===
+|Category |Native |Microcode |Total |Primary Use Case
+
+|ALU Operations |16 |6 |22 |Arithmetic and logic
+|Memory Operations |8 |3 |11 |Data movement
+|Control Operations |12 |3 |15 |Program flow
+|Vector Operations |8 |6 |14 |SIMD processing
+|FPU Operations |6 |8 |14 |Floating-point math
+|System Operations |2 |0 |2 |System control
+|**Total** |**52** |**26** |**78** |**Complete ISA**
+|===
+
+==== Native Hardware Instructions (52 Instructions, 1-3 cycles)
+
+**ALU Operations (16 instructions)**
+----
+ADD, SUB, MUL     - Basic arithmetic operations
+AND, OR, NOT, XOR - Logic operations  
+SHL, SHR, ROL, ROR - Shift and rotate operations
+CMP, TEST         - Comparison and test operations
+INC, DEC, NEG     - Increment, decrement, negate operations
+----
+
+**Memory Operations (8 instructions)**
+----
+LD, ST           - Load/store operations
+VLD, VST         - Vector load/store operations
+FLD, FST         - Floating-point load/store operations
+LEA, PUSH        - Load effective address, push to stack
+----
+
+**Control Operations (12 instructions)**
+----
+JMP, JAL, JR, JALR    - Jump operations
+BEQ, BNE, BLT, BGE    - Conditional branches (signed)
+BLTU, BGEU            - Conditional branches (unsigned) 
+CALL, RET             - Function call/return
+----
+
+**Vector Operations (8 instructions)**
+----
+VADD, VSUB, VMUL - Vector arithmetic operations
+VAND, VOR, VNOT  - Vector logic operations
+VSHL, VSHR       - Vector shift operations
+----
+
+**FPU Operations (6 instructions)**
+----
+FADD, FSUB, FMUL - Floating-point arithmetic
+FCMP, FMOV, FNEG - Floating-point compare, move, negate
+----
+
+**System Operations (2 instructions)**
+----
+NOP              - No operation
+WFI              - Wait for interrupt (integrates with interrupt controller in system.adoc)
+----
+
+==== Microcode Instructions (26 Instructions, 4-16 cycles)
+
+**Complex Arithmetic (6 instructions)**
+----
+DIV, MOD         - Division and modulo (signed)
+UDIV, UMOD       - Division and modulo (unsigned)
+SQRT, ABS        - Square root, absolute value
+----
+
+**Transcendental Functions (8 instructions)**
+----
+SIN, COS, TAN    - Trigonometric functions
+ASIN, ACOS, ATAN - Inverse trigonometric functions
+EXP, LOG         - Exponential and logarithm
+----
+
+**Advanced Vector Operations (6 instructions)**
+----
+VDOT             - Vector dot product
+VREDUCE          - Vector reduction operations
+VMAX, VMIN       - Vector maximum/minimum
+VSUM, VPERM      - Vector sum, permutation
+----
+
+**Memory Management (3 instructions)**
+----
+CACHE            - Cache control operations
+FLUSH            - Cache flush operations
+MEMBAR           - Memory barrier operations
+----
+
+**System Control (3 instructions)**
+----
+SYSCALL          - System call
+BREAK            - Debug breakpoint
+HALT             - System halt
+----
+
+==== Instruction Categories by Execution Unit
+
+1. **TCU Native Operations (1-3 cycles)**
+   - Execute directly in Ternary Computing Unit
+   - Single or dual-cycle execution
+   - Support VLIW parallel execution
+   - Minimal control overhead
+
+2. **Microcode Operations (4-16 cycles)**
+   - Implemented using microcode sequencer
+   - Multi-cycle execution patterns
+   - May require multiple TCU operations
+   - Cannot execute in parallel with other operations
+
+==== Design Rationale
+
+The streamlined ISA removes exotic operations that provided limited benefit while maintaining comprehensive functionality:
+
+**Removed Operations:**
+- Complex matrix operations (rarely used in embedded applications)
+- Advanced permutation operations (can be composed from simpler ops)
+- Hardware DMA control (moved to memory-mapped interface)
+- Exotic transcendental functions (FATAN2 → software implementation)
+- Complex bit manipulation (can be composed from basic operations)
+
+**Benefits:**
+- Reduced hardware complexity (~30% gate count reduction)
+- Clearer performance characteristics
+- Simplified compiler implementation
+- Maintainable microcode complexity
+- Optimal balance of functionality vs. implementation cost
+
+=== VLIW Architecture
+
+The VTX1 ISA is designed to support a wide range of operations using a Very Long Instruction Word (VLIW) format, allowing for parallel execution of multiple operations in a single instruction. The architecture supports both ternary and binary operations, with a focus on efficient execution and minimal gate count.
+
+==== VLIW Format
+
+[bytefield]
+....
+(def boxes-per-row 8)
+(def bits-per-box 4)
+
+(draw-box (text "Operation 1 (32 bits)" {:font-weight "bold"}) {:span 8})
+(draw-box (text "Operation 2 (32 bits)" {:font-weight "bold"}) {:span 8})
+(draw-box (text "Operation 3 (32 bits)" {:font-weight "bold"}) {:span 8})
+(draw-gap "Complete VLIW Instruction Word (96 bits)")
+
+(draw-box "Opcode" {:span 1.5})
+(draw-box "Reg1" {:span 0.75})
+(draw-box "Reg2" {:span 0.75})
+(draw-box "Reg3" {:span 0.75})
+(draw-box "Immediate/Offset" {:span 2.75})
+(draw-box "Type" {:span 0.75})
+(draw-box "Par" {:span 0.75})
+(draw-gap "Single Operation Field (32 bits)")
+
+(draw-box "6 bits" {:span 1.5})
+(draw-box "3b" {:span 0.75})
+(draw-box "3b" {:span 0.75})
+(draw-box "3b" {:span 0.75})
+(draw-box "11 bits" {:span 2.75})
+(draw-box "3b" {:span 0.75})
+(draw-box "3b" {:span 0.75})
+(draw-gap "Bit allocation")
+....
+
+- 96-bit instruction word
+- 3 operations per cycle
+- Operation field (32 bits):
+   - 6-bit opcode
+   - 3×3-bit register fields
+   - 11-bit immediate/offset
+   - 3-bit operation type
+   - 3-bit parallel flags
+
+==== Operation Types
+- Arithmetic Operations
+   - ADD, SUB, MUL, DIV
+   - Ternary arithmetic
+   - Vector arithmetic
+   - FP arithmetic
+- Logic Operations
+   - AND, OR, NOT
+   - Ternary logic
+   - Vector logic
+   - Bit manipulation
+- Memory Operations
+   - Load/Store
+   - Vector load/store
+   - Cache control
+   - Memory barrier   - Control Operations
+   - Branch/Jump
+   - Call/Return
+   - System control
+   - Interrupt handling (detailed in `system.adoc`)
+
+==== Register Usage
+   
+For complete register specifications, see Register Organization section above.
+
+**Register Categories:**
+   - General Purpose: T0-T6 (7 registers)
+   - Special Purpose: TA (Accumulator), TB (Base Pointer)  
+   - Control: TC (PC), TS (Status), TI (Instruction)
+   - Vector: VA, VT, VB (3 vector registers)
+   - FPU: FA, FT, FB (3 floating-point registers)
+
+==== Addressing Modes
+- Register Direct
+- Immediate
+- Base + Offset
+- Base + Index
+- TC Relative
+- Vector Indexed
+
+
+==== Operation Scheduling
+- Static Scheduling
+   - Compiler-driven
+   - Resource allocation
+   - Dependency resolution
+   - Parallel operation packing
+- Dynamic Scheduling
+   - Microcode control
+   - Hazard detection
+   - Result forwarding
+   - Exception handling
+
+==== Parallel Execution
+- Operation Combinations
+   - 2 ALU + 1 Memory
+   - 1 ALU + 1 FPU + 1 SIMD
+   - 3 ALU (different units)
+- Resource Constraints
+   - Register file ports
+   - Functional units
+   - Memory ports
+   - Control flow
+
+==== Instruction Examples
+
+----
+Example 1: ALU + Memory + Control
+[ALU: ADD T0, T1, T2] [MEM: LD T3, [TB+1]] [CTRL: NOP]
+
+Example 2: Dual ALU + Memory
+[ALU: MUL T0, T1, T2] [ALU: ADD T3, T4, T5] [MEM: ST T6, [TB+2]]
+
+Example 3: Vector + ALU
+[VEC: VADD VA, VT, VB] [ALU: SUB T3, T4, T5] [CTRL: NOP]
+----
+
+=== Microcode Architecture
+
+The VTX1 microcode system implements complex operations that would require significant hardware resources if implemented directly. The microcode approach provides flexibility while maintaining reasonable performance for less frequently used operations.
+
+==== Microcode Implementation
+
+1. **Microcode ROM**
+   - 4KB microcode storage
+   - 32-bit microword format
+   - Supports 26 complex operations
+   - Optimized for size and performance
+
+2. **Microcode Sequencer**
+   - Integrated with pipeline control
+   - Automatic hazard detection
+   - Result forwarding support
+   - Exception handling integration
+
+3. **Performance Characteristics**
+   - Complex operations: 4-16 cycles
+   - Single operation execution (no parallel)
+   - Automatic pipeline coordination
+   - Transparent to programmer
+
+==== Microcode Operations by Category
+
+1. **Complex Arithmetic (6 operations)**
+   - Division algorithms (signed/unsigned)
+   - Modulo operations
+   - Square root implementation
+   - Absolute value with exception handling
+
+2. **Transcendental Functions (8 operations)**
+   - CORDIC-based trigonometric functions
+   - Taylor series implementations
+   - Optimized for ternary representation
+   - IEEE 754 compatibility
+
+3. **Advanced Vector Operations (6 operations)**
+   - Reduction algorithms
+   - Complex permutation patterns
+   - Optimized parallel processing
+   - Memory-efficient implementations
+
+4. **Memory Management (3 operations)**
+   - Cache control and coherency
+   - Memory barrier implementations
+   - Performance optimization
+
+5. **System Control (3 operations)**
+   - System call interface
+   - Debug and test support
+   - Power management integration
+
+==== Microcode Format
+
+[cols="1,1,1"]
+|===
+| Control Field (12 bits) | Data Field (12 bits) | Address Field (8 bits)
+
+| Description of control signals | Microcode data/operation | Microcode address/offset
+|===
+
+**Control Field Encoding:**
+- [11:9] Execution Unit Select (ALU/FPU/VEC)
+- [8:6] Operation Subtype
+- [5:3] Register Control
+- [2:0] Flow Control
+
+**Data Field Encoding:**
+- [11:6] Immediate Data/Constants
+- [5:3] Source Register Select
+- [2:0] Destination Register Select
+
+**Address Field Encoding:**
+- [7:0] Next Microinstruction Address/Offset
+
+==== Design Benefits
+
+1. **Hardware Efficiency**
+   - Reduced gate count for complex operations
+   - Shared execution resources
+   - Simplified hardware design
+
+2. **Flexibility**
+   - Easy to modify algorithms
+   - Support for future enhancements
+   - Bug fixes without hardware changes
+
+3. **Performance Balance**
+   - Fast execution for common operations
+   - Acceptable performance for complex operations
+   - Optimal resource utilization
+
+=== Instruction Encoding
+
+For detailed VLIW instruction format specifications, see VLIW Architecture section above.
+
+**Operation Types**
+   - 000: ALU Operation
+   - 001: Memory Operation
+   - 010: Control Operation
+   - 011: Vector Operation
+   - 100: FPU Operation
+   - 101: System Operation
+   - 110: Microcode Operation
+   - 111: Reserved
+
+**Parallel Flags**
+   - 000: Serial Execution
+   - 001: Parallel with ALU
+   - 010: Parallel with Memory
+   - 011: Parallel with Control
+   - 100: Full Parallel
+   - 101-111: Reserved
+
+=== Exception Handling
+
+1. **Exception Types**
+   - Hardware Exceptions
+     - Illegal Instruction
+     - Memory Access
+     - Division by Zero
+     - Overflow
+   - Software Exceptions
+     - System Call
+     - Breakpoint
+     - Watchpoint
+   - External Exceptions
+     - Interrupt
+     - Reset
+     - NMI
+
+2. **Exception Handling**
+   - Vector Table
+   - Context Save
+   - Exception Service
+   - Context Restore
+
+=== Ternary Logic Implementation
+
+This section consolidates all ternary logic implementation details referenced throughout the CPU specification.
+
+==== Implementation Specifications
+
+**Authoritative References:**
+- **Ternary Logic Encoding:** See Ternary Logic Encoding for complete voltage level and encoding specifications
+- **Power Specifications:** See Power Consumption Specifications for complete dual-voltage power requirements
+
+**Physical Implementation:**
+- **Supply Voltage:** 5.0V nominal (4.5V to 5.5V range)
+- **Level Conversion:** 5V-tolerant CMOS level shifters for compatibility
+- **Input Protection:** 5V-tolerant I/O cells with comprehensive protection
+- **ESD Protection:** 2kV HBM (Human Body Model), 200V MM (Machine Model)
+- **Noise Margins:** ±0.5V around each logic level
+- **Power Consumption:** 0.15nJ per ternary operation
+
+==== Ternary Arithmetic Operations
+
+**1. Balanced Ternary Addition**
+
+```
+Truth Table (with Carry):
++---+---+---+--------+-------+
+| A | B |Cin| Sum    | Cout  |
++---+---+---+--------+-------+
+|-1 |-1 |-1 |  +1    |  -1   |
+|-1 |-1 | 0 |   0    |  -1   |
+|-1 |-1 |+1 |  -1    |  -1   |
+|-1 | 0 |-1 |   0    |  -1   |
+|-1 | 0 | 0 |  -1    |   0   |
+|-1 | 0 |+1 |   0    |   0   |
+|-1 |+1 |-1 |  -1    |   0   |
+|-1 |+1 | 0 |   0    |   0   |
+|-1 |+1 |+1 |  +1    |   0   |
+| 0 |-1 |-1 |   0    |  -1   |
+| 0 |-1 | 0 |  -1    |   0   |
+| 0 |-1 |+1 |   0    |   0   |
+| 0 | 0 |-1 |  -1    |   0   |
+| 0 | 0 | 0 |   0    |   0   |
+| 0 | 0 |+1 |  +1    |   0   |
+| 0 |+1 |-1 |   0    |   0   |
+| 0 |+1 | 0 |  +1    |   0   |
+| 0 |+1 |+1 |   0    |  +1   |
+|+1 |-1 |-1 |  -1    |   0   |
+|+1 |-1 | 0 |   0    |   0   |
+|+1 |-1 |+1 |  +1    |   0   |
+|+1 | 0 |-1 |   0    |   0   |
+|+1 | 0 | 0 |  +1    |   0   |
+|+1 | 0 |+1 |   0    |  +1   |
+|+1 |+1 |-1 |  +1    |   0   |
+|+1 |+1 | 0 |   0    |  +1   |
+|+1 |+1 |+1 |  -1    |  +1   |
++---+---+---+--------+-------+
+```
+
+**2. Balanced Ternary Multiplication**
+
+```
+Truth Table:
++---+---+--------+
+| A | B | Product|
++---+---+--------+
+|-1 |-1 |   +1   |
+|-1 | 0 |    0   |
+|-1 |+1 |   -1   |
+| 0 |-1 |    0   |
+| 0 | 0 |    0   |
+| 0 |+1 |    0   |
+|+1 |-1 |   -1   |
+|+1 | 0 |    0   |
+|+1 |+1 |   +1   |
++---+---+--------+
+```
+
+==== Analog Interface Implementation
+
+**Ternary to Analog Conversion:**
+- **Voltage Levels:** Reference Ternary Logic Encoding for authoritative specifications
+- **Current Levels:** 0mA (TRIT_ZERO), 2mA (TRIT_NEG), 4mA (TRIT_POS)
+- **Conversion Timing:** 15ns maximum propagation delay
+- **Accuracy:** ±1% across all PVT corners
+- **Output Drive:** 4mA minimum drive strength
+
+**Analog to Ternary Conversion:**
+- **Threshold Detection:** 1.25V (NEG/ZERO), 3.75V (ZERO/POS)
+- **Hysteresis:** 0.2V for noise immunity
+- **Sampling Rate:** 100MHz maximum
+- **Input Filtering:** 2nd order active filter for noise rejection
+- **Input Protection:** 5V-tolerant with integrated ESD protection
+
+**VTX1 Error Integration:**
+
+The enhanced TCU interface implements the standardized VTX1 error handling framework:
+
+[source,verilog]
+----
+// VTX1 Error Handling Variables
+reg [3:0] vtx1_error_reg;           // Standardized error code register
+reg [31:0] vtx1_error_info;         // Additional error information
+reg vtx1_error_valid;               // Error condition validity flag
+
+// Error handling macros from vtx1_error_macros.v
+`VTX1_SET_ERROR(vtx1_error_reg, interface_state, VTX1_ERROR_TIMEOUT)
+`VTX1_CLEAR_ERROR(vtx1_error_reg, interface_state)
+----
+
+**Error Classification for TCU Operations:**
+- **VTX1_ERROR_TIMEOUT**: Operation exceeded adaptive timeout threshold
+- **VTX1_ERROR_INVALID_ADDR**: Invalid operand or addressing mode
+- **VTX1_ERROR_PROTOCOL**: Handshaking protocol violation
+- **VTX1_ERROR_RESOURCE**: TCU resource conflict or unavailability
+- **VTX1_ERROR_OVERFLOW**: Arithmetic overflow in ternary operations
+- **VTX1_ERROR_UNDERFLOW**: Arithmetic underflow in ternary operations
+
+==== VLIW Integration and Pipeline Enhancement
+
+**Enhanced Pipeline Integration:**
+
+
