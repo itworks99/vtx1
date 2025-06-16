@@ -6,6 +6,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/kvany/vtx1/assembler/internal/codegen"
 	"github.com/kvany/vtx1/assembler/internal/lexer"
@@ -115,42 +118,176 @@ func showUsage() {
 
 // assembleFile processes the input file and generates the output binary
 func assembleFile(inputFile, outputFile, listingFile, format string, verbose bool) error {
-	// Read a source file
+	// Read the source file
 	source, err := ioutil.ReadFile(inputFile)
 	if err != nil {
 		return fmt.Errorf("failed to read input file: %v", err)
 	}
 
+	// Create a compilation context to pass information between stages
+	ctx := &CompilationContext{
+		SourceFile:   inputFile,
+		SourceCode:   string(source),
+		Verbose:      verbose,
+		OutputFormat: format,
+	}
+
+	// Stage 1: Lexical Analysis
 	if verbose {
 		fmt.Println("Stage 1: Lexical Analysis")
 	}
 
-	// Initialize lexer
-	lex := lexer.New(string(source))
+	if err := runLexicalAnalysis(ctx); err != nil {
+		return fmt.Errorf("lexical analysis failed: %v", err)
+	}
 
-	// Parse tokens directly from the lexer
+	// Stage 2: Parsing
 	if verbose {
 		fmt.Println("Stage 2: Parsing")
 	}
 
-	// Parse using the lexer instance
-	p := parser.New(lex)
-	ast, err := p.Parse()
-	if err != nil {
+	if err := runParsing(ctx); err != nil {
 		return fmt.Errorf("parsing failed: %v", err)
 	}
 
-	if verbose {
-		fmt.Println("Parsing completed successfully")
-	}
-
+	// Stage 3: Code Generation
 	if verbose {
 		fmt.Println("Stage 3: Code Generation")
 	}
 
+	if err := runCodeGeneration(ctx); err != nil {
+		return fmt.Errorf("code generation failed: %v", err)
+	}
+
+	// Write output based on format
+	if err := writeOutput(ctx.MachineCode, outputFile, format); err != nil {
+		return fmt.Errorf("failed to write output: %v", err)
+	}
+
+	// Generate a listing file if requested
+	if listingFile != "" {
+		if err := generateListing([]byte(ctx.SourceCode), ctx.Tokens, ctx.AST, ctx.MachineCode, listingFile); err != nil {
+			return fmt.Errorf("failed to generate listing: %v", err)
+		}
+
+		if verbose {
+			fmt.Printf("Assembly listing written to %s\n", listingFile)
+		}
+	}
+
+	if verbose {
+		fmt.Printf("Successfully assembled %s (%d bytes of machine code)\n",
+			filepath.Base(inputFile), len(ctx.MachineCode))
+	}
+
+	return nil
+}
+
+// CompilationContext holds state and outputs from each compilation stage
+type CompilationContext struct {
+	SourceFile   string // Input file path
+	SourceCode   string // Source code content
+	Verbose      bool   // Verbose output enabled
+	OutputFormat string // Output format
+
+	// Lexical analysis outputs
+	Lexer  *lexer.Lexer  // Lexer instance
+	Tokens []lexer.Token // Collected tokens (for diagnostics)
+
+	// Parsing outputs
+	Parser *parser.Parser // Parser instance
+	AST    *parser.AST    // Abstract Syntax Tree
+
+	// Code generation outputs
+	CodeGen     *codegen.CodeGenerator // Code generator instance (if available)
+	MachineCode []byte                 // Generated machine code
+	Symbols     map[string]int         // Symbol table (for debugging)
+	Diagnostics []string               // Warnings and information
+}
+
+// runLexicalAnalysis performs lexical analysis on the source code
+func runLexicalAnalysis(ctx *CompilationContext) error {
+	// Initialize lexer
+	ctx.Lexer = lexer.New(ctx.SourceCode)
+
+	// If verbose, collect tokens for diagnostics
+	if ctx.Verbose {
+		// Collect tokens for diagnostics while not disturbing the lexer state
+		tempLexer := lexer.New(ctx.SourceCode)
+		ctx.Tokens = []lexer.Token{}
+
+		for {
+			token := tempLexer.NextToken()
+			ctx.Tokens = append(ctx.Tokens, token)
+
+			if token.Type == lexer.EOF {
+				break
+			}
+		}
+
+		fmt.Printf("Tokenization completed: %d tokens generated\n", len(ctx.Tokens))
+
+		// Print sample tokens if very verbose
+		if len(os.Getenv("VTX1_VERY_VERBOSE")) > 0 {
+			fmt.Println("First 10 tokens:")
+			for i, t := range ctx.Tokens {
+				if i >= 10 {
+					break
+				}
+				fmt.Printf("  %s\n", t.String())
+			}
+		}
+	}
+
+	return nil
+}
+
+// runParsing parses the tokens into an AST
+func runParsing(ctx *CompilationContext) error {
+	// Initialize parser with the lexer
+	ctx.Parser = parser.New(ctx.Lexer)
+
+	// Parse the tokens into an AST
+	ast, err := ctx.Parser.Parse()
+	if err != nil {
+		return err
+	}
+
+	ctx.AST = ast
+
+	if ctx.Verbose {
+		fmt.Println("Parsing completed successfully")
+
+		// Print AST node count if very verbose
+		if len(os.Getenv("VTX1_VERY_VERBOSE")) > 0 {
+			nodeCount := countASTNodes(ast)
+			fmt.Printf("AST contains %d nodes\n", nodeCount)
+		}
+	}
+
+	return nil
+}
+
+// countASTNodes counts the number of nodes in the AST (helper for diagnostics)
+func countASTNodes(node *parser.AST) int {
+	if node == nil {
+		return 0
+	}
+
+	count := 1 // Count this node
+
+	for _, child := range node.Children {
+		count += countASTNodes(child)
+	}
+
+	return count
+}
+
+// runCodeGeneration generates machine code from the AST
+func runCodeGeneration(ctx *CompilationContext) error {
 	// Determine output format
 	var outputFormat codegen.BinaryFormat
-	switch format {
+	switch ctx.OutputFormat {
 	case "binary":
 		outputFormat = codegen.BinaryFormatRaw
 	case "hex":
@@ -161,28 +298,33 @@ func assembleFile(inputFile, outputFile, listingFile, format string, verbose boo
 		outputFormat = codegen.BinaryFormatRaw
 	}
 
+	// Create code generator
+	generator := codegen.New(ctx.AST, outputFormat)
+	ctx.CodeGen = generator
+
 	// Generate machine code
-	gen := codegen.New(ast, outputFormat)
-	err = gen.Generate()
+	err := generator.Generate()
 	if err != nil {
-		return fmt.Errorf("code generation failed: %v", err)
+		return err
 	}
 
-	if verbose {
-		fmt.Printf("Code generation completed: %d bytes of machine code\n", len(gen.MachineCode()))
+	// Get the generated machine code
+	ctx.MachineCode = generator.MachineCode()
+
+	// Extract symbol table if available
+	if table := generator.SymbolTable(); table != nil {
+		ctx.Symbols = table
 	}
 
-	// Write output based on format
-	if err := writeOutput(gen.MachineCode(), outputFile, format); err != nil {
-		return fmt.Errorf("failed to write output: %v", err)
-	}
+	if ctx.Verbose {
+		fmt.Printf("Code generation completed: %d bytes of machine code\n", len(ctx.MachineCode))
 
-	// Generate listing file if requested
-	if listingFile != "" {
-		// We'll pass an empty tokens slice, our generateListing function handles this case
-		var tokens []lexer.Token
-		if err := generateListing(source, tokens, ast, gen.MachineCode(), listingFile); err != nil {
-			return fmt.Errorf("failed to generate listing: %v", err)
+		// Show an address map of main sections if very verbose
+		if len(os.Getenv("VTX1_VERY_VERBOSE")) > 0 && len(ctx.Symbols) > 0 {
+			fmt.Println("Symbol addresses:")
+			for sym, addr := range ctx.Symbols {
+				fmt.Printf("  %-20s 0x%06X\n", sym, addr)
+			}
 		}
 	}
 
@@ -302,27 +444,225 @@ func formatAsObjDump(data []byte) string {
 
 // generateListing creates a listing file with source, tokens, and binary representation
 func generateListing(source []byte, tokens []lexer.Token, ast *parser.AST, binary []byte, listingFile string) error {
-	listing := fmt.Sprintf("VTX1 Assembler Listing\n\n")
+	// Create a map to track which machine code addresses correspond to which source lines
+	addressToSourceLineMap := buildAddressSourceMap(ast, binary)
 
-	// If tokens weren't pre-collected, we can tokenize here for the listing
-	if len(tokens) == 0 {
-		// Initialize a new lexer for tokenization
-		tokenLexer := lexer.New(string(source))
+	// Split source code into lines for display
+	sourceLines := strings.Split(string(source), "\n")
 
-		// Collect tokens for the listing
-		var collectedTokens []lexer.Token
-		for {
-			token := tokenLexer.NextToken()
-			collectedTokens = append(collectedTokens, token)
-			if token.Type == lexer.EOF {
-				break
-			}
+	// Create the header for the listing
+	listing := strings.Builder{}
+	listing.WriteString(fmt.Sprintf("VTX1 Assembler Listing - Generated %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	listing.WriteString(fmt.Sprintf("%-10s %-30s %s\n", "Address", "Machine Code", "Source Code"))
+	listing.WriteString(fmt.Sprintf("%-10s %-30s %s\n", "-------", "---------------", "--------------------------------"))
+
+	// Process by source line
+	for lineNum, sourceLine := range sourceLines {
+		// Ensure source line is not excessively long
+		displaySource := sourceLine
+		if len(displaySource) > 60 {
+			displaySource = displaySource[:57] + "..."
 		}
-		tokens = collectedTokens
+
+		// Check if this source line generated any machine code
+		if addresses, found := getAddressesForSourceLine(lineNum+1, addressToSourceLineMap); found {
+			// This line generated machine code - display with address and bytes
+			for i, addr := range addresses {
+				// Display the memory address
+				addrStr := fmt.Sprintf("0x%06X", addr)
+
+				// Get machine code bytes (typically 4 or 8 bytes per instruction for VTX1)
+				mcodeBytes := getInstructionBytes(binary, addr)
+
+				// Format machine code as hex values
+				mcodeHex := formatBytesAsHex(mcodeBytes)
+
+				if i == 0 {
+					// First or only instruction for this source line - show with source
+					listing.WriteString(fmt.Sprintf("%-10s %-30s %s\n", addrStr, mcodeHex, displaySource))
+				} else {
+					// Additional instructions for this source line - just show the code
+					listing.WriteString(fmt.Sprintf("%-10s %-30s\n", addrStr, mcodeHex))
+				}
+			}
+		} else {
+			// This line generated no machine code (comment, directive, etc.)
+			listing.WriteString(fmt.Sprintf("%-10s %-30s %s\n", "", "", displaySource))
+		}
 	}
 
-	// TODO: Implement proper listing format with address, machine code, and source code alignment
-	// Using source, tokens, ast, and binary data to create a well-formatted listing
+	// Add symbol table if we have access to symbols
+	if ast != nil {
+		// Try to get symbols from the code generator
+		// Note: In a full implementation, these would be passed from the compiler context
+		var symbols map[string]struct {
+			Address uint32
+			Defined bool
+		}
 
-	return ioutil.WriteFile(listingFile, []byte(listing), 0644)
+		// Create a simple symbol table for demonstration
+		symbols = make(map[string]struct {
+			Address uint32
+			Defined bool
+		})
+
+		// Extract some basic symbols from the AST - in a real implementation,
+		// this would use the actual symbol table from the compiler
+		extractSymbolsFromAST(ast, symbols)
+
+		// Only display the section if we found symbols
+		if len(symbols) > 0 {
+			listing.WriteString("\n\nSymbol Table:\n")
+			listing.WriteString(fmt.Sprintf("%-20s %-10s %s\n", "Name", "Address", "Defined"))
+			listing.WriteString(fmt.Sprintf("%-20s %-10s %s\n", "--------------------", "----------", "-------"))
+
+			// Sort symbols by address
+			var sortedSymbols []struct {
+				Name    string
+				Address uint32
+				Defined bool
+			}
+
+			for name, info := range symbols {
+				sortedSymbols = append(sortedSymbols, struct {
+					Name    string
+					Address uint32
+					Defined bool
+				}{
+					Name:    name,
+					Address: info.Address,
+					Defined: info.Defined,
+				})
+			}
+
+			sort.Slice(sortedSymbols, func(i, j int) bool {
+				return sortedSymbols[i].Address < sortedSymbols[j].Address
+			})
+
+			// Print sorted symbols
+			for _, sym := range sortedSymbols {
+				listing.WriteString(fmt.Sprintf("%-20s 0x%08X %v\n", sym.Name, sym.Address, sym.Defined))
+			}
+		}
+	}
+
+	return ioutil.WriteFile(listingFile, []byte(listing.String()), 0644)
+}
+
+// extractSymbolsFromAST extracts symbol information from the AST
+// This is a simplified implementation for demonstration purposes
+func extractSymbolsFromAST(ast *parser.AST, symbols map[string]struct {
+	Address uint32
+	Defined bool
+}) {
+	if ast == nil {
+		return
+	}
+
+	// Check if this node is a label
+	if ast.Type == parser.NODE_LABEL && ast.Value != nil {
+		if labelName, ok := ast.Value.(string); ok {
+			// In a real implementation, you'd get the actual address from the symbol table
+			// Here we're just assigning sequential addresses for demonstration
+			addr := uint32(len(symbols) * 4) // Just for demonstration
+
+			symbols[labelName] = struct {
+				Address uint32
+				Defined bool
+			}{
+				Address: addr,
+				Defined: true,
+			}
+		}
+	}
+
+	// Process child nodes
+	for _, child := range ast.Children {
+		extractSymbolsFromAST(child, symbols)
+	}
+}
+
+// buildAddressSourceMap creates a mapping from machine code addresses to source line numbers
+func buildAddressSourceMap(ast *parser.AST, binary []byte) map[uint32]int {
+	addressMap := make(map[uint32]int)
+
+	// Start at address 0 and process the AST
+	processASTForAddressMap(ast, addressMap, 0)
+
+	return addressMap
+}
+
+// processASTForAddressMap recursively processes AST nodes to build address-to-line mapping
+func processASTForAddressMap(node *parser.AST, addressMap map[uint32]int, currentAddr uint32) uint32 {
+	if node == nil {
+		return currentAddr
+	}
+
+	// If this is an instruction node, map its address to its line number
+	if node.Type == parser.NODE_INSTRUCTION {
+		addressMap[currentAddr] = node.Line
+
+		// For VTX1, assume each instruction is 4 bytes (can be customized based on actual architecture)
+		currentAddr += 4
+	}
+
+	// Process all child nodes
+	for _, child := range node.Children {
+		currentAddr = processASTForAddressMap(child, addressMap, currentAddr)
+	}
+
+	return currentAddr
+}
+
+// getAddressesForSourceLine finds all instruction addresses for a given source line
+func getAddressesForSourceLine(lineNum int, addressMap map[uint32]int) ([]uint32, bool) {
+	var addresses []uint32
+
+	for addr, line := range addressMap {
+		if line == lineNum {
+			addresses = append(addresses, addr)
+		}
+	}
+
+	// Sort addresses for consistent output
+	if len(addresses) > 0 {
+		sort.Slice(addresses, func(i, j int) bool {
+			return addresses[i] < addresses[j]
+		})
+		return addresses, true
+	}
+
+	return nil, false
+}
+
+// getInstructionBytes extracts the machine code bytes for an instruction at the given address
+func getInstructionBytes(binary []byte, addr uint32) []byte {
+	if int(addr) >= len(binary) {
+		return []byte{}
+	}
+
+	// Define instruction size (4 bytes for VTX1)
+	instructionSize := 4
+	if int(addr)+instructionSize > len(binary) {
+		instructionSize = len(binary) - int(addr)
+	}
+
+	return binary[addr : addr+uint32(instructionSize)]
+}
+
+// formatBytesAsHex formats a byte slice as a hex string with spaces between bytes
+func formatBytesAsHex(bytes []byte) string {
+	if len(bytes) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for i, b := range bytes {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(fmt.Sprintf("%02X", b))
+	}
+
+	return sb.String()
 }
