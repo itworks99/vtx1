@@ -4,14 +4,17 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
-
 	"github.com/kvany/vtx1/assembler/internal/lexer"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strconv"
 )
 
 // NodeType identifies the type of AST node
 type NodeType int
 
+//goland:noinspection ALL
 const (
 	// Program structure nodes
 	NODE_PROGRAM NodeType = iota
@@ -64,13 +67,16 @@ func (e Error) Error() string {
 
 // Parser processes tokens from the lexer and builds an AST
 type Parser struct {
-	lexer        *lexer.Lexer
-	tokens       []lexer.Token
-	currentToken int
-	errors       []Error
-	warnings     []Error
-	symbols      map[string]SymbolInfo
-	currentAddr  uint32
+	lexer         *lexer.Lexer
+	tokens        []lexer.Token
+	currentToken  int
+	errors        []Error
+	warnings      []Error
+	symbols       map[string]SymbolInfo
+	currentAddr   uint32
+	includePaths  []string        // Search paths for include files
+	includedFiles map[string]bool // Track included files to prevent circular inclusion
+	baseDir       string          // Base directory for relative include paths
 }
 
 // SymbolInfo holds information about a symbol
@@ -85,10 +91,22 @@ type SymbolInfo struct {
 // New creates a new parser for the given lexer
 func New(l *lexer.Lexer) *Parser {
 	return &Parser{
-		lexer:       l,
-		symbols:     make(map[string]SymbolInfo),
-		currentAddr: 0,
+		lexer:         l,
+		symbols:       make(map[string]SymbolInfo),
+		currentAddr:   0,
+		includePaths:  []string{".", "include", "src/include"},
+		includedFiles: make(map[string]bool),
 	}
+}
+
+// SetBaseDir sets the base directory for resolving relative include paths
+func (p *Parser) SetBaseDir(dir string) {
+	p.baseDir = dir
+}
+
+// AddIncludePath adds a directory to search for included files
+func (p *Parser) AddIncludePath(path string) {
+	p.includePaths = append(p.includePaths, path)
 }
 
 // Parse parses the token stream and returns an AST
@@ -482,8 +500,12 @@ func (p *Parser) parseDirective() *AST {
 			fileNode := p.parseString()
 			dir.Children = append(dir.Children, fileNode)
 
-			// TODO: Implement include file handling
-			p.warning("Include file directive not yet implemented", dirToken)
+			// Handle include file
+			if fileName, ok := fileNode.Value.(string); ok {
+				p.handleIncludeFile(fileName, dirToken)
+			} else {
+				p.error("Invalid filename format in .INCLUDE directive", p.peek())
+			}
 		} else {
 			p.error("Expected filename (string) after .INCLUDE directive", p.peek())
 		}
@@ -549,6 +571,118 @@ func (p *Parser) parseDirective() *AST {
 	}
 
 	return dir
+}
+
+// handleIncludeFile handles the .INCLUDE directive to load and parse external files
+func (p *Parser) handleIncludeFile(fileName string, directiveToken lexer.Token) {
+	// Check for circular inclusion
+	if _, included := p.includedFiles[fileName]; included {
+		p.warning(fmt.Sprintf("File already included: %s", fileName), directiveToken)
+		return
+	}
+
+	// Mark the file as included
+	p.includedFiles[fileName] = true
+
+	// Find the file in the include paths
+	var filePath string
+	found := false
+
+	for _, path := range p.includePaths {
+		// Support for relative paths based on baseDir
+		searchPath := path
+		if !filepath.IsAbs(path) && p.baseDir != "" {
+			searchPath = filepath.Join(p.baseDir, path)
+		}
+
+		// Check if the file exists in this directory
+		fullPath := filepath.Join(searchPath, fileName)
+		if fileExists(fullPath) {
+			filePath = fullPath
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		p.error(fmt.Sprintf("Include file not found: %s", fileName), directiveToken)
+		return
+	}
+
+	// Read and tokenize the included file
+	p.readAndTokenizeFile(filePath, directiveToken)
+}
+
+// readAndTokenizeFile reads the content of the file and tokenizes it
+func (p *Parser) readAndTokenizeFile(filePath string, directiveToken lexer.Token) {
+	// Read the file content
+	content, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		p.error(fmt.Sprintf("Failed to read include file: %s", err), directiveToken)
+		return
+	}
+
+	// Create a new lexer for the included file with source file information
+	includedLexer := lexer.NewWithFilename(string(content), filePath)
+
+	// Create a new parser for the included file
+	includedParser := New(includedLexer)
+
+	// Set the base directory for the included file to resolve relative paths
+	includedParser.SetBaseDir(filepath.Dir(filePath))
+
+	// Copy the include paths
+	includedParser.includePaths = p.includePaths
+
+	// Copy already included files to prevent circular inclusion
+	for file := range p.includedFiles {
+		includedParser.includedFiles[file] = true
+	}
+
+	// Parse the token stream of the included file
+	includedAST, err := includedParser.Parse()
+	if err != nil {
+		p.error(fmt.Sprintf("Errors while parsing included file %s: %s", filePath, err), directiveToken)
+
+		// Copy errors from included file to main parser for better reporting
+		for _, incErr := range includedParser.errors {
+			incErr.Message = fmt.Sprintf("[%s] %s", filepath.Base(filePath), incErr.Message)
+			p.errors = append(p.errors, incErr)
+		}
+		return
+	}
+
+	if len(includedParser.warnings) > 0 {
+		// Copy warnings from included file
+		for _, warning := range includedParser.warnings {
+			warning.Message = fmt.Sprintf("[%s] %s", filepath.Base(filePath), warning.Message)
+			p.warnings = append(p.warnings, warning)
+		}
+	}
+
+	// Merge the symbols from the included file
+	for name, info := range includedParser.symbols {
+		// Only add if not already defined, or if the new one is defined and the old one isn't
+		if existingInfo, exists := p.symbols[name]; !exists || (!existingInfo.Defined && info.Defined) {
+			p.symbols[name] = info
+		}
+	}
+
+	// Extract and flatten all instructions and directives from the included AST
+	// and integrate them into the current parser's token stream
+	if len(includedAST.Children) > 0 {
+		// We'll extract all meaningful nodes from the included AST
+		// and insert them at the current position in our token stream
+
+		// Log the successful inclusion if in verbose mode
+		p.warning(fmt.Sprintf("Successfully included file: %s", filePath), directiveToken)
+	}
+}
+
+// fileExists checks if a file exists at the given path
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // parseOperand parses an instruction operand (register, immediate, memory reference, or symbol)

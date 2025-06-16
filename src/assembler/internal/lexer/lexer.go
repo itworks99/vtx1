@@ -7,10 +7,12 @@ import (
 	"strings"
 )
 
-// TokenType represents the type of a token in the VTX1 assembly language
+// TokenType represents the type of token in the VTX1 assembly language
 type TokenType int
 
 // Token types for the VTX1 assembly language
+//
+//goland:noinspection ALL
 const (
 	EOF TokenType = iota
 	ILLEGAL
@@ -178,11 +180,19 @@ type Lexer struct {
 	char         byte   // Current character under examination
 	line         int    // Current line number
 	column       int    // Current column number
+	filename     string // Source filename for better error reporting
 }
 
 // New creates a new Lexer for the given input string
 func New(input string) *Lexer {
 	l := &Lexer{input: input, line: 1, column: 0}
+	l.readChar()
+	return l
+}
+
+// NewWithFilename creates a new Lexer for the given input string and filename
+func NewWithFilename(input string, filename string) *Lexer {
+	l := &Lexer{input: input, line: 1, column: 0, filename: filename}
 	l.readChar()
 	return l
 }
