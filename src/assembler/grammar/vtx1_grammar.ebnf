@@ -1,0 +1,83 @@
+/* VTX1 Assembly Language Grammar - EBNF Notation
+ * This formal grammar defines the syntax of the VTX1 assembly language
+ */
+
+/* Top-level program structure */
+Program             ::= (Line)*
+Line                ::= (Label)? (Instruction | Directive | VLIW_Instruction)? (Comment)? EOL
+Label               ::= Identifier ':'
+Comment             ::= ';' (AnyChar)*
+
+/* Instructions types */
+Instruction         ::= Mnemonic (Operand (',' Operand)*)?
+VLIW_Instruction    ::= '[' Instruction ']' (('[' Instruction ']') ('[' Instruction ']')?)?
+
+/* Mnemonics */
+Mnemonic            ::= ALU_Op | Memory_Op | Control_Op | Vector_Op | FPU_Op | System_Op
+
+ALU_Op              ::= 'ADD' | 'SUB' | 'MUL' | 'AND' | 'OR' | 'NOT' | 'XOR' |
+                       'SHL' | 'SHR' | 'ROL' | 'ROR' | 'CMP' | 'TEST' |
+                       'INC' | 'DEC' | 'NEG' | 'DIV' | 'MOD' | 'UDIV' |
+                       'UMOD' | 'SQRT' | 'ABS'
+
+Memory_Op           ::= 'LD' | 'ST' | 'VLD' | 'VST' | 'FLD' | 'FST' | 'LEA' |
+                       'PUSH' | 'CACHE' | 'FLUSH' | 'MEMBAR'
+
+Control_Op          ::= 'JMP' | 'JAL' | 'JR' | 'JALR' | 'BEQ' | 'BNE' | 'BLT' |
+                       'BGE' | 'BLTU' | 'BGEU' | 'CALL' | 'RET' | 'SYSCALL' |
+                       'BREAK' | 'HALT'
+
+Vector_Op           ::= 'VADD' | 'VSUB' | 'VMUL' | 'VAND' | 'VOR' | 'VNOT' |
+                       'VSHL' | 'VSHR' | 'VDOT' | 'VREDUCE' | 'VMAX' | 'VMIN' |
+                       'VSUM' | 'VPERM'
+
+FPU_Op              ::= 'FADD' | 'FSUB' | 'FMUL' | 'FCMP' | 'FMOV' | 'FNEG' |
+                       'SIN' | 'COS' | 'TAN' | 'ASIN' | 'ACOS' | 'ATAN' |
+                       'EXP' | 'LOG'
+
+System_Op           ::= 'NOP' | 'WFI'
+
+/* Operand types */
+Operand             ::= Register | Immediate | Memory_Operand | Label_Ref
+
+Register            ::= GPR | Special_Reg | Vector_Reg | FP_Reg
+GPR                 ::= 'T0' | 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6'
+Special_Reg         ::= 'TA' | 'TB' | 'TC' | 'TS' | 'TI'
+Vector_Reg          ::= 'VA' | 'VT' | 'VB'
+FP_Reg              ::= 'FA' | 'FT' | 'FB'
+
+Memory_Operand      ::= '[' Base_Reg ('+' (Index_Reg | Offset))? ']'
+Base_Reg            ::= 'TB' | GPR
+Index_Reg           ::= GPR
+Offset              ::= Immediate
+
+Label_Ref           ::= Identifier
+
+/* Immediate values */
+Immediate           ::= Decimal | Hexadecimal | Binary | Ternary
+Decimal             ::= ('0'..'9')+
+Hexadecimal         ::= '0x' ('0'..'9' | 'A'..'F' | 'a'..'f')+
+Binary              ::= '0b' ('0' | '1')+
+Ternary             ::= '0t' ('+' | '0' | '-')+
+
+/* Assembly directives */
+Directive           ::= '.ORG' Immediate
+                      | '.DB' DataList
+                      | '.DW' DataList
+                      | '.DT' DataList
+                      | '.EQU' Identifier ',' Immediate
+                      | '.INCLUDE' String
+                      | '.SECTION' Identifier
+                      | '.ALIGN' Immediate
+                      | '.SPACE' Immediate
+
+DataList            ::= Immediate (',' Immediate)*
+String              ::= '"' (AnyCharExceptQuote)* '"'
+
+/* Identifiers */
+Identifier          ::= ('A'..'Z' | 'a'..'z' | '_') ('A'..'Z' | 'a'..'z' | '0'..'9' | '_')*
+
+/* Misc */
+AnyChar             ::= <any valid character>
+AnyCharExceptQuote  ::= <any valid character except ">
+EOL                 ::= <end of line>
