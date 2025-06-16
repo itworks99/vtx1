@@ -1,0 +1,56 @@
+# VTX1 Assembly Language Token Definitions
+# This file defines the tokens that will be recognized by the lexer
+
+# Token Types - Definition for the lexical analyzer
+# Each token type has a unique identifier and regex pattern
+
+# Whitespace and comments
+WHITESPACE  = r'\s+'                    # Spaces, tabs, newlines (ignored)
+COMMENT     = r';.*$'                   # Comment starts with ; to end of line
+
+# Instruction categories
+ALU_OP      = r'ADD|SUB|MUL|AND|OR|NOT|XOR|SHL|SHR|ROL|ROR|CMP|TEST|INC|DEC|NEG'
+MEM_OP      = r'LD|ST|VLD|VST|FLD|FST|LEA|PUSH'
+CTRL_OP     = r'JMP|JAL|JR|JALR|BEQ|BNE|BLT|BGE|BLTU|BGEU|CALL|RET'
+VEC_OP      = r'VADD|VSUB|VMUL|VAND|VOR|VNOT|VSHL|VSHR'
+FP_OP       = r'FADD|FSUB|FMUL|FCMP|FMOV|FNEG'
+SYS_OP      = r'NOP|WFI'
+
+# Complex Operations (microcode)
+COMPLEX_OP  = r'DIV|MOD|UDIV|UMOD|SQRT|ABS|SIN|COS|TAN|ASIN|ACOS|ATAN|EXP|LOG'
+COMPLEX_VEC = r'VDOT|VREDUCE|VMAX|VMIN|VSUM|VPERM'
+COMPLEX_MEM = r'CACHE|FLUSH|MEMBAR'
+COMPLEX_SYS = r'SYSCALL|BREAK|HALT'
+
+# Registers
+GPR         = r'T[0-6]'                 # General Purpose Registers T0-T6
+SPECIAL_REG = r'TA|TB|TC|TS|TI'         # Special registers (TA, TB, TC, TS, TI)
+VECTOR_REG  = r'VA|VT|VB'               # Vector registers (VA, VT, VB)
+FP_REG      = r'FA|FT|FB'               # Floating point registers (FA, FT, FB)
+
+# VLIW Instruction brackets
+LBRACKET    = r'\['                     # Left bracket for VLIW instruction
+RBRACKET    = r'\]'                     # Right bracket for VLIW instruction
+
+# Operand syntax
+COMMA       = r','                      # Operand separator
+COLON       = r':'                      # Label delimiter
+PLUS        = r'\+'                     # For address calculation
+LSQUARE     = r'\['                     # Start of memory reference
+RSQUARE     = r'\]'                     # End of memory reference
+
+# Directive markers
+DIRECTIVE   = r'\.(ORG|DB|DW|DT|EQU|INCLUDE|SECTION|ALIGN|SPACE)'
+
+# Literals
+TERNARY     = r'0t[-0+]+'               # Ternary literal with prefix 0t
+BINARY      = r'0b[01]+'                # Binary literal with prefix 0b
+HEXADECIMAL = r'0x[0-9A-Fa-f]+'         # Hexadecimal literal with prefix 0x
+DECIMAL     = r'[0-9]+'                 # Decimal literal
+STRING      = r'"[^"]*"'                # String literal for directives
+
+# Identifiers
+IDENTIFIER  = r'[A-Za-z_][A-Za-z0-9_]*' # Labels and symbols
+
+# Error token
+ERROR       = r'.'                      # Any character not matched above is error
