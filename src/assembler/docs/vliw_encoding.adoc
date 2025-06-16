@@ -1,0 +1,121 @@
+= VTX1 VLIW Instruction Encoding
+:toc: left
+:icons: font
+
+== Overview
+
+The VTX1 processor implements a VLIW (Very Long Instruction Word) architecture that allows multiple operations to be executed in parallel. This document describes the encoding format for VLIW instructions in the VTX1 assembler.
+
+== VLIW Instruction Format
+
+Each VTX1 VLIW instruction is 96 bits wide and can contain up to 3 operations (32 bits each):
+
+[literal]
+....
++-----------------------------------+-----------------------------------+-----------------------------------+
+|          Operation 1 (32 bits)    |          Operation 2 (32 bits)    |          Operation 3 (32 bits)    |
++-----------------------------------+-----------------------------------+-----------------------------------+
+....
+
+== Operation Field Encoding
+
+Each operation field is encoded as follows:
+
+[literal]
+....
++--------+------+------+------+--------------------+------+------+
+| Opcode | Reg1 | Reg2 | Reg3 | Immediate/Offset   | Type | Par  |
++--------+------+------+------+--------------------+------+------+
+| 6 bits | 3b   | 3b   | 3b   | 11 bits            | 3b   | 3b   |
++--------+------+------+------+--------------------+------+------+
+....
+
+Where:
+
+* *Opcode* (6 bits): Instruction operation code
+* *Reg1, Reg2, Reg3* (3 bits each): Register specifiers
+* *Immediate/Offset* (11 bits): Immediate value or address offset
+* *Type* (3 bits): Operation type (ALU, Memory, Control, Vector, FPU, System)
+* *Par* (3 bits): Parallel execution flags
+
+== Operation Type Encoding
+
+The "Type" field uses the following encoding:
+
+* `000`: ALU Operation
+* `001`: Memory Operation
+* `002`: Control Operation
+* `003`: Vector Operation
+* `004`: FPU Operation
+* `005`: System Operation
+* `006`: Microcode Operation
+* `007`: Reserved
+
+== Parallel Flags Encoding
+
+The "Par" field uses the following encoding:
+
+* `000`: Serial Execution
+* `001`: Parallel with ALU
+* `002`: Parallel with Memory
+* `003`: Parallel with Control
+* `004`: Full Parallel
+* `005`-`007`: Reserved
+
+== Binary Representation
+
+In memory, the VLIW instruction is stored in little-endian format (lower address bits first).
+
+Example encoding for the VLIW instruction `[ADD T0, T1, T2] [LD T3, [TB+1]] [NOP]`:
+
+[literal]
+....
++--------+------+------+------+--------------------+------+------+
+| 000001 | 000  | 001  | 010  | 00000000000        | 000  | 004  | Operation 1: ADD T0, T1, T2
++--------+------+------+------+--------------------+------+------+
+| 010000 | 011  | 100  | 000  | 00000000001        | 001  | 001  | Operation 2: LD T3, [TB+1]
++--------+------+------+------+--------------------+------+------+
+| 000000 | 000  | 000  | 000  | 00000000000        | 005  | 000  | Operation 3: NOP
++--------+------+------+------+--------------------+------+------+
+....
+
+== Assembler Representation
+
+In assembly language, VLIW instructions are represented by enclosing operations in square brackets:
+
+[source,assembly]
+----
+[ADD T0, T1, T2] [LD T3, [TB+1]] [NOP]
+----
+
+== Instruction Packing Rules
+
+Not all operations can be combined in a VLIW instruction. The assembler enforces the following rules:
+
+1. Maximum of 3 operations per VLIW instruction
+2. Maximum of 1 memory operation per VLIW instruction
+3. Maximum of 1 control operation per VLIW instruction
+4. No register conflicts between operations
+5. No pipeline hazards between operations
+
+== Register Encoding
+
+Registers are encoded as follows:
+
+* `T0`-`T6`: `000`-`110` (General Purpose Registers)
+* `TA`: `111` (Accumulator)
+* `TB`: `000` (Base Pointer, accessed via type field)
+* `TC`: `001` (Program Counter, accessed via type field)
+* `TS`: `010` (Status Register, accessed via type field)
+* `TI`: `011` (Instruction Register, accessed via type field)
+* `VA`, `VT`, `VB`: Accessed via vector operations
+* `FA`, `FT`, `FB`: Accessed via FPU operations
+
+== Error Handling
+
+The assembler will report errors if:
+
+1. A VLIW instruction contains more than 3 operations
+2. Operations within a VLIW instruction have conflicts
+3. Register usage violates architectural constraints
+4. Parallel execution flags are incompatible

@@ -1,0 +1,151 @@
+= VTX1 Assembly Language Instruction Syntax
+:toc: left
+:icons: font
+:source-highlighter: rouge
+
+== Overview
+
+This document describes the syntax for VTX1 assembly language instructions. The VTX1 assembler supports a sophisticated instruction set with VLIW (Very Long Instruction Word) capabilities that allow for parallel execution of multiple operations.
+
+== Basic Instruction Format
+
+Individual instructions follow this general format:
+
+[source]
+----
+[label:] mnemonic [operand1][, operand2][, operand3] [; comment]
+----
+
+Where:
+
+* `label` (optional): A symbol used to reference a memory location
+* `mnemonic`: The instruction name (e.g., ADD, LD, JMP)
+* `operand1, operand2, operand3` (optional, instruction-dependent): Registers, literals, or symbols
+* `comment` (optional): Text following a semicolon, ignored by the assembler
+
+== VLIW Instruction Format
+
+The VTX1 supports VLIW instructions with up to 3 operations executed in parallel. VLIW instructions use the following syntax:
+
+[source]
+----
+[op1] [op2] [op3]
+----
+
+Where each operation follows the basic instruction format. Operations are enclosed in square brackets and separated by spaces.
+
+Example:
+[source,assembly]
+----
+[ADD T0, T1, T2] [LD T3, [TB+1]] [NOP]
+----
+
+== Register Naming
+
+The VTX1 supports several register types:
+
+1. *General Purpose Registers (GPRs)*: T0-T6
+2. *Special Registers*:
+   * TA: Accumulator
+   * TB: Base Pointer
+   * TC: Program Counter
+   * TS: Status Register
+   * TI: Instruction Register
+3. *Vector Registers*: VA, VT, VB
+4. *Floating-Point Registers*: FA, FT, FB
+
+== Addressing Modes
+
+The VTX1 supports the following addressing modes:
+
+1. *Register Direct*: The operand is a register
++
+[source,assembly]
+----
+ADD T0, T1, T2  ; T0 = T1 + T2
+----
+
+2. *Immediate*: The operand is a constant value
++
+[source,assembly]
+----
+ADD T0, T1, 5   ; T0 = T1 + 5
+----
+
+3. *Base + Offset*: The operand is a memory location specified by a base register plus offset
++
+[source,assembly]
+----
+LD T0, [TB+4]   ; T0 = Memory[TB+4]
+----
+
+4. *Program Counter Relative*: The operand is an address relative to the current program counter
++
+[source,assembly]
+----
+JMP label       ; PC = label_address
+----
+
+5. *Vector Indexed*: The operand is a vector register with an index
++
+[source,assembly]
+----
+VLD VA, [TB+T0] ; VA = Memory[TB+T0]
+----
+
+== Literal Formats
+
+The VTX1 supports multiple literal formats:
+
+1. *Decimal*: Standard decimal notation
++
+[source,assembly]
+----
+ADD T0, T1, 42  ; Decimal 42
+----
+
+2. *Hexadecimal*: Prefixed with `0x`
++
+[source,assembly]
+----
+ADD T0, T1, 0x2A  ; Hexadecimal 2A (42 decimal)
+----
+
+3. *Binary*: Prefixed with `0b`
++
+[source,assembly]
+----
+ADD T0, T1, 0b101010  ; Binary 101010 (42 decimal)
+----
+
+4. *Ternary*: Prefixed with `0t` (balanced ternary notation using `-`, `0`, `+`)
++
+[source,assembly]
+----
+ADD T0, T1, 0t+--+0  ; Balanced ternary +--+0 (42 decimal)
+----
+
+== Operation Categories
+
+The VTX1 instruction set is organized into the following categories:
+
+1. *ALU Operations*: ADD, SUB, MUL, AND, OR, NOT, etc.
+2. *Memory Operations*: LD, ST, VLD, VST, FLD, FST, etc.
+3. *Control Operations*: JMP, JAL, BEQ, BNE, CALL, RET, etc.
+4. *Vector Operations*: VADD, VSUB, VMUL, VAND, VOR, etc.
+5. *Floating-Point Operations*: FADD, FSUB, FMUL, etc.
+6. *System Operations*: NOP, WFI, etc.
+
+== Example Assembly Code
+
+[source,assembly]
+----
+; Simple VTX1 assembly program example
+        LD T0, 0x1000        ; Load value from address 0x1000 into T0
+        LD T1, 0x1004        ; Load value from address 0x1004 into T1
+loop:   ADD T2, T0, T1        ; T2 = T0 + T1
+        [ADD T0, T1, 0] [SUB T1, T2, T0] [NOP]  ; VLIW instruction with 3 operations
+        BNE T0, 0, loop       ; Branch to loop if T0 != 0
+        ST T2, 0x1008        ; Store result to address 0x1008
+        WFI                  ; Wait for interrupt
+----

@@ -1,0 +1,103 @@
+= VTX1 Assembler Architecture
+:toc: left
+:icons: font
+
+== Overview
+
+The VTX1 assembler is designed as a multi-pass assembler to convert VTX1 assembly language into binary machine code for the VTX1 ternary processor. This document outlines the architecture and design principles of the assembler.
+
+== Architecture Components
+
+=== 1. Lexer (Tokenization)
+
+The lexer processes the input source code and converts it into a stream of tokens. Each token represents a meaningful element in the assembly language such as:
+
+* Mnemonics (e.g., ADD, SUB, LD)
+* Registers (e.g., T0, TA, VA)
+* Literals (decimal, binary, ternary)
+* Labels and symbols
+* Directives and special characters
+
+=== 2. Parser
+
+The parser processes the token stream and builds an abstract syntax tree (AST) that represents the structure of the program. It handles:
+
+* Instruction recognition
+* Operand validation
+* VLIW grouping for parallel operations
+* Directive processing
+* Label definition and usage
+
+=== 3. Symbol Table Manager
+
+Manages symbol resolution including:
+
+* Label definitions and references
+* Global and local symbols
+* Address calculation
+* Forward references
+
+=== 4. Code Generator
+
+Converts the parsed instructions into binary code according to the VTX1 instruction encoding:
+
+* 96-bit VLIW instruction words (3 operations per word)
+* 36-bit ternary word encoding
+* Balanced ternary literal encoding
+* Address resolution
+
+=== 5. Error Handler
+
+Provides comprehensive error detection and reporting:
+
+* Syntax errors
+* Semantic errors (e.g., invalid register usage)
+* Symbol resolution errors
+* Range and value validation
+
+=== 6. Output Formatter
+
+Generates the final output in the required format:
+
+* Binary file format
+* Hexadecimal listing
+* Debug information
+* Symbol table output
+
+== Processing Flow
+
+The assembler operates in multiple passes:
+
+1. *Pass 1*: Lexical analysis and parsing, build initial symbol table
+2. *Pass 2*: Resolve symbols and calculate addresses
+3. *Pass 3*: Generate code and produce binary output
+
+== Implementation Choices
+
+=== Programming Language
+
+The initial prototype will be implemented in Python for rapid development and ease of maintenance. Key considerations:
+
+* Excellent string processing capabilities
+* Rich library ecosystem
+* Easy to extend and modify
+* Good performance for an assembler of this scale
+* Cross-platform compatibility
+
+=== Error Handling Strategy
+
+The assembler will use a comprehensive error handling strategy:
+
+* Continue parsing after errors when possible
+* Collect multiple errors before halting
+* Provide clear error messages with line/column information
+* Suggest potential fixes when appropriate
+
+=== VLIW Handling
+
+VLIW instructions (multiple operations per instruction word) will be handled through:
+
+* Explicit grouping syntax in the assembly language
+* Automatic validation of illegal operation combinations
+* Resource conflict detection
+* Pipeline hazard warnings
