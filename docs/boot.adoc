@@ -9,17 +9,17 @@
 
 ==== Boot Process
 1. Power-up
-- Reset sequence
-- Clock initialization
-- PLL lock
+* Reset sequence
+* Clock initialization
+* PLL lock
 2. Boot ROM execution
-- Hardware initialization
-- Memory test
-- Peripheral initialization
+* Hardware initialization
+* Memory test
+* Peripheral initialization
 3. Bootloader execution
-- Application validation
-- Application loading
-- Application execution
+* Application validation
+* Application loading
+* Application execution
 
 ==== Boot Configuration
 * Boot source selection
@@ -29,6 +29,7 @@
 * Boot recovery
 
 === Critical Path Timing
+
 [wavedrom]
 ....
 {
@@ -44,9 +45,9 @@
     {name: 'Memory (Cache Miss)', wave: 'x...3.4...5..6.7.', data: ['Address', 'Miss', 'Line Fill', 'Read', 'Data']},
     {},
     {name: 'Clock Domains', wave: 'x................'},
-    {name: 'CPU (100MHz)', wave: 'p................'},
-    {name: 'Memory (100MHz)', wave: 'p................'},
-    {name: 'Peripheral (50MHz)', wave: 'P................'},
+    {name: 'CPU (100 MHz)', wave: 'p................'},
+    {name: 'Memory (100 MHz)', wave: 'p................'},
+    {name: 'Peripheral (50 MHz)', wave: 'P................'},
     {name: 'Sync Crossing', wave: 'x..3.4...5.x.....', data: ['Request', 'Sync', 'Complete']}
   ],
   head: {
@@ -59,68 +60,69 @@
   }
 }
 ....
+
 ==== Instruction Pipeline
-- Fetch Stage
-- Cache Hit: 1 cycle
-- Cache Miss: 5 cycles
-- Line Fill: 4 cycles
-- Branch Prediction: 1 cycle
-- Decode Stage
-- VLIW Decode: 1 cycle
-- Register Read: 1 cycle
-- Hazard Detection: 1 cycle
-- Execute Stage
-- ALU Operations: 1 cycle
-- FPU Operations: 2-3 cycles
-- SIMD Operations: 1-2 cycles
-- Memory Access: 2-6 cycles
-- Writeback Stage
-- Register Write: 1 cycle
-- Result Forwarding: 1 cycle
-- Status Update: 1 cycle
+* Fetch Stage
+* Cache Hit: 1 cycle
+* Cache Miss: 5 cycles
+* Line Fill: 4 cycles
+* Branch Prediction: 1 cycle
+* Decode Stage
+* VLIW Decode: 1 cycle
+* Register Read: 1 cycle
+* Hazard Detection: 1 cycle
+* Execute Stage
+* ALU Operations: 1 cycle
+* FPU Operations: 2-3 cycles
+* SIMD Operations: 1-2 cycles
+* Memory Access: 2-6 cycles
+* Writeback Stage
+* Register Write: 1 cycle
+* Result Forwarding: 1 cycle
+* Status Update: 1 cycle
 
 ==== Memory Access Timing
-- Cache Operations
-- Hit Access: 1 cycle
-- Miss Penalty: 8 cycles
-- Line Fill: 4 cycles
-- Write Back: 3 cycles
-- RAM Operations
-- Read Access: 2 cycles
-- Write Access: 1 cycle
-- Burst Transfer: 4 cycles
-- Bank Switch: 1 cycle
-- Flash Operations
-- Read Access: 3 cycles
-- Write Access: 100μs
-- Erase Time: 1ms
-- Program Time: 50μs
+* Cache Operations
+* Hit Access: 1 cycle
+* Miss Penalty: 8 cycles
+* Line Fill: 4 cycles
+* Write Back: 3 cycles
+* RAM Operations
+* Read Access: 2 cycles
+* Write Access: 1 cycle
+* Burst Transfer: 4 cycles
+* Bank Switch: 1 cycle
+* Flash Operations
+* Read Access: 3 cycles
+* Write Access: 100 μs
+* Erase Time: 1ms
+* Program Time: 50 μs
 
 ==== Clock Domain Crossing
-- CPU to Memory (100MHz)
-- Transfer Time: 1 cycle
-- Synchronization: 2 cycles
-- Total Latency: 3 cycles
-- Memory to Peripheral (50MHz)
-- Transfer Time: 2 cycles
-- Synchronization: 2 cycles
-- Total Latency: 4 cycles
-- CPU to Debug (25MHz)
-- Transfer Time: 4 cycles
-- Synchronization: 2 cycles
-- Total Latency: 6 cycles
+* CPU to Memory (100 MHz)
+* Transfer Time: 1 cycle
+* Synchronization: 2 cycles
+* Total Latency: 3 cycles
+* Memory to Peripheral (50 MHz)
+* Transfer Time: 2 cycles
+* Synchronization: 2 cycles
+* Total Latency: 4 cycles
+* CPU to Debug (25MHz)
+* Transfer Time: 4 cycles
+* Synchronization: 2 cycles
+* Total Latency: 6 cycles
 
 ==== Power Management Timing
-- State Transitions
-- Active to Sleep: 12 cycles
-- Sleep to Active: 8 cycles
-- Active to Deep Sleep: 16 cycles
-- Deep Sleep to Active: 24 cycles
-- Power Sequencing
-- Power-Up: 1.1ms + 8 cycles
-- Power-Down: 1.1ms + 12 cycles
-- Brown-out Detection: 1μs
-- Recovery Time: 8 cycles
+* State Transitions
+* Active to Sleep: 12 cycles
+* Sleep to Active: 8 cycles
+* Active to Deep Sleep: 16 cycles
+* Deep Sleep to Active: 24 cycles
+* Power Sequencing
+* Power-Up: 1.1 ms + 8 cycles
+* Power-Down: 1.1 ms + 12 cycles
+* Brown-out Detection: 1 μs
+* Recovery Time: 8 cycles
 
 === Timing Diagrams
 
@@ -128,10 +130,10 @@
 ....
 {
   signal: [
-    {name: 'CPU Clock (100MHz)', wave: 'p..........'},
-    {name: 'Memory Clock (100MHz)', wave: 'p..........'},
-    {name: 'Peripheral Clock (50MHz)', wave: 'P..........'},
-    {name: 'Debug Clock (25MHz)', wave: 'n..........'},
+    {name: 'CPU Clock (100 MHz)', wave: 'p..........'},
+    {name: 'Memory Clock (100 MHz)', wave: 'p..........'},
+    {name: 'Peripheral Clock (50 MHz)', wave: 'P..........'},
+    {name: 'Debug Clock (25 MHz)', wave: 'n..........'},
     {},
     {name: 'Register Timing', wave: 'x3.4.x.....', data: ['Data', 'Capture'],
      node: '.a.b...',
@@ -181,35 +183,35 @@
 === Timing Constraints and performance
 
 1. **Setup and Hold Times**
-- Register Setup: 2ns
-- Register Hold: 1ns
-- Clock to Q: 3ns
-- Input Setup: 2ns
-- Input Hold: 1ns
-- Output Valid: 4ns
+* Register Setup: 2ns
+* Register Hold: 1ns
+* Clock to Q: 3 ns
+* Input Setup: 2 ns
+* Input Hold: 1 ns
+* Output Valid: 4ns
 
 2. **Clock Specifications**
-- CPU Clock: 100MHz max
-- Memory Clock: 100MHz max
-- Peripheral Clock: 50MHz max
-- Debug Clock: 25MHz max
-- Clock Jitter: < 100ps
-- Clock Skew: < 100ps
-- Duty Cycle: 50% ± 5%
+* CPU Clock: 100 MHz max
+* Memory Clock: 100 MHz max
+* Peripheral Clock: 50 MHz max
+* Debug Clock: 25 MHz max
+* Clock Jitter: < 100ps
+* Clock Skew: < 100ps
+* Duty Cycle: 50% ± 5%
 
 3. **Path Delays**
-- Critical Path: 10ns
-- Memory Access: 15ns
-- Cache Access: 5ns
-- Register Access: 3ns
-- ALU Operation: 5ns
-- FPU Operation: 15ns
+* Critical Path: 10 ns
+* Memory Access: 15 ns
+* Cache Access: 5 ns
+* Register Access: 3ns
+* ALU Operation: 5ns
+* FPU Operation: 15 ns
 
 4. **Interface Timing**
-- GPIO Setup: 2ns
-- GPIO Hold: 1ns
-- UART Baud: Up to 3Mbps
-- SPI Clock: Up to 25MHz
-- I2C Clock: Up to 400kHz
-- JTAG TCK: Up to 25MHz
+* GPIO Setup: 2ns
+* GPIO Hold: 1 ns
+* UART Baud: Up to 3Mbps
+* SPI Clock: Up to 25 MHz
+* I2C Clock: Up to 400 kHz
+* JTAG TCK: Up to 25MHz
 

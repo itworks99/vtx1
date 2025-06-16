@@ -1,9 +1,15 @@
 
 = VTX1 Ternary SoC Architecture
+{author} -- version {revnumber}, {revdate}
 :doctype: book
+:title: VTX1 Ternary SoC Architecture
 :description: VTX1 Ternary SoC Architecture
+:author: K.Vanyushov
 :keywords: VTX1, Ternary SoC, Architecture, Specification
-:url-repo: https://github.com/itworks99/vtx1l
+:revnumber: 1.0
+:revdate: 2025-06-16
+:revremark: Initial release
+:url-repo: https://github.com/itworks99/vtx1
 :source-highlighter: rouge
 :stem: latexmath
 :toc:

@@ -159,7 +159,7 @@ tasks:
     desc: Generate documentation in PDF
     cmds:
       - echo "Generating documentation..."
-      - asciidoctor-pdf --theme docs/ARCHITECTURE.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-architecture.pdf" docs/ARCHITECTURE.adoc
+      - asciidoctor-pdf --theme docs/Architecture.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-architecture.pdf" docs/Architecture.adoc
       - asciidoctor-pdf --theme src/assembler/docs/assembler.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-assembler.pdf" src/assembler/docs/assembler.adoc
       - echo "Documentation generated in {{.RELEASE_DIR}}"
 

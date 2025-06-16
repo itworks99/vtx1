@@ -3,6 +3,7 @@
 ==== Reset Architecture
 
 **Reset Sources:**
+
 1. **External Reset (RST_N):** Active-low external pin
 2. **Power-On Reset (POR):** Automatic on power application
 3. **Brown-Out Reset (BOR):** Voltage supervisor triggered
@@ -11,12 +12,14 @@
 6. **Debug Reset (DBG):** JTAG-initiated reset
 
 **Reset Distribution:**
+
 - Asynchronous assertion: Immediate reset activation
 - Synchronous deassertion: Clock-synchronized reset release
 - Reset tree: Balanced distribution to all flip-flops
 - Reset sequencing: Controlled startup order for complex blocks
 
 **Reset Timing:**
+
 - External reset pulse width: 100ns minimum
 - Internal reset duration: 8 clock cycles minimum
 - Power-on reset duration: 1ms + 8 cycles
@@ -295,6 +298,7 @@ flowchart TB
 ===== Interrupt Nesting and Priority Resolution
 
 **Priority Arbitration Algorithm:**
+
 1. **Level 0 (NMI):** Non-maskable interrupts (Bus errors, Debug requests)
    - Cannot be disabled by software
    - Highest priority, always processed immediately
@@ -309,6 +313,7 @@ flowchart TB
    - Level 7: Low priority (RTC, Trace buffer)
 
 **Nesting Rules:**
+
 - Higher priority interrupts can preempt lower priority ISRs
 - Same priority interrupts queue in FIFO order
 - Maximum nesting depth: 8 levels
@@ -333,6 +338,7 @@ flowchart TB
 |===
 
 **Throughput Specifications:**
+
 - Maximum interrupt rate: 10 MHz (100ns minimum spacing)
 - Sustained interrupt rate: 5 MHz with context switching
 - Nested interrupt depth: 8 levels maximum
@@ -341,12 +347,14 @@ flowchart TB
 ===== Integration with CPU Pipeline
 
 **Interrupt Injection Points:**
+
 1. **Fetch Stage:** NMI and debug interrupts can force immediate pipeline flush
 2. **Decode Stage:** IRQ and FIQ are checked during instruction decode
 3. **Execute Stage:** Precise exceptions and system interrupts
 4. **Writeback Stage:** Memory and cache error interrupts
 
 **Pipeline Interaction:**
+
 - **IRQ/FIQ:** Finish current instruction, then branch to ISR
 - **NMI:** Immediate pipeline flush and exception entry
 - **Debug:** Can interrupt at any pipeline stage
@@ -355,12 +363,14 @@ flowchart TB
 ===== Power Management Integration
 
 **Sleep Mode Operation:**
+
 - Wake-up interrupts: GPIO, UART, RTC, Watchdog
 - Interrupt controller remains active in all sleep modes
 - Wake-up latency: 4 cycles + clock restart time
 - Context preservation during deep sleep
 
 **Power Gating Support:**
+
 - Individual interrupt source gating
 - Automatic power domain control
 - Wake-up signal routing
@@ -369,6 +379,7 @@ flowchart TB
 ===== Debug and Diagnostics
 
 **Debug Features:**
+
 - Real-time interrupt monitoring
 - Priority conflict detection  
 - Nesting depth tracking
@@ -376,6 +387,7 @@ flowchart TB
 - Trace buffer integration for interrupt flow analysis
 
 **Diagnostic Registers:**
+
 - Interrupt source identification
 - Timing violation detection
 - Priority inversion monitoring

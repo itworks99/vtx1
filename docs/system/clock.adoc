@@ -5,6 +5,7 @@ The VTX1 clock system provides a robust, flexible, and power-efficient clocking 
 ==== Clock System Overview
 
 **Key Features:**
+
 - Multi-domain clock architecture with 5 primary domains
 - Dynamic frequency scaling from 25MHz to 100MHz
 - Hierarchical clock gating for power efficiency
@@ -13,6 +14,7 @@ The VTX1 clock system provides a robust, flexible, and power-efficient clocking 
 - Comprehensive clock quality monitoring
 
 **Architecture Principles:**
+
 - Minimal clock skew across all domains (<100ps)
 - High clock tree efficiency (>95% gating efficiency)
 - Reliable synchronization between clock domains
@@ -200,6 +202,7 @@ flowchart TB
 |===
 
 **Clock Domain Relationships:**
+
 - CPU ↔ Memory: Synchronous (1:1 phase-aligned)
 - CPU ↔ Peripheral: Rational synchronous (2:1)
 - CPU ↔ Debug: Asynchronous crossing
@@ -210,6 +213,7 @@ flowchart TB
 ===== Primary Clock Sources
 
 **Crystal Oscillator (25MHz):**
+
 - Frequency accuracy: ±50ppm over temperature
 - Load capacitance: 18pF ±1pF
 - Drive level: 100μW nominal
@@ -218,6 +222,7 @@ flowchart TB
 - Temperature coefficient: ±30ppm over -40°C to +85°C
 
 **Backup Ring Oscillator:**
+
 - Frequency: 25MHz ±5% (uncalibrated)
 - Low power consumption: <10μA
 - Fast startup: <1μs
@@ -227,6 +232,7 @@ flowchart TB
 ===== Phase-Locked Loop (PLL)
 
 **PLL Specifications:**
+
 - Input frequency: 25MHz (crystal reference)
 - VCO frequency range: 400MHz - 800MHz
 - Output frequencies: 400MHz, 200MHz, 100MHz, 50MHz, 25MHz
@@ -236,6 +242,7 @@ flowchart TB
 - RMS jitter: <50ps (12kHz-20MHz bandwidth)
 
 **PLL Configuration:**
+
 - Multiplication factors: Software programmable
 - Fast frequency switching: <10μs settling time
 - Low-power mode: VCO shutdown with backup oscillator
@@ -247,6 +254,7 @@ flowchart TB
 ===== Clock Tree Design Methodology
 
 **H-Tree Distribution Strategy:**
+
 - Balanced routing ensures equal path lengths (±5% variation)
 - Minimum clock skew target: <100ps within domain
 - Clock buffer insertion every 2mm of routing
@@ -254,12 +262,14 @@ flowchart TB
 - Matched impedance traces (50Ω ±10%)
 
 **Buffer Hierarchy:**
+
 - Root buffers: High-drive strength, low skew
 - Level 1 buffers: H-tree distribution points
 - Level 2 buffers: Load balancing and fan-out
 - Leaf buffers: Final drive to clock gates
 
 **Skew Management:**
+
 - Route length matching: ±10% variation maximum
 - Buffer sizing: Matched rise/fall times (±20ps)
 - Load balancing: Equal capacitive loading per branch
@@ -363,6 +373,7 @@ flowchart TB
 ....
 
 **Clock Tree Implementation:**
+
 - **Balanced H-tree distribution** ensures equal path lengths (±5% variation)
 - **Hierarchical buffering** provides proper signal integrity at each level
 - **Domain-specific optimization** with appropriate drive strengths
@@ -384,6 +395,7 @@ flowchart TB
 |===
 
 **Clock Gating Features:**
+
 - Glitch-free enable/disable sequences
 - Automatic dependency tracking
 - Power domain isolation support
@@ -391,6 +403,7 @@ flowchart TB
 - Gating efficiency monitoring
 
 **Gating Control Logic:**
+
 - Enable signal synchronization
 - Minimum pulse width guarantee
 - Safe state during transitions
@@ -411,6 +424,7 @@ flowchart TB
 |===
 
 **DFS Implementation:**
+
 - Software-controlled frequency selection
 - Hardware-assisted voltage scaling coordination
 - Automatic dependency management
@@ -418,6 +432,7 @@ flowchart TB
 - Power-performance optimization algorithms
 
 **Voltage-Frequency Coordination:**
+
 - Voltage scaling precedes frequency increases
 - Frequency scaling precedes voltage decreases
 - Hardware voltage monitoring and validation
@@ -427,6 +442,7 @@ flowchart TB
 ===== CDC Design Principles
 
 **Synchronization Methodology:**
+
 - All CDC circuits follow proven design patterns
 - Metastability resolution with >1000 year MTBF
 - Comprehensive simulation and verification
@@ -448,6 +464,7 @@ flowchart TB
 ===== Synchronization Circuits Implementation
 
 **Two-Flop Synchronizers:**
+
 - Input register in source domain for stability
 - Two synchronizing registers in destination domain
 - Reset synchronization: Asynchronous assert, synchronous release
@@ -455,6 +472,7 @@ flowchart TB
 - Metastability detection for debug purposes
 
 **FIFO-Based Crossing:**
+
 - Dual-clock FIFO with independent read/write domains
 - Gray code pointers for reliable full/empty generation
 - Configurable depth: 4-16 entries based on throughput requirements
@@ -462,6 +480,7 @@ flowchart TB
 - Built-in overflow/underflow protection
 
 **Handshake Protocols:**
+
 - Four-phase handshaking for critical control transfers
 - Request-acknowledge-complete-idle sequence
 - Configurable timeout detection for error handling
@@ -471,6 +490,7 @@ flowchart TB
 ===== Domain Crossing Specifications
 
 **CPU ↔ Memory Domain (100MHz → 100MHz):**
+
 - Type: Synchronous (same frequency, phase-aligned)
 - Phase relationship: 0° skew target, <50ps actual
 - Latency: 0 cycles additional delay
@@ -478,6 +498,7 @@ flowchart TB
 - Bandwidth: Full rate (100MHz × 36-bit data width)
 
 **CPU ↔ Peripheral Domain (100MHz → 50MHz):**
+
 - Type: Rational synchronous (2:1 frequency ratio)
 - Phase relationship: Peripheral clock edge aligned to even CPU edges
 - Latency: 1-2 peripheral clock cycles
@@ -486,6 +507,7 @@ flowchart TB
 - Flow control: Hardware back-pressure and ready signaling
 
 **CPU ↔ Debug Domain (100MHz → 25MHz):**
+
 - Type: Asynchronous crossing (no frequency relationship)
 - Latency: 4-8 cycles worst case (average 6 cycles)
 - Method: Dual-clock FIFO with gray code pointers
@@ -494,6 +516,7 @@ flowchart TB
 - Error handling: Timeout detection and overflow protection
 
 **Peripheral ↔ Debug Domain (50MHz → 25MHz):**
+
 - Type: Rational synchronous (2:1 frequency ratio)
 - Phase relationship: Debug clock edge aligned to even peripheral edges
 - Latency: 2-3 clock cycles
@@ -519,6 +542,7 @@ flowchart TB
 |===
 
 **Clock Tree Specifications:**
+
 - Clock skew within domain: <100ps (target <50ps)
 - Clock skew across domains: <200ps where relevant
 - Clock-to-output delay: <5ns (register to pad)
@@ -540,6 +564,7 @@ flowchart TB
 |===
 
 **Power Optimization Features:**
+
 - Clock tree power: <5% of total chip power target
 - Dynamic power scaling with frequency
 - Automatic clock gating when blocks are idle
@@ -547,6 +572,7 @@ flowchart TB
 - Voltage scaling coordination for optimal efficiency
 
 **Power Gating Efficiency:**
+
 - Coarse-grained gating: >95% power reduction
 - Medium-grained gating: 80-90% power reduction  
 - Fine-grained gating: 60-75% power reduction
@@ -593,6 +619,7 @@ flowchart TB
 ===== Clock Control Registers
 
 **Clock Management Unit (CMU) Registers:**
+
 - PLL control and status registers
 - Frequency selection and divider controls
 - Clock gate enable/disable controls
@@ -601,6 +628,7 @@ flowchart TB
 - Clock quality monitoring registers
 
 **Dynamic Control Features:**
+
 - Software-controlled frequency scaling
 - Automatic clock gating based on activity
 - Power domain coordination
@@ -610,6 +638,7 @@ flowchart TB
 ===== Monitoring and Debug
 
 **Clock Monitoring Capabilities:**
+
 - Real-time frequency measurement
 - Clock duty cycle monitoring
 - Jitter and phase noise measurement
@@ -618,6 +647,7 @@ flowchart TB
 - CDC error detection and counting
 
 **Debug and Test Features:**
+
 - Clock domain isolation for debug
 - Test clock injection capability
 - Clock tree observability points
@@ -628,6 +658,7 @@ flowchart TB
 ===== Implementation Guidelines
 
 **Design Rules:**
+
 - All clock crossings must use approved CDC circuits
 - Clock gating must use standard clock gate cells
 - Clock tree synthesis with verified timing constraints
@@ -635,6 +666,7 @@ flowchart TB
 - Clock domain assignments must be verified
 
 **Verification Strategy:**
+
 - Static timing analysis across all corners
 - Dynamic timing simulation with realistic workloads
 - CDC metastability analysis and MTBF calculation
@@ -837,24 +869,28 @@ flowchart TB
 ....
 
 **Clock Domains:**
+
 1. **Core Domain (100MHz):** CPU, pipeline, caches, memory controller
 2. **Peripheral Domain (50MHz):** All communication and I/O peripherals
 3. **Debug Domain (25MHz):** JTAG, trace, debug infrastructure
 4. **Analog Domain (Various):** PLL, ADC, DAC, serializers
 
 **Dynamic Frequency Scaling:**
+
 - CPU clock: 25MHz - 100MHz in 25MHz steps
 - Memory clock: Locked to CPU clock (1:1 ratio)
 - Peripheral clock: CPU clock ÷ 2 or ÷ 4
 - Debug clock: Fixed 25MHz or CPU clock ÷ 4
 
 **Clock Gating Hierarchy:**
+
 - Coarse-grained: Per functional block (manual control)
 - Medium-grained: Per pipeline stage (automatic)
 - Fine-grained: Per register/latch (automatic)
 - Gating efficiency: >95% clock edge reduction in gated blocks
 
 **PLL Configuration:**
+
 - Multiple output frequencies from single VCO
 - Software-configurable multiplication factors
 - Fast frequency switching: <10μs settling time

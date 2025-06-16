@@ -13,6 +13,9 @@ font:
     FiraCode:
       normal: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Regular.ttf
       bold: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Bold.ttf
+title-page:
+  background-image: images/soc_title_page_background.svg
+  font-color: #999999
 heading:
   font-family: Fira
 code:

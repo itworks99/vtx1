@@ -114,6 +114,7 @@ flowchart TB
 |===
 
 **Electrical Characteristics:**
+
 - **Output Drive Strength:** 2mA, 4mA, 8mA, 12mA (configurable per pin)
 - **Input Threshold:** VIL=1.5V, VIH=3.5V (5V operation)
 - **Output Levels:** VOL<0.4V, VOH>4.6V (5V operation)
@@ -165,6 +166,7 @@ flowchart TB
 ==== Interrupt Generation and Handling
 
 **Interrupt Capabilities:**
+
 - **Sources:** GPIO[7:0] can generate interrupts (IRQ 0-7)
 - **Trigger Modes:** Rising edge, falling edge, both edges, high level, low level
 - **Debouncing:** Hardware debounce with configurable time constant
@@ -198,6 +200,7 @@ flowchart TB
 ==== Performance Characteristics
 
 **Timing Specifications:**
+
 - **Setup Time:** 2ns before clock edge (50MHz)
 - **Hold Time:** 1ns after clock edge (50MHz)  
 - **Input Delay:** <5ns from pad to register
@@ -212,6 +215,7 @@ flowchart TB
 ==== Power Management Integration
 
 **Power Management Features:**
+
 - **Bank-Level Gating:** Independent power control for each 8-pin bank
 - **Retention Mode:** State preservation during sleep with minimal power
 - **Wake-up Sources:** GPIO events can wake system from deep sleep
@@ -231,6 +235,7 @@ flowchart TB
 |===
 
 **Power Gating Control:**
+
 - **Bank 0 Gating:** GPIO[7:0] independent power domain
 - **Bank 1 Gating:** GPIO[15:8] independent power domain  
 - **Bank 2 Gating:** GPIO[23:16] independent power domain

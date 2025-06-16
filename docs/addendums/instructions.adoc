@@ -18,7 +18,7 @@ This eliminates the previous mathematical impossibility of fitting 78 instructio
 
 |NEG      |000000 |1      |ALU  |Negate register                      |Rd = -Rs1
 |ADD      |000001 |1      |ALU  |Add two registers                    |Rd = Rs1 + Rs2
-|SUB      |000010 |1      |ALU  |Subtract two registers               |Rd = Rs1 - Rs2  
+|SUB      |000010 |1      |ALU  |Subtract two registers               |Rd = Rs1 - Rs2
 |MUL      |000011 |2      |ALU  |Multiply two registers               |Rd = Rs1 * Rs2
 |AND      |000100 |1      |ALU  |Bitwise AND                          |Rd = Rs1 & Rs2
 |OR       |000101 |1      |ALU  |Bitwise OR                           |Rd = Rs1 | Rs2
@@ -32,6 +32,7 @@ This eliminates the previous mathematical impossibility of fitting 78 instructio
 |TEST     |001101 |1      |ALU  |Test register                        |Flags = Rs1 & Rs2
 |INC      |001110 |1      |ALU  |Increment register                   |Rd = Rs1 + 1
 |DEC      |001111 |1      |ALU  |Decrement register                   |Rd = Rs1 - 1
+|         |       |       |     |                                     |
 |===
 
 ===== Memory Operations (Type: 001)
@@ -83,6 +84,7 @@ This eliminates the previous mathematical impossibility of fitting 78 instructio
 |VNOT     |000101 |1      |VEC  |Vector bitwise NOT                   |Vd = ~Vs1
 |VSHL     |000110 |2      |VEC  |Vector shift left                    |Vd = Vs1 << imm
 |VSHR     |000111 |2      |VEC  |Vector shift right                   |Vd = Vs1 >> imm
+|         |       |       |     |                                     |
 |===
 
 ===== FPU Operations (Type: 100)
@@ -120,7 +122,7 @@ This eliminates the previous mathematical impossibility of fitting 78 instructio
 |UDIV     |000010 |10     |μCODE |Divide (unsigned)                    |Rd = Rs1 / Rs2
 |UMOD     |000011 |10     |μCODE |Modulo (unsigned)                    |Rd = Rs1 % Rs2
 |SQRT     |000100 |16     |μCODE |Square root                          |Rd = sqrt(Rs1)
-|ABS      |000101 |4      |μCODE |Absolute value                       |Rd = |Rs1|
+|ABS      |000101 |4      |μCODE |Absolute value                       |Rd = abs(Rs1)|
 |===
 
 ===== Transcendental Functions (Type: 110 continued)

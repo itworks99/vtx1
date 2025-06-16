@@ -23,7 +23,7 @@ The VTX1 is a balanced ternary logic System-on-Chip (SoC) that implements a nove
 * Small implementation footprint under 10K gates
 * Power efficiency: See Power Consumption Specifications for complete dual-voltage power specifications
 * Area: ~5×5mm die
-* Clock frequency: Up to 100MHz
+* Clock frequency: Up to 100 MHz
 
 == Overview
 
@@ -254,12 +254,13 @@ All internal components operate using balanced ternary representation, implement
 |===
 
 **Technical Specifications**:
-- **Supply Voltage**: 5.0V ±5% (compatible with legacy systems)
+
+- **Supply Voltage**: 5.0 V ±5% (compatible with legacy systems)
 - **Noise Margins**: ±0.5V around each logic level
-- **Drive Strength**: 4mA minimum per output
-- **Input Thresholds**: VIL = 0.5V max, VIH = 4.5V min
+- **Drive Strength**: 4 mA minimum per output
+- **Input Thresholds**: VIL = 0.5 V max, VIH = 4.5 V min
 - **Implementation**: 5V-compatible using standard CMOS level shifters
-- **ESD Protection**: 2kV HBM, 200V MM for 5V-tolerant operation
+- **ESD Protection**: 2 kV HBM, 200 V MM for 5V-tolerant operation
 
 **Verilog Implementation**:
 
@@ -276,6 +277,7 @@ localparam TRIT_X = 2'b11;     // Invalid or undetermined
 **Note**: For complete encoding specifications, see <<Ternary Logic Encoding>> above.
 
 **Quick Reference**:
+
 - **Trit to Binary**: Each trit is represented by a 2-bit binary value per the authoritative encoding table.
 - **Binary to Trit**: 2-bit binary values are mapped to their corresponding trit values as defined in the encoding specification.
 
@@ -288,7 +290,7 @@ The trit gate is a basic building block of the trinary system. It represents the
 f(x) = -x \quad \text{where} \quad x \in \{-1,\ 0,\ +1\}
 ++++
 
-as per the ternary logic encoding defined above. Then a function f(e) (where e is a 2-bit encoded trit) could be written logically as:
+As per the ternary logic encoding defined above. Then a function f(e) (where e is a 2-bit encoded trit) could be written logically as:
 
 [latexmath]
 ++++
@@ -572,9 +574,9 @@ endmodule
 
 **Transistor Sizing and Characteristics:**
 
-- **PMOS Devices:** W/L = 20μm/0.18μm (high drive strength)
+- **PMOS Devices:** W/L = 20 μm/0.18μm (high drive strength)
 - **NMOS Devices:** W/L = 10μm/0.18μm (matched conductance)
-- **Level Decoders:** W/L = 5μm/0.18μm (low power)
+- **Level Decoders:** W/L = 5 μm/0.18μm (low power)
 - **Pull-down Network:** Triple-stack for ternary logic levels
 - **Pull-up Network:** Parallel configuration for voltage division
 
@@ -606,11 +608,11 @@ endmodule
 
 **Implementation Specifications:**
 
-- **Technology Node:** 180nm CMOS process
-- **Supply Voltage:** 5.0V ±5% (compatible with legacy systems)
+- **Technology Node:** 180 nm CMOS process
+- **Supply Voltage:** 5.0 V ±5% (compatible with legacy systems)
 - **Voltage Levels:** See Ternary Logic Encoding for complete specification
 - **Noise Margins:** ±0.5V around each logic level
-- **Drive Strength:** 4mA minimum per output
+- **Drive Strength:** 4 mA minimum per output
 - **Fanout:** 8 ternary gates maximum per output
 
 ==== CMOS Implementation Details
@@ -618,10 +620,11 @@ endmodule
 **Process Technology Requirements:**
 
 1. **Device Characteristics:**
-   - **Process:** 180nm CMOS with thick oxide options
+
+   - **Process:** 180 nm CMOS with thick oxide options
    - **VTH NMOS:** 0.7V ±0.1V (thick oxide: 1.2V ±0.1V)
    - **VTH PMOS:** -0.8V ±0.1V (thick oxide: -1.3V ±0.1V)
-   - **IOX Thickness:** 6nm (core), 12nm (I/O)
+   - **IOX Thickness:** 6 nm (core), 12 nm (I/O)
    - **Metal Layers:** 6 layers (M1-M6)
 
 2. **Ternary Level Generators:**
@@ -659,6 +662,7 @@ endmodule
 ==== Layout Considerations
 
 **Device Matching Requirements:**
+
 - **Transistor Matching:** ±2% W/L ratio matching
 - **Resistor Matching:** ±1% for voltage dividers
 - **Layout Techniques:** Common-centroid, dummy devices
@@ -666,6 +670,7 @@ endmodule
 - **Metal Shielding:** M3/M4 power/ground shields
 
 **Parasitic Effects Management:**
+
 - **Gate Capacitance:** 0.5fF/μm² (typical)
 - **Interconnect Capacitance:** 0.2fF/μm (M1), 0.15fF/μm (M2-M6)
 - **Wire Resistance:** 0.1Ω/square (M1), 0.05Ω/square (M2-M6)
@@ -683,13 +688,13 @@ endmodule
    - **FS (Fast-Slow):** Asymmetric PMOS/NMOS
 
 2. **Voltage Variations:**
-   - **Supply Range:** 4.5V to 5.5V (±10%)
+   - **Supply Range:** 4.5 V to 5.5 V (±10%)
    - **Reference Voltage:** ±2% variation (2.45V to 2.55V)
    - **Level Margins:** Maintained >±400mV across corners
 
 3. **Temperature Variations:**
    - **Operating Range:** -40°C to +85°C
-   - **VTH Temperature Coefficient:** -2mV/°C (NMOS), +2mV/°C (PMOS)
+   - **VTH Temperature Coefficient:** -2 mV/°C (NMOS), +2mV/°C (PMOS)
    - **Resistor Temperature Coefficient:** ±100ppm/°C
 
 **Monte Carlo Analysis Results:**
@@ -732,7 +737,7 @@ endmodule
 **Implementation Metrics:**
 
 - **Area:** 2,500 transistors for 4×4 multiplier
-- **Delay:** 12ns typical (TT corner, 5V, 25°C)
+- **Delay:** 12 ns typical (TT corner, 5 V, 25°C)
 - **Power:** 15mW active, 50μW standby
 - **Accuracy:** ±1 LSB across all process corners
 
@@ -773,9 +778,9 @@ endmodule
 **Gate Count Analysis:**
 
 - **Total Gate Count:** 8,500 gates for 16-bit ternary ALU
-- **Critical Path:** 15ns through multiply-accumulate
-- **Area Estimation:** 1.2mm² in 180nm technology
-- **Power Consumption:** 25mW active, 100μW standby
+- **Critical Path:** 15 ns through multiply-accumulate
+- **Area Estimation:** 1.2 mm² in 180 nm technology
+- **Power Consumption:** 25 mW active, 100 μW standby
 
 === Comprehensive Timing Analysis
 ==== Gate-Level Propagation Delays
@@ -979,9 +984,9 @@ endspecify
 
 **Critical Path Analysis:**
 
-- **Longest Path:** Execute Stage (15.6ns)
+- **Longest Path:** Execute Stage (15.6 ns)
 - **Critical Operations:** Ternary multiplication, data cache access
-- **Maximum Clock Frequency:** 100MHz (considering 20% timing margin)
+- **Maximum Clock Frequency:** 100 MHz (considering 20% timing margin)
 - **Pipeline Efficiency:** 85% (accounting for hazards and stalls)
 
 ==== Clock Domain Analysis
@@ -1142,8 +1147,9 @@ set_max_delay -from [get_clocks cpu_clk] -to [get_clocks mem_clk] 20.0
 **Power Modeling Equations:**
 
 **Dynamic Power Model:**
+[latexmath]
 ++++
-P_dynamic = α × C_load × V² × f
+P_{dynamic} = \alpha × C_{load} × V² × f
 ++++
 
 - **α (Activity Factor):** 0.15 (average switching activity)
@@ -1152,15 +1158,17 @@ P_dynamic = α × C_load × V² × f
 - **f (Frequency):** 100MHz
 
 **Static Power Model:**
+[latexmath]
 ++++
-P_static = I_leakage × V
+P_{static} = I_{leakage} × V
 ++++
 
-- **I_leakage (Leakage Current):** 100nA (typical)
+- **I_leakage (Leakage Current):** 100 nA (typical)
 
 **Total Power Consumption:**
+[latexmath]
 ++++
-P_total = P_dynamic + P_static
+P_{total} = P_{dynamic} + P_static
 ++++
 
 ==== Noise Margin Analysis
@@ -1331,8 +1339,8 @@ Rbuf mid out 50
 
 |0V → 5V (aggressor) |Static 2.5V |±0.15V |30% margin used
 |5V → 0V (aggressor) |Static 2.5V |±0.15V |30% margin used
-|2.5V → 5V |Static 0V |±0.08V |16% margin used
-|0V → 2.5V |Static 5V |±0.12V |24% margin used
+|2.5V → 5V |Static 0 V |±0.08V |16% margin used
+|0V → 2.5V |Static 5 V |±0.12V |24% margin used
 |===
 
 **Power Supply Noise Analysis:**
@@ -1420,7 +1428,7 @@ Rbuf mid out 50
 
 1. **Power Distribution:**
    - Dedicated power planes for each voltage level
-   - Decoupling capacitors: 100nF every 2mm
+   - Decoupling capacitors: 100 nF every 2 mm
    - Low-inductance power delivery network
    - Separate analog and digital grounds
 
@@ -1464,7 +1472,7 @@ Rbuf mid out 50
 
 **Design Robustness Summary:**
 
-- **Minimum Noise Margin:** 0.28V (56% of ideal)
+- **Minimum Noise Margin:** 0.28 V (56% of ideal)
 - **Yield Prediction:** >99.5% across all PVT corners
 - **Reliability:** >15 years MTBF under worst-case conditions
 - **EMC Compliance:** Passes Class B requirements with >10dB margin

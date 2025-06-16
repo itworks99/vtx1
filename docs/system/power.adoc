@@ -15,6 +15,7 @@
 |===
 
 **Voltage Selection:**
+
 - **3.3V Operation:** Lower power consumption, compatible with modern I/O standards
 - **5.0V Operation:** Maximum performance, optimal ternary logic margins
 - **Level Translation:** Automatic internal level shifting for 3.3V operation
@@ -35,6 +36,7 @@
 |===
 
 **Power State Transitions:**
+
 - Active to Sleep: 12 cycles (120ns @ 100MHz)
 - Sleep to Active: 8 cycles (80ns @ 100MHz)  
 - Active to Deep Sleep: 16 cycles (160ns @ 100MHz)
@@ -72,6 +74,7 @@
 ==== Brown-out Protection and Voltage Monitoring
 
 **3.3V Brown-out Thresholds:**
+
 - Brown-out threshold: 3.0V
 - Power-off threshold: 2.7V
 - Hysteresis: 0.2V
@@ -79,6 +82,7 @@
 - Recovery time: 8 cycles
 
 **5.0V Brown-out Thresholds:**
+
 - Brown-out threshold: 4.2V  
 - Power-off threshold: 3.0V
 - Hysteresis: 0.3V
@@ -86,6 +90,7 @@
 - Recovery time: 8 cycles
 
 **Voltage Monitoring:**
+
 - Automatic voltage detection on power-up
 - Real-time supply monitoring during operation
 - Voltage change notification to software
@@ -94,6 +99,7 @@
 === Power Management System
 
 1. **Power Sequencing**
+
    - Power-Up Sequence
      - VCC rise time (t_rise): 100μs maximum
      - Voltage detection and configuration: 2 cycles
@@ -403,17 +409,20 @@ flowchart TB
 ==== Grid Topology
 
 **Hierarchical Power Grid:**
+
 - **Level 1 (Primary):** 50μm wide copper traces, 5V backbone distribution
 - **Level 2 (Secondary):** 20μm wide copper traces, domain-specific distribution  
 - **Level 3 (Local):** 10μm wide copper traces, functional block supply
 - **Via Arrays:** High-density via connections between metal layers
 
 **Grid Spacing:**
+
 - Primary grid: 500μm pitch across entire die
 - Secondary grid: 100μm pitch within power domains
 - Local grid: 20μm pitch for fine-grain supply
 
 **Metal Layer Assignment:**
+
 - **Metal 6 (Top):** Primary 5V distribution, bond pad connections
 - **Metal 5:** Secondary domain distribution, power switching
 - **Metal 4:** Local power distribution, power gating switches
@@ -424,11 +433,13 @@ flowchart TB
 ==== IR Drop Analysis
 
 **Design Targets:**
+
 - Maximum IR drop: <100mV (2% of 5V supply)
 - RMS IR drop: <50mV across typical operating conditions
 - Dynamic IR drop: <150mV during worst-case switching
 
 **Analysis Results:**
+
 - **Core Domain:** 78mV worst-case, 35mV typical
 - **Memory Domain:** 65mV worst-case, 28mV typical  
 - **I/O Domain:** 45mV worst-case, 20mV typical
@@ -436,6 +447,7 @@ flowchart TB
 - **Debug Domain:** 30mV worst-case, 15mV typical
 
 **Grid Resistance Analysis:**
+
 - Primary grid resistance: <1mΩ between any two points
 - Secondary grid resistance: <5mΩ within power domains
 - Local grid resistance: <20mΩ for functional blocks
@@ -444,6 +456,7 @@ flowchart TB
 ==== Power Switching and Gating
 
 **Header Switches (PMOS):**
+
 - Used for VDD power gating in sleep modes
 - Switch resistance: <100Ω when ON  
 - Leakage current: <1nA per switch when OFF
@@ -451,6 +464,7 @@ flowchart TB
 - Control: Dedicated power management unit
 
 **Footer Switches (NMOS):**
+
 - Used for ground path gating  
 - Switch resistance: <50Ω when ON
 - Leakage current: <0.5nA per switch when OFF
@@ -458,6 +472,7 @@ flowchart TB
 - Control: Synchronized with header switches
 
 **Power Gating Domains:**
+
 1. **TCU Execution Units:** Individual ALU, FPU, SIMD units
 2. **Cache Ways:** Per-way power gating in L1 cache
 3. **Peripheral Blocks:** Per-peripheral power control
@@ -467,6 +482,7 @@ flowchart TB
 ==== Power State Transitions
 
 **Active → Sleep Transition:**
+
 1. Save critical state to retention registers (2 cycles)
 2. Isolate outputs to prevent glitching (1 cycle)
 3. Assert power gate control signals (1 cycle)  
@@ -474,7 +490,8 @@ flowchart TB
 5. Switch off power gates (8 cycles settling)
 6. **Total transition time:** 13 cycles + 80ns
 
-**Sleep → Active Transition:**  
+**Sleep → Active Transition:**
+
 1. Assert power gate enable (1 cycle)
 2. Wait for power stabilization (8 cycles)
 3. Release output isolation (1 cycle)
@@ -483,6 +500,7 @@ flowchart TB
 6. **Total transition time:** 13 cycles + 80ns
 
 **Power Gating Efficiency:**
+
 - Leakage reduction: >99% in power-gated domains
 - Active power reduction: 0% (no dynamic power when gated)
 - Area overhead: <5% for power switching infrastructure
@@ -492,18 +510,21 @@ flowchart TB
 ==== EMI Reduction Techniques
 
 **Power Supply Filtering:**
+
 - LC filters on each power domain (L=1μH, C=10μF)
 - Common-mode chokes for external power connections
 - Ferrite beads on sensitive analog supplies
 - Ground plane isolation between digital and analog domains
 
 **Clock Distribution EMI:**
+
 - Spread spectrum clocking: ±0.5% frequency modulation
 - Clock edge rate control: <1V/ns rise/fall times
 - Differential signaling for high-speed clocks
 - Clock domain isolation and filtering
 
 **Package-Level EMI:**
+
 - Solid ground plane on package substrate
 - Via stitching between ground layers (every 100μm)
 - Guard rings around sensitive analog circuits
@@ -512,17 +533,20 @@ flowchart TB
 ==== EMC Compliance Targets
 
 **Conducted Emissions:**
+
 - CISPR 25 Class 5 compliance for automotive applications
 - FCC Part 15 Class B for consumer electronics
 - Frequency range: 150kHz - 30MHz
 - Measurement: 50Ω LISN, peak and average detection
 
 **Radiated Emissions:**
+
 - CISPR 25 Class 5: <40dBμV/m @ 3m (30MHz-1GHz)
 - FCC Part 15 Class B: <40dBμV/m @ 3m (30MHz-1GHz)
 - Measurement: Semi-anechoic chamber, calibrated antennas
 
 **Immunity Requirements:**
+
 - ESD immunity: ±8kV contact, ±15kV air discharge
 - EFT/burst immunity: ±4kV, 5/50ns pulses
 - Surge immunity: ±2kV line-to-line, ±4kV line-to-ground
@@ -532,12 +556,14 @@ flowchart TB
 ==== Thermal Design
 
 **Power Dissipation:**
+
 - Total chip power: 750mW maximum @ 5V, 100MHz
 - Power density: 30mW/mm² average, 75mW/mm² peak (TCU)
 - Junction temperature: 85°C maximum, 25°C typical ambient
 - Thermal resistance: 40°C/W junction-to-ambient (QFP-64)
 
 **Thermal Distribution:**
+
 - Core domain: 400mW (53% of total)
 - Memory domain: 200mW (27% of total)
 - I/O domain: 100mW (13% of total)
@@ -545,6 +571,7 @@ flowchart TB
 - Debug domain: 20mW (3% of total)
 
 **Cooling Requirements:**
+
 - Natural convection: Adequate for typical operation
 - Forced convection: Recommended for sustained high-performance operation
 - Heat sink: Optional, 20°C/W thermal resistance

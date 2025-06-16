@@ -3,6 +3,7 @@
 ==== Register Map 
 |===
 |Register |Name |Purpose |Width |Special Behavior| Usage
+
 |T0-T3 |GPRs |General Purpose Registers |Trit |-|Primary computation
 |T4-T6 |Extended GPRs |Extended working registers |Trit |-|Extended computation
 |TA |Accumulator |ALU/FPU Accumulator |Trit |Implicit in some ops|Accumulator operations
@@ -51,6 +52,7 @@ The VTX1 core implements a sophisticated 4-stage pipeline architecture optimized
 The Ternary Control Unit (TCU) interface has been significantly enhanced with sophisticated handshaking and error management:
 
 **State Machine Architecture (7 States):**
+
 1. **VTX1_TCU_IDLE**: Default state - ready for new instruction requests
 2. **VTX1_TCU_FETCH_REQ**: Instruction fetch request initiated
 3. **VTX1_TCU_FETCH_WAIT**: Waiting for memory/cache response
@@ -60,13 +62,16 @@ The Ternary Control Unit (TCU) interface has been significantly enhanced with so
 7. **VTX1_TCU_ERROR**: Error state with recovery mechanisms
 
 **Adaptive Timeout Management:**
+
 - **Simple Operations**: 4-cycle timeout for register-to-register operations
 - **Memory Operations**: 16-cycle timeout for cache hits, 64-cycle for memory access
 - **Complex Operations**: 128-cycle timeout for microcode-assisted operations
 - **Microcode Execution**: 256-cycle timeout for complex microcode sequences
 
 **Enhanced Handshaking Protocol:**
-```verilog
+
+[source,verilog]
+----
 // TCU Enhanced Interface Signals
 input wire tcu_request;              // TCU operation request
 input wire [31:0] tcu_instruction;   // 32-bit instruction word
@@ -76,17 +81,19 @@ output wire tcu_valid;               // Operation result valid
 output wire [31:0] tcu_result;       // Operation result data
 output wire tcu_error;               // Error condition flag
 output wire [3:0] tcu_error_code;    // Standardized error classification
-```
+----
 
 ==== Microcode Integration System
 
 **Microcode ROM Implementation:**
+
 - **Capacity**: 1024 × 32-bit microcode storage (4KB total)
 - **Operations**: 26 complex operations with microcode assistance
 - **Sequencer**: Enhanced microcode sequencer with adaptive timeout management
 - **Integration**: Seamless handoff between pipeline and microcode execution
 
 **Microcode Operations (Examples):**
+
 - **Division Operations**: 32-cycle microcode sequence for integer division
 - **Multiplication**: Optimized ternary multiplication with partial products
 - **Floating-Point**: IEEE 754 compatible operations in ternary domain
@@ -94,6 +101,7 @@ output wire [3:0] tcu_error_code;    // Standardized error classification
 - **System Operations**: Context switching, exception handling, cache management
 
 **Microcode Performance Characteristics:**
+
 - **Latency**: 8-256 cycles depending on operation complexity
 - **Throughput**: Pipeline continues with independent operations
 - **Error Handling**: Integrated with VTX1 error framework
@@ -353,15 +361,18 @@ The VTX1 implements a streamlined ternary ISA optimized for balanced ternary ope
 ==== ISA Characteristics
 
 **Instruction Count:** 78 total instructions
+
 - 52 Native hardware instructions (1-3 cycles)
 - 26 Microcode instructions (4-16 cycles)
 
-**Instruction Format:** 
+**Instruction Format:**
+
 - VLIW 96-bit instruction word (3×32-bit operations)
 - Ternary-optimized encoding
 - Support for parallel execution
 
 **Register Set:** (See Register Organization for complete specifications)
+
 - 7 General purpose registers (T0-T6)
 - 2 Special registers (TA accumulator, TB base pointer)
 - 3 Control registers (TC, TS, TI)
@@ -369,6 +380,7 @@ The VTX1 implements a streamlined ternary ISA optimized for balanced ternary ope
 - 3 FPU registers (FA, FT, FB)
 
 **Addressing Modes:**
+
 - Register direct
 - Immediate (11-bit)
 - Base + offset (TB relative)
@@ -543,6 +555,7 @@ HALT             - System halt
 The streamlined ISA removes exotic operations that provided limited benefit while maintaining comprehensive functionality:
 
 **Removed Operations:**
+
 - Complex matrix operations (rarely used in embedded applications)
 - Advanced permutation operations (can be composed from simpler ops)
 - Hardware DMA control (moved to memory-mapped interface)
@@ -550,6 +563,7 @@ The streamlined ISA removes exotic operations that provided limited benefit whil
 - Complex bit manipulation (can be composed from basic operations)
 
 **Benefits:**
+
 - Reduced hardware complexity (~30% gate count reduction)
 - Clearer performance characteristics
 - Simplified compiler implementation
@@ -626,6 +640,7 @@ The VTX1 ISA is designed to support a wide range of operations using a Very Long
 For complete register specifications, see Register Organization section above.
 
 **Register Categories:**
+
    - General Purpose: T0-T6 (7 registers)
    - Special Purpose: TA (Accumulator), TB (Base Pointer)  
    - Control: TC (PC), TS (Status), TI (Instruction)
@@ -823,87 +838,88 @@ This section consolidates all ternary logic implementation details referenced th
 ==== Implementation Specifications
 
 **Authoritative References:**
+
 - **Ternary Logic Encoding:** See Ternary Logic Encoding for complete voltage level and encoding specifications
 - **Power Specifications:** See Power Consumption Specifications for complete dual-voltage power requirements
 
 **Physical Implementation:**
-- **Supply Voltage:** 5.0V nominal (4.5V to 5.5V range)
+
+- **Supply Voltage:** 5.0 V nominal (4.5 V to 5.5 V range)
 - **Level Conversion:** 5V-tolerant CMOS level shifters for compatibility
 - **Input Protection:** 5V-tolerant I/O cells with comprehensive protection
-- **ESD Protection:** 2kV HBM (Human Body Model), 200V MM (Machine Model)
+- **ESD Protection:** 2 kV HBM (Human Body Model), 200 V MM (Machine Model)
 - **Noise Margins:** ±0.5V around each logic level
-- **Power Consumption:** 0.15nJ per ternary operation
+- **Power Consumption:** 0.15 nJ per ternary operation
 
 ==== Ternary Arithmetic Operations
 
 **1. Balanced Ternary Addition**
 
-```
-Truth Table (with Carry):
-+---+---+---+--------+-------+
-| A | B |Cin| Sum    | Cout  |
-+---+---+---+--------+-------+
-|-1 |-1 |-1 |  +1    |  -1   |
-|-1 |-1 | 0 |   0    |  -1   |
-|-1 |-1 |+1 |  -1    |  -1   |
-|-1 | 0 |-1 |   0    |  -1   |
-|-1 | 0 | 0 |  -1    |   0   |
-|-1 | 0 |+1 |   0    |   0   |
-|-1 |+1 |-1 |  -1    |   0   |
-|-1 |+1 | 0 |   0    |   0   |
-|-1 |+1 |+1 |  +1    |   0   |
-| 0 |-1 |-1 |   0    |  -1   |
-| 0 |-1 | 0 |  -1    |   0   |
-| 0 |-1 |+1 |   0    |   0   |
-| 0 | 0 |-1 |  -1    |   0   |
-| 0 | 0 | 0 |   0    |   0   |
-| 0 | 0 |+1 |  +1    |   0   |
-| 0 |+1 |-1 |   0    |   0   |
-| 0 |+1 | 0 |  +1    |   0   |
-| 0 |+1 |+1 |   0    |  +1   |
-|+1 |-1 |-1 |  -1    |   0   |
-|+1 |-1 | 0 |   0    |   0   |
-|+1 |-1 |+1 |  +1    |   0   |
-|+1 | 0 |-1 |   0    |   0   |
-|+1 | 0 | 0 |  +1    |   0   |
-|+1 | 0 |+1 |   0    |  +1   |
-|+1 |+1 |-1 |  +1    |   0   |
-|+1 |+1 | 0 |   0    |  +1   |
-|+1 |+1 |+1 |  -1    |  +1   |
-+---+---+---+--------+-------+
-```
+Truth table with carry out for balanced ternary addition:
+[cols="1,1,1,1,1", options="header"]
+|===
+| A | B | Cin | Sum | Cout
+
+| -1 | -1 | -1 | +1  | -1
+| -1 | -1 |  0 |  0  | -1
+| -1 | -1 | +1 | -1  | -1
+| -1 |  0 | -1 |  0  | -1
+| -1 |  0 |  0 | -1  |  0
+| -1 |  0 | +1 |  0  |  0
+| -1 | +1 | -1 | -1  |  0
+| -1 | +1 |  0 |  0  |  0
+| -1 | +1 | +1 | +1  |  0
+|  0 | -1 | -1 |  0  | -1
+|  0 | -1 |  0 | -1  |  0
+|  0 | -1 | +1 |  0  |  0
+|  0 |  0 | -1 | -1  |  0
+|  0 |  0 |  0 |  0  |  0
+|  0 |  0 | +1 | +1  |  0
+|  0 | +1 | -1 |  0  |  0
+|  0 | +1 |  0 | +1  |  0
+|  0 | +1 | +1 |  0  | +1
+| +1 | -1 | -1 | -1  |  0
+| +1 | -1 |  0 |  0  |  0
+| +1 | -1 | +1 | +1  |  0
+| +1 |  0 | -1 |  0  |  0
+| +1 |  0 |  0 | +1  |  0
+| +1 |  0 | +1 |  0  | +1
+| +1 | +1 | -1 | +1  |  0
+| +1 | +1 |  0 |  0  | +1
+| +1 | +1 | +1 | -1  | +1
+|===
 
 **2. Balanced Ternary Multiplication**
+Truth table for balanced ternary multiplication:
+[cols="1,1,1", options="header"]
+|===
+| A | B | Product
 
-```
-Truth Table:
-+---+---+--------+
-| A | B | Product|
-+---+---+--------+
-|-1 |-1 |   +1   |
-|-1 | 0 |    0   |
-|-1 |+1 |   -1   |
-| 0 |-1 |    0   |
-| 0 | 0 |    0   |
-| 0 |+1 |    0   |
-|+1 |-1 |   -1   |
-|+1 | 0 |    0   |
-|+1 |+1 |   +1   |
-+---+---+--------+
-```
+| -1 | -1 | +1
+| -1 |  0 |  0
+| -1 | +1 | -1
+|  0 | -1 |  0
+|  0 |  0 |  0
+|  0 | +1 |  0
+| +1 | -1 | -1
+| +1 |  0 |  0
+| +1 | +1 | +1
+|===
 
 ==== Analog Interface Implementation
 
 **Ternary to Analog Conversion:**
+
 - **Voltage Levels:** Reference Ternary Logic Encoding for authoritative specifications
-- **Current Levels:** 0mA (TRIT_ZERO), 2mA (TRIT_NEG), 4mA (TRIT_POS)
+- **Current Levels:** 0 mA (TRIT_ZERO), 2 mA (TRIT_NEG), 4 mA (TRIT_POS)
 - **Conversion Timing:** 15ns maximum propagation delay
 - **Accuracy:** ±1% across all PVT corners
-- **Output Drive:** 4mA minimum drive strength
+- **Output Drive:** 4 mA minimum drive strength
 
 **Analog to Ternary Conversion:**
-- **Threshold Detection:** 1.25V (NEG/ZERO), 3.75V (ZERO/POS)
-- **Hysteresis:** 0.2V for noise immunity
+
+- **Threshold Detection:** 1.25 V (NEG/ZERO), 3.75 V (ZERO/POS)
+- **Hysteresis:** 0.2 V for noise immunity
 - **Sampling Rate:** 100MHz maximum
 - **Input Filtering:** 2nd order active filter for noise rejection
 - **Input Protection:** 5V-tolerant with integrated ESD protection
@@ -925,6 +941,7 @@ reg vtx1_error_valid;               // Error condition validity flag
 ----
 
 **Error Classification for TCU Operations:**
+
 - **VTX1_ERROR_TIMEOUT**: Operation exceeded adaptive timeout threshold
 - **VTX1_ERROR_INVALID_ADDR**: Invalid operand or addressing mode
 - **VTX1_ERROR_PROTOCOL**: Handshaking protocol violation
@@ -935,5 +952,3 @@ reg vtx1_error_valid;               // Error condition validity flag
 ==== VLIW Integration and Pipeline Enhancement
 
 **Enhanced Pipeline Integration:**
-
-

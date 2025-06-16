@@ -56,11 +56,13 @@ All system components implement standardized interfaces for consistent system in
 |===
 
 **Interface Signal Standards:**
-```verilog
+
+[source,verilog]
+----
 // VTX1 Standard Memory Interface
 interface vtx1_memory_if;
     logic                         req;        // Request active
-    logic                         wr;         // Write enable  
+    logic                         wr;         // Write enable
     logic [1:0]                   size;       // Transfer size
     logic [`VTX1_ADDR_WIDTH-1:0] addr;       // 36-bit ternary address
     logic [`VTX1_WORD_WIDTH-1:0] wdata;      // 36-bit ternary write data
@@ -71,7 +73,7 @@ interface vtx1_memory_if;
     logic                         timeout;    // Operation timeout
     logic                         error_clear;// Clear error state
 endinterface
-```
+----
 
 ==== Advanced System Coordination
 
@@ -80,16 +82,19 @@ endinterface
 The enhanced bus matrix provides sophisticated system coordination:
 
 **Multi-Master Coordination:**
+
 - **CPU Core**: Primary system master with pipeline integration
 - **DMA Controller**: 8-channel high-speed data movement with peripheral integration
 - **Debug Master**: Non-intrusive system access with comprehensive visibility
 
 **Multi-Slave Management:**
+
 - **Memory Controller**: DDR interface with ECC and performance optimization
 - **MMIO Router**: Unified peripheral addressing with error aggregation
 - **Cache Controller**: MESI protocol implementation with performance monitoring
 
 **Advanced Arbitration Features:**
+
 - **Configurable Modes**: Round-robin, priority-based, weighted arbitration
 - **Deadlock Detection**: Hardware deadlock detection with automatic recovery
 - **Performance Monitoring**: Real-time bus utilization and latency tracking

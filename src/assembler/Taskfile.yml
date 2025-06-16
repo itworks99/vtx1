@@ -1,0 +1,44 @@
+# Taskfile for VTX1 assembler implementation - part of VTX1 project
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  PROJECT_NAME: "VTX assembler"
+  DOCS_DIR: docs
+  MAIN_ASM_FILE: cmd/vtxasm/main.go
+  RELEASE_DIR: ../../release
+
+set:
+    - pipefail
+
+tasks:
+    default:
+        cmds:
+        - echo ""
+        - echo "{{.PROJECT_NAME}} Build System"
+        - echo ""
+        - echo "Available tasks:"
+        - echo "Task Name              Description"
+        - echo "---------------------- -------------------------------------------------"
+        - echo "build                  Build the assembler"
+        - echo "install                Install dependencies"
+        - echo "parse                  Parse the assembler source files"
+        - echo "clean                  Clean build artifacts"
+        silent: true
+
+    build:
+        desc: Build the assembler
+        cmds:
+        - echo "Building {{.PROJECT_NAME}}..."
+        - go build -o vtxasm.exe {{.MAIN_ASM_FILE}}
+        - echo "{{.PROJECT_NAME}} build completed successfully."
+        silent: true
+
+    install:
+        desc: Install dependencies
+        cmds:
+        - echo "Installing dependencies for {{.PROJECT_NAME}}..."
+        - go mod download
+        - echo "Dependencies installed successfully."
+        silent: true

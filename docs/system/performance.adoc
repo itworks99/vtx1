@@ -17,6 +17,7 @@ The VTX1 provides extensive performance monitoring capabilities:
 |===
 
 **Real-Time Monitoring:**
+
 - **Hardware Counters**: 32-bit performance counters with overflow protection
 - **Sampling Windows**: Configurable measurement periods for trend analysis
 - **Threshold Alerts**: Configurable performance threshold monitoring

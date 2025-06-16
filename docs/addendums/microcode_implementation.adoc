@@ -12,53 +12,57 @@ The VTX1 now uses a two-level encoding scheme:
 
 === Microcode Instruction Mapping
 
-----
-Instruction  | Type | Opcode | ROM Entry | Description
--------------|------|--------|-----------|-------------
-DIV          | 110  | 000000 | 0x000     | Signed division
-MOD          | 110  | 000001 | 0x018     | Signed modulo  
-UDIV         | 110  | 000010 | 0x030     | Unsigned division
-UMOD         | 110  | 000011 | 0x048     | Unsigned modulo
-SQRT         | 110  | 000100 | 0x060     | Square root
-ABS          | 110  | 000101 | 0x078     | Absolute value
-SIN          | 110  | 001000 | 0x100     | Sine function
-COS          | 110  | 001001 | 0x120     | Cosine function
-TAN          | 110  | 001010 | 0x140     | Tangent function
-ASIN         | 110  | 001011 | 0x160     | Arcsine function
-ACOS         | 110  | 001100 | 0x180     | Arccosine function
-ATAN         | 110  | 001101 | 0x1A0     | Arctangent function
-EXP          | 110  | 001110 | 0x1C0     | Exponential function
-LOG          | 110  | 001111 | 0x1E0     | Natural logarithm
-VDOT         | 110  | 010000 | 0x200     | Vector dot product
-VREDUCE      | 110  | 010001 | 0x210     | Vector reduction
-VMAX         | 110  | 010010 | 0x220     | Vector maximum
-VMIN         | 110  | 010011 | 0x230     | Vector minimum
-VSUM         | 110  | 010100 | 0x240     | Vector sum
-VPERM        | 110  | 010101 | 0x250     | Vector permutation
-CACHE        | 110  | 011000 | 0x300     | Cache control
-FLUSH        | 110  | 011001 | 0x310     | Cache flush
-MEMBAR       | 110  | 011010 | 0x320     | Memory barrier
-SYSCALL      | 110  | 100000 | 0x380     | System call
-BREAK        | 110  | 100001 | 0x390     | Debug breakpoint
-HALT         | 110  | 100010 | 0x3A0     | System halt
-----
+[cols="1,1,1,1,2",options="header"]
+|===
+|Instruction |Type |Opcode |ROM Entry |Description
+
+|DIV      |110 |000000 |0x000  |Signed division
+|MOD      |110 |000001 |0x018  |Signed modulo
+|UDIV     |110 |000010 |0x030  |Unsigned division
+|UMOD     |110 |000011 |0x048  |Unsigned modulo
+|SQRT     |110 |000100 |0x060  |Square root
+|ABS      |110 |000101 |0x078  |Absolute value
+|SIN      |110 |001000 |0x100  |Sine function
+|COS      |110 |001001 |0x120  |Cosine function
+|TAN      |110 |001010 |0x140  |Tangent function
+|ASIN     |110 |001011 |0x160  |Arcsine function
+|ACOS     |110 |001100 |0x180  |Arccosine function
+|ATAN     |110 |001101 |0x1A0  |Arctangent function
+|EXP      |110 |001110 |0x1C0  |Exponential function
+|LOG      |110 |001111 |0x1E0  |Natural logarithm
+|VDOT     |110 |010000 |0x200  |Vector dot product
+|VREDUCE  |110 |010001 |0x210  |Vector reduction
+|VMAX     |110 |010010 |0x220  |Vector maximum
+|VMIN     |110 |010011 |0x230  |Vector minimum
+|VSUM     |110 |010100 |0x240  |Vector sum
+|VPERM    |110 |010101 |0x250  |Vector permutation
+|CACHE    |110 |011000 |0x300  |Cache control
+|FLUSH    |110 |011001 |0x310  |Cache flush
+|MEMBAR   |110 |011010 |0x320  |Memory barrier
+|SYSCALL  |110 |100000 |0x380  |System call
+|BREAK    |110 |100001 |0x390  |Debug breakpoint
+|HALT     |110 |100010 |0x3A0  |System halt
+|===
 
 === ROM Layout
 
-----
-Address Range    | Operation Category           | Instructions
-0x000 - 0x0FF   | Complex Arithmetic          | DIV, MOD, UDIV, UMOD, SQRT, ABS
-0x100 - 0x1FF   | Transcendental Functions    | SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG
-0x200 - 0x2FF   | Advanced Vector Operations  | VDOT, VREDUCE, VMAX, VMIN, VSUM, VPERM
-0x300 - 0x37F   | Memory Management           | CACHE, FLUSH, MEMBAR
-0x380 - 0x3EF   | System Control              | SYSCALL, BREAK, HALT
-0x3F0 - 0x3FF   | Error Handlers              | Exception and error handling
-----
+[cols="1,2,2",options="header"]
+|===
+|Address Range |Operation Category |Instructions
+
+|0x000 - 0x0FF   |Complex Arithmetic          |DIV, MOD, UDIV, UMOD, SQRT, ABS
+|0x100 - 0x1FF   |Transcendental Functions    |SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG
+|0x200 - 0x2FF   |Advanced Vector Operations  |VDOT, VREDUCE, VMAX, VMIN, VSUM, VPERM
+|0x300 - 0x37F   |Memory Management           |CACHE, FLUSH, MEMBAR
+|0x380 - 0x3EF   |System Control              |SYSCALL, BREAK, HALT
+|0x3F0 - 0x3FF   |Error Handlers              |Exception and error handling
+|===
 
 === Complete Microcode Listing
 ==== Complex Arithmetic Operations (0x000-0x0FF)
 ===== Signed Division (DIV) - Entry: 0x000
 
+[source,assembly]
 ----
 // DIV Rs1, Rs2 -> Rd = Rs1 / Rs2 (signed 32-bit division)
 // Uses non-restoring division algorithm
@@ -90,7 +94,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Signed Modulo (MOD) - Entry: 0x018
-
+[source,assembly]
 ----
 // MOD Rs1, Rs2 -> Rd = Rs1 % Rs2 (signed 32-bit modulo)
 // Reuses division algorithm, returns remainder
@@ -122,7 +126,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Square Root (SQRT) - Entry: 0x030
-
+[source,assembly]
 ----
 // SQRT Rs1 -> Rd = sqrt(Rs1) (integer square root)
 // Uses binary search algorithm optimized for ternary
@@ -153,7 +157,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Absolute Value (ABS) - Entry: 0x048
-
+[source,assembly]
 ----
 // ABS Rs1 -> Rd = |Rs1| (absolute value with overflow check)
 
@@ -166,7 +170,7 @@ Address Range    | Operation Category           | Instructions
 
 ==== Transcendental Functions (0x100-0x1FF)
 ===== Sine Function (SIN) - Entry: 0x100
-
+[source,assembly]
 ----
 // SIN Fs1 -> Fd = sin(Fs1) using CORDIC algorithm
 // Input in radians, output normalized
@@ -206,7 +210,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Cosine Function (COS) - Entry: 0x120
-
+[source,assembly]
 ----
 // COS Fs1 -> Fd = cos(Fs1) using CORDIC algorithm
 // Similar to SIN but returns X component
@@ -218,7 +222,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Exponential Function (EXP) - Entry: 0x140
-
+[source,assembly]
 ----
 // EXP Fs1 -> Fd = e^Fs1 using Taylor series with range reduction
 
@@ -242,7 +246,7 @@ Address Range    | Operation Category           | Instructions
 
 ==== Advanced Vector Operations (0x200-0x2FF)
 ===== Vector Dot Product (VDOT) - Entry: 0x200
-
+[source,assembly]
 ----
 // VDOT Vs1, Vs2 -> Rd = Vs1 · Vs2 (3-element dot product)
 
@@ -258,7 +262,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Vector Reduction (VREDUCE) - Entry: 0x210
-
+[source,assembly]
 ----
 // VREDUCE Vs1, op -> Rd = reduce(Vs1, op)
 // op: 0=sum, 1=max, 2=min, 3=product
@@ -295,7 +299,7 @@ Address Range    | Operation Category           | Instructions
 
 ==== Memory Management Operations (0x300-0x37F)
 ===== Cache Control (CACHE) - Entry: 0x300
-
+[source,assembly]
 ----
 // CACHE Rs1, op -> Cache operation at address Rs1
 // op: 0=flush, 1=invalidate, 2=prefetch, 3=writeback
@@ -328,7 +332,7 @@ Address Range    | Operation Category           | Instructions
 
 ==== System Control Operations (0x380-0x3EF)
 ===== System Call (SYSCALL) - Entry: 0x380
-
+[source,assembly]
 ----
 // SYSCALL -> Invoke system call with full context save
 
@@ -342,7 +346,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Debug Breakpoint (BREAK) - Entry: 0x390
-
+[source,assembly]
 ----
 // BREAK -> Debug breakpoint with state preservation
 
@@ -353,7 +357,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== System Halt (HALT) - Entry: 0x3A0
-
+[source,assembly]
 ----
 // HALT -> System halt with power management
 
@@ -364,7 +368,7 @@ Address Range    | Operation Category           | Instructions
 
 ==== Error Handlers (0x3F0-0x3FF)
 ===== Division by Zero Handler - Entry: 0x3F0
-
+[source,assembly]
 ----
 0x3F0:  100_100_000_000  000000_000_000  000003F1  // Set divide-by-zero exception flag
 0x3F1:  100_101_000_000  000011_000_000  000003F2  // Set error code = 3
@@ -373,7 +377,7 @@ Address Range    | Operation Category           | Instructions
 ----
 
 ===== Floating-Point Error Handler - Entry: 0x3F8
-
+[source,assembly]
 ----
 0x3F8:  100_111_000_000  000000_000_000  000003F9  // Set FP exception flag
 0x3F9:  101_000_000_000  000101_000_000  000003FA  // Set error code = 5
@@ -383,7 +387,7 @@ Address Range    | Operation Category           | Instructions
 
 === Microcode Constants and Lookup Tables
 ==== CORDIC Constants (Used by trigonometric functions)
-
+[source,assembly]
 ----
 // CORDIC arctangent lookup table (16 entries)
 // atan(2^(-i)) values in fixed-point format
@@ -393,11 +397,22 @@ CORDIC_ATAN_TABLE:
 0x12E4051E,  // atan(2^-1) = 0.46364761
 0x09FB385B,  // atan(2^-2) = 0.24497866
 0x051111D4,  // atan(2^-3) = 0.12435499
-// ... (12 more entries)
+0x028B0D43,  // atan(2^-4) = 0.06241881
+0x0145D7E1,  // atan(2^-5) = 0.03123983
+0x00A2F61E,  // atan(2^-6) = 0.01562373
+0x00517C55,  // atan(2^-7) = 0.00781234
+0x0028BE53,  // atan(2^-8) = 0.00390623
+0x00145F2E,  // atan(2^-9) = 0.00195312
+0x000A2F98,  // atan(2^-10) = 0.00097656
+0x000517CC,  // atan(2^-11) = 0.00048828
+0x00028BE6,  // atan(2^-12) = 0.00024414
+0x000145F3,  // atan(2^-13) = 0.00012207
+0x0000A2F9,  // atan(2^-14) = 0.00006104
+0x0000517C,  // atan(2^-15) = 0.00003052
 ----
 
 ==== Exponential Constants (Used by EXP function)
-
+[source,assembly]
 ----
 // Natural logarithm and exponential constants
 LN2_FIXED:     0x2C5C85FE   // ln(2) in fixed-point

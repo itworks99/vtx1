@@ -7,6 +7,7 @@ The VTX1 system implements sophisticated peripheral controllers with advanced fe
 ==== Enhanced GPIO Controller
 
 **Implementation Features:**
+
 - **24-Pin Configuration**: Comprehensive I/O capability with flexible pin assignment
 - **Interrupt Support**: Individual pin interrupt generation with edge/level detection
 - **DMA Integration**: Direct memory access for high-speed I/O operations
@@ -44,6 +45,7 @@ The VTX1 system implements sophisticated peripheral controllers with advanced fe
 |===
 
 **DMA Integration:**
+
 ```verilog
 // GPIO DMA Interface
 output wire gpio_dma_req;           // DMA request signal
@@ -90,6 +92,7 @@ output wire [4:0] gpio_dma_pin;     // Pin number for DMA operation
 |===
 
 **DMA Integration Example:**
+
 ```verilog
 // UART DMA Interface
 output wire uart_tx_dma_req;        // TX DMA request
@@ -103,6 +106,7 @@ output wire [7:0] uart_rx_dma_data; // RX DMA data
 ==== Enhanced SPI Controller
 
 **SPI Master/Slave Implementation:**
+
 - **Dual Mode Operation**: Configurable master or slave mode operation
 - **8 Chip Select Lines**: Support for up to 8 SPI slave devices
 - **DMA Support**: High-speed data transfer with DMA integration
@@ -139,6 +143,7 @@ output wire [7:0] uart_rx_dma_data; // RX DMA data
 ==== Enhanced I2C Controller
 
 **I2C Multi-Master Implementation:**
+
 - **Multi-Master Capability**: Full multi-master bus arbitration support
 - **Clock Stretching**: Slave clock stretching with timeout protection
 - **DMA Interface**: High-speed I2C transfers with DMA integration
@@ -198,6 +203,7 @@ The DMA controller provides sophisticated peripheral integration with the follow
 |===
 
 **DMA Performance Characteristics:**
+
 - **Throughput**: Up to 100MB/s per channel with bus matrix optimization
 - **Latency**: 2-cycle request-to-transfer latency for critical operations
 - **Burst Size**: Configurable 1-256 byte bursts with automatic address increment
@@ -228,6 +234,7 @@ All enhanced peripheral controllers implement the VTX1 standardized error handli
 |===
 
 **Automatic Recovery Mechanisms:**
+
 - **Timeout Recovery**: Configurable timeout thresholds with automatic operation restart
 - **FIFO Management**: Automatic overflow/underflow handling with flow control
 - **Protocol Recovery**: State machine reset and protocol re-initialization

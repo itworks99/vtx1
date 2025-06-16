@@ -8,6 +8,7 @@ The VTX1 debug system implements a sophisticated debugging and monitoring archit
 ==== Enhanced JTAG Debug Interface
 
 **Debug Master Integration:**
+
 - **Bus Matrix Integration**: Dedicated debug master with 36-bit ternary interface
 - **25MHz Operation**: Independent debug clock domain for system debugging
 - **Non-Intrusive Access**: Debug operations do not interfere with normal system operation
@@ -46,19 +47,23 @@ The VTX1 debug system implements a sophisticated debugging and monitoring archit
 ==== Advanced Breakpoint and Watchpoint System
 
 **Hardware Breakpoint Implementation:**
+
 - **8 Hardware Breakpoints**: Configurable instruction breakpoints with conditions
 - **Address Range Support**: Breakpoints can cover address ranges for complex debugging
 - **Conditional Breakpoints**: Support for register value and flag-based conditions
 - **Execution Modes**: Breakpoints active in user, supervisor, or both modes
 
 **Watchpoint Capabilities:**
+
 - **4 Hardware Watchpoints**: Data access monitoring with read/write/both detection
 - **Data Value Matching**: Watchpoints can trigger on specific data values
 - **Address Range Monitoring**: Watchpoint coverage of memory regions
 - **Access Size Filtering**: Byte, word, or long word access detection
 
 **Breakpoint/Watchpoint Configuration:**
-```verilog
+
+[source,verilog]
+----
 // Breakpoint Control Register Format
 typedef struct {
     logic        enable;      // Breakpoint enable
@@ -67,11 +72,12 @@ typedef struct {
     logic [3:0]  condition;   // Conditional breakpoint flags
     logic [7:0]  count;       // Breakpoint hit count threshold
 } bp_ctrl_t;
-```
+----
 
 ==== Comprehensive Trace System
 
 **Embedded Trace Buffer:**
+
 - **Buffer Size**: 4KB trace buffer for real-time trace capture
 - **Trace Depth**: Up to 1024 trace entries with timestamp information
 - **Circular Buffer**: Continuous trace capture with configurable overwrite policy
@@ -90,6 +96,7 @@ typedef struct {
 |===
 
 **Trace Filter Configuration:**
+
 - **Address Filtering**: Trace capture for specific memory regions
 - **Instruction Filtering**: Trace specific instruction types or opcodes
 - **Data Filtering**: Trace specific data values or access patterns
@@ -116,6 +123,7 @@ The debug system implements 8 configurable performance counters for real-time sy
 |===
 
 **Performance Analysis Features:**
+
 - **Cycle-Accurate Timing**: Nanosecond resolution timing measurement
 - **Statistical Analysis**: Min/max/average calculations with standard deviation
 - **Trend Analysis**: Performance trend tracking over configurable time windows
@@ -140,6 +148,7 @@ The debug system provides comprehensive error detection across all system compon
 |===
 
 **Advanced Diagnostic Tools:**
+
 - **Error Injection**: Controllable error injection for system resilience testing
 - **Fault Isolation**: Automatic fault localization with component-level granularity
 - **Recovery Testing**: Automated recovery mechanism verification
@@ -148,12 +157,14 @@ The debug system provides comprehensive error detection across all system compon
 ==== Debug Integration with Bus Matrix
 
 **Debug Master Bus Interface:**
+
 - **Priority Level**: Lowest priority to minimize system impact during debugging
 - **Access Capabilities**: Full system access including memory, peripherals, and internal registers
 - **Transaction Types**: Read, write, burst transfers with debug-specific commands
 - **Error Handling**: Comprehensive error detection with debug-specific error codes
 
 **Non-Intrusive Debugging:**
+
 - **Shadow Registers**: Debug register access without affecting system state
 - **Atomic Operations**: Debug operations complete atomically to prevent system disruption
 - **Background Operation**: Debug operations execute in background without blocking system
@@ -204,6 +215,7 @@ The debug system provides comprehensive error detection across all system compon
 JTAG Configuration:
 
 JTAG Interface:
+
 - TCK: 25MHz max
 - TMS: Pull-up required
 - TDI: Pull-up required
@@ -211,6 +223,7 @@ JTAG Interface:
 - TRST: Optional
 
 Debug Tools:
+
 - GDB configuration
 - Trace setup
 - Performance profiling
@@ -218,7 +231,7 @@ Debug Tools:
 
 ==== Verification Methodology
 
-   Formal Verification:
+Formal Verification:
 
 - Property Checking
 - Safety properties

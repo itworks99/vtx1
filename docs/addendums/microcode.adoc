@@ -74,6 +74,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 12 cycles average +
 **Algorithm**: Non-restoring division
 
+[source,assembly]
 ----
 ; DIV Rs1, Rs2 -> Rd = Rs1 / Rs2
 ; Entry: Rs1 in T_SRC1, Rs2 in T_SRC2
@@ -104,6 +105,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 12 cycles average +
 **Algorithm**: Division with remainder extraction
 
+[source,assembly]
 ----
 ; MOD Rs1, Rs2 -> Rd = Rs1 % Rs2
 0x010: 101_000_001_010  000000_001_010  00000011  ; Load operands, check signs
@@ -121,6 +123,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 16 cycles average +
 **Algorithm**: Binary search / Newton-Raphson
 
+[source,assembly]
 ----
 ; SQRT Rs1 -> Rd = sqrt(Rs1)
 0x020: 101_000_001_010  000000_001_010  00000021  ; Load Rs1
@@ -145,6 +148,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 14 cycles average +
 **Algorithm**: CORDIC rotation mode
 
+[source,assembly]
 ----
 ; SIN Fs1 -> Fd = sin(Fs1)
 ; Input: Fs1 in radians, range checked to [-π, π]
@@ -173,6 +177,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 14 cycles average +
 **Algorithm**: CORDIC rotation mode (return X component)
 
+[source,assembly]
 ----
 ; COS Fs1 -> Fd = cos(Fs1)
 ; Similar to SIN but returns X component
@@ -188,6 +193,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 12 cycles average +
 **Algorithm**: Taylor series with range reduction
 
+[source,assembly]
 ----
 ; EXP Fs1 -> Fd = e^Fs1
 0x070: 001_000_001_010  000000_001_010  00000071  ; Load Fs1
@@ -214,6 +220,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 6 cycles average +
 **Algorithm**: Parallel multiply-accumulate
 
+[source,assembly]
 ----
 ; VDOT Vs1, Vs2 -> Rd = Vs1 · Vs2
 0x080: 010_000_001_010  000000_001_010  00000081  ; Load vector operands
@@ -231,6 +238,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 8 cycles average +
 **Algorithm**: Configurable reduction operation
 
+[source,assembly]
 ----
 ; VREDUCE Vs1, op -> Rd = reduce(Vs1, op)
 ; op: 0=sum, 1=max, 2=min, 3=product
@@ -256,6 +264,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: 6 cycles average +
 **Algorithm**: Cache line operations
 
+[source,assembly]
 ----
 ; CACHE Rs1, op -> Cache operation based on Rs1 address and op
 0x0A0: 011_000_001_010  000000_001_010  000000A1  ; Load address Rs1
@@ -278,6 +287,7 @@ The VTX1 microcode system implements 26 complex operations that would require si
 **Cycles**: Variable +
 **Algorithm**: System call dispatch
 
+[source,assembly]
 ----
 ; SYSCALL -> Software interrupt with context save
 0x0B0: 100_000_000_000  000000_000_000  000000B1  ; Save current context
@@ -302,6 +312,8 @@ The microcode sequencer operates in several modes:
 ==== Error Handling
 
 **Division by Zero (Entry: 0x3F0)**
+
+[source,assembly]
 ----
 0x3F0: 100_100_000_000  000000_000_000  000003F1  ; Set divide-by-zero flag
 0x3F1: 100_101_000_000  000000_000_000  000003F2  ; Trigger exception
@@ -309,6 +321,8 @@ The microcode sequencer operates in several modes:
 ----
 
 **Floating-Point Overflow (Entry: 0x3F8)**
+
+[source,assembly]
 ----
 0x3F8: 100_110_000_000  000000_000_000  000003F9  ; Set overflow flag
 0x3F9: 100_111_000_000  000000_000_000  000003FA  ; Trigger FP exception
