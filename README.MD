@@ -43,15 +43,15 @@ VTX1 leverages the computational advantages of balanced ternary logic (trits: -1
 
 ## Implementation
 
-This project is written with [Icarus Verilog](https://bleyer.org/icarus/) - a free compiler implementation for the IEEE-1364 Verilog hardware description language.
+This project is written with [Icarus Verilog—](https://bleyer.org/icarus/)a free compiler implementation for the IEEE-1364 Verilog hardware description language.
 
-It uses a [Taskfile](https://taskfile.dev/) build system that is been used for variety of project-related.
+It uses a [Taskfile](https://taskfile.dev/) build system used for a variety of project-related tasks.
 
 ## Documentation
 
 Comprehensive documentation is available in the `/docs` directory. The project documentation is written in asciidoc format with aim to generate documentation both in html and pdf formats:
 
-- [Architecture Specification](docs/ARCHITECTURE.adoc) - Detailed architecture description
+- [Architecture Specification](docs/Architecture.adoc) - Detailed architecture description
 - Complete [PDF version](release/vtx1-architecture.pdf) of the document
 
 ## Install

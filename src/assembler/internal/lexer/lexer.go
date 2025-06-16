@@ -80,6 +80,7 @@ const (
 	OP_FST
 	OP_LEA
 	OP_PUSH
+	OP_POP // Added missing POP opcode
 	OP_CACHE
 	OP_FLUSH
 	OP_MEMBAR
@@ -95,6 +96,8 @@ const (
 	OP_BGE
 	OP_BLTU
 	OP_BGEU
+	OP_BGT // Added missing opcode
+	OP_BLE // Added missing opcode
 	OP_CALL
 	OP_RET
 	OP_SYSCALL
@@ -527,6 +530,8 @@ func (l *Lexer) lookupIdent(ident string) TokenType {
 		return OP_LEA
 	case "PUSH":
 		return OP_PUSH
+	case "POP": // Added missing opcode mapping
+		return OP_POP
 	case "CACHE":
 		return OP_CACHE
 	case "FLUSH":
@@ -553,6 +558,10 @@ func (l *Lexer) lookupIdent(ident string) TokenType {
 		return OP_BLTU
 	case "BGEU":
 		return OP_BGEU
+	case "BGT": // Added missing opcode
+		return OP_BGT
+	case "BLE": // Added missing opcode
+		return OP_BLE
 	case "CALL":
 		return OP_CALL
 	case "RET":

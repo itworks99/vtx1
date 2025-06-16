@@ -5,7 +5,10 @@ package codegen
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/kvany/vtx1/assembler/internal/lexer"
 	"io"
+	"strconv"
+	"strings"
 
 	"github.com/kvany/vtx1/assembler/internal/parser"
 )
@@ -105,15 +108,16 @@ type CodeGenerator struct {
 	vliwBuffer   *VLIWInstruction // Buffer for building VLIW instructions
 }
 
-// CodegenError represents an error during code generation with line information
+// CodegenError represents a code generation error
 type CodegenError struct {
-	Message string // Error message
-	Line    int    // Line number where the error occurred
-	Column  int    // Column number where the error occurred
+	Message string
+	Line    int
+	Column  int
 }
 
+// Error returns the string representation of the error
 func (e CodegenError) Error() string {
-	return fmt.Sprintf("Code generation error at line %d, column %d: %s", e.Line, e.Column, e.Message)
+	return fmt.Sprintf("codegen error at line %d, column %d: %s", e.Line, e.Column, e.Message)
 }
 
 // New creates a new code generator for the given AST with optional output format
@@ -140,12 +144,13 @@ func (cg *CodeGenerator) Generate() error {
 }
 
 // addError adds a code generation error with line and column information
-func (cg *CodeGenerator) addError(msg string, line, column int) {
+func (cg *CodeGenerator) addError(msg string, line, column int) error {
 	cg.errors = append(cg.errors, CodegenError{
 		Message: msg,
 		Line:    line,
 		Column:  column,
 	})
+	return fmt.Errorf(msg) // Return an error for convenience
 }
 
 // WriteOutput writes the generated machine code to the given writer in the specified format
@@ -370,7 +375,7 @@ func (cg *CodeGenerator) writeELF(w io.Writer) error {
 		return err
 	}
 
-	// Segment size in file
+	// Segment size in a file
 	err = binary.Write(w, binary.LittleEndian, uint32(len(cg.machineCode)))
 	if err != nil {
 		return err
@@ -411,6 +416,11 @@ func (cg *CodeGenerator) SymbolTable() map[string]int {
 // Errors returns any errors encountered during code generation
 func (cg *CodeGenerator) Errors() []CodegenError {
 	return cg.errors
+}
+
+// MachineCode returns the generated machine code
+func (cg *CodeGenerator) MachineCode() []byte {
+	return cg.machineCode
 }
 
 // collectSymbols performs the first pass over the AST to gather symbol addresses
@@ -482,7 +492,7 @@ func (cg *CodeGenerator) generateCode(node *parser.AST) error {
 					return err
 				}
 			}
-			// Skip labels in second pass since we already processed them
+			// Skip labels in the second pass since we already processed them
 		}
 
 	default:
@@ -499,7 +509,11 @@ func (cg *CodeGenerator) generateInstruction(node *parser.AST) error {
 	encoding, exists := encodingTable[mnemonic]
 
 	if !exists {
-		cg.errors = append(cg.errors, fmt.Errorf("unknown instruction: %s at line %d", mnemonic, node.Line))
+		cg.errors = append(cg.errors, CodegenError{
+			Message: fmt.Sprintf("unknown instruction: %s", mnemonic),
+			Line:    node.Line,
+			Column:  node.Column,
+		})
 		// Add a placeholder to maintain alignment
 		cg.emitUint32(0)
 		return nil
@@ -516,7 +530,11 @@ func (cg *CodeGenerator) generateInstruction(node *parser.AST) error {
 	case FormatV:
 		return cg.generateVFormat(node, encoding)
 	default:
-		cg.errors = append(cg.errors, fmt.Errorf("unsupported instruction format for %s at line %d", mnemonic, node.Line))
+		cg.errors = append(cg.errors, CodegenError{
+			Message: fmt.Sprintf("unsupported instruction format for %s", mnemonic),
+			Line:    node.Line,
+			Column:  node.Column,
+		})
 		// Add a placeholder to maintain alignment
 		cg.emitUint32(0)
 		return nil
@@ -534,25 +552,15 @@ func (cg *CodeGenerator) generateRFormat(node *parser.AST, encoding InstructionE
 	}
 
 	// Extract registers
-	rd, rs1, rs2 := 0, 0, 0
-	var err error
+	var rd, rs1, rs2 uint8
 
-	rd, err = cg.getRegisterNumber(node.Children[0])
-	if err != nil {
-		cg.addError(fmt.Sprintf("Invalid destination register: %s", err.Error()),
-			node.Children[0].Line, node.Children[0].Column)
-		rd = 0 // Use r0 as a fallback
-	}
+	// Get the register value from the AST node
+	rd = cg.getRegisterFromNode(node.Children[0])
 
 	// For unary operations (NOT, NEG, INC, DEC), rs2 is unused
 	if encoding.Mnemonic == "NOT" || encoding.Mnemonic == "NEG" || encoding.Mnemonic == "INC" || encoding.Mnemonic == "DEC" {
 		if len(node.Children) >= 2 {
-			rs1, err = cg.getRegisterNumber(node.Children[1])
-			if err != nil {
-				cg.addError(fmt.Sprintf("Invalid source register: %s", err.Error()),
-					node.Children[1].Line, node.Children[1].Column)
-				rs1 = 0
-			}
+			rs1 = cg.getRegisterFromNode(node.Children[1])
 		} else {
 			cg.addError(fmt.Sprintf("Missing source register for %s instruction", encoding.Mnemonic),
 				node.Line, node.Column)
@@ -560,19 +568,8 @@ func (cg *CodeGenerator) generateRFormat(node *parser.AST, encoding InstructionE
 		rs2 = 0 // Not used for unary operations
 	} else {
 		// Binary operations (ADD, SUB, MUL, etc.)
-		rs1, err = cg.getRegisterNumber(node.Children[1])
-		if err != nil {
-			cg.addError(fmt.Sprintf("Invalid first source register: %s", err.Error()),
-				node.Children[1].Line, node.Children[1].Column)
-			rs1 = 0
-		}
-
-		rs2, err = cg.getRegisterNumber(node.Children[2])
-		if err != nil {
-			cg.addError(fmt.Sprintf("Invalid second source register: %s", err.Error()),
-				node.Children[2].Line, node.Children[2].Column)
-			rs2 = 0
-		}
+		rs1 = cg.getRegisterFromNode(node.Children[1])
+		rs2 = cg.getRegisterFromNode(node.Children[2])
 	}
 
 	// Validate instruction encoding
@@ -591,9 +588,30 @@ func (cg *CodeGenerator) generateRFormat(node *parser.AST, encoding InstructionE
 
 	// Emit the instruction
 	cg.emitUint32(instruction)
-	cg.currentAddr += 4
 
 	return nil
+}
+
+// getRegisterFromNode extracts a register value from an AST node
+func (cg *CodeGenerator) getRegisterFromNode(node *parser.AST) uint8 {
+	if node == nil {
+		cg.addError("Nil node passed to getRegisterFromNode", 0, 0)
+		return 0
+	}
+
+	if node.Type != parser.NODE_REGISTER {
+		cg.addError(fmt.Sprintf("Expected register node, got %v", node.Type), node.Line, node.Column)
+		return 0
+	}
+
+	regName := node.Token.Literal
+	reg, err := cg.getRegisterNumber(regName)
+	if err != nil {
+		cg.addError(fmt.Sprintf("Invalid register: %s", err.Error()), node.Line, node.Column)
+		return 0
+	}
+
+	return reg
 }
 
 // generateIFormat generates I-format instructions (register-immediate operations)
@@ -607,16 +625,12 @@ func (cg *CodeGenerator) generateIFormat(node *parser.AST, encoding InstructionE
 	}
 
 	// Extract registers and immediate
-	rd, rs1 := 0, 0
+	var rd, rs1 uint8
 	imm := 0
 	var err error
 
-	rd, err = cg.getRegisterNumber(node.Children[0])
-	if err != nil {
-		cg.addError(fmt.Sprintf("Invalid destination register: %s", err.Error()),
-			node.Children[0].Line, node.Children[0].Column)
-		rd = 0
-	}
+	// Get destination register
+	rd = cg.getRegisterFromNode(node.Children[0])
 
 	// Handle different I-format instruction patterns
 	if encoding.Type == OpTypeMEM {
@@ -631,12 +645,7 @@ func (cg *CodeGenerator) generateIFormat(node *parser.AST, encoding InstructionE
 					imm = 0
 				}
 
-				rs1, err = cg.getRegisterNumber(memRef.Children[1])
-				if err != nil {
-					cg.addError(fmt.Sprintf("Invalid base register in memory reference: %s", err.Error()),
-						memRef.Children[1].Line, memRef.Children[1].Column)
-					rs1 = 0
-				}
+				rs1 = cg.getRegisterFromNode(memRef.Children[1])
 			} else {
 				cg.addError("Incomplete memory reference, expected format: imm(rs)",
 					node.Children[1].Line, node.Children[1].Column)
@@ -647,12 +656,7 @@ func (cg *CodeGenerator) generateIFormat(node *parser.AST, encoding InstructionE
 		}
 	} else {
 		// ALU immediate operations like ADDI: ADDI rd, rs1, imm
-		rs1, err = cg.getRegisterNumber(node.Children[1])
-		if err != nil {
-			cg.addError(fmt.Sprintf("Invalid source register: %s", err.Error()),
-				node.Children[1].Line, node.Children[1].Column)
-			rs1 = 0
-		}
+		rs1 = cg.getRegisterFromNode(node.Children[1])
 
 		if len(node.Children) >= 3 {
 			imm, err = cg.getImmediateValue(node.Children[2])
@@ -686,7 +690,6 @@ func (cg *CodeGenerator) generateIFormat(node *parser.AST, encoding InstructionE
 
 	// Emit the instruction
 	cg.emitUint32(instruction)
-	cg.currentAddr += 4
 
 	return nil
 }
@@ -695,24 +698,20 @@ func (cg *CodeGenerator) generateIFormat(node *parser.AST, encoding InstructionE
 func (cg *CodeGenerator) generateJFormat(node *parser.AST, encoding InstructionEncoding) error {
 	// J-format: | imm(20) | rd(5) | opcode(7) |
 	if len(node.Children) < 1 {
-		cg.errors = append(cg.errors, fmt.Errorf("not enough operands for %s instruction at line %d", encoding.Mnemonic, node.Line))
-		// Add a placeholder to maintain alignment
+		cg.addError(fmt.Sprintf("Not enough operands for %s instruction", encoding.Mnemonic),
+			node.Line, node.Column)
 		cg.emitUint32(0)
 		return nil
 	}
 
 	// Extract destination register and target
-	rd := 0
+	var rd uint8
 	target := 0
 	var err error
 
 	// For CALL, the first operand is the destination register
 	if encoding.Mnemonic == "CALL" {
-		rd, err = cg.getRegisterNumber(node.Children[0])
-		if err != nil {
-			cg.errors = append(cg.errors, err)
-			rd = 0 // Use r0 as a fallback
-		}
+		rd = cg.getRegisterFromNode(node.Children[0])
 	}
 
 	// Get the jump target
@@ -722,22 +721,25 @@ func (cg *CodeGenerator) generateJFormat(node *parser.AST, encoding InstructionE
 	}
 
 	if len(node.Children) <= targetIdx {
-		cg.errors = append(cg.errors, fmt.Errorf("missing jump target for %s at line %d", encoding.Mnemonic, node.Line))
+		cg.addError(fmt.Sprintf("Missing jump target for %s instruction", encoding.Mnemonic),
+			node.Line, node.Column)
 		target = 0
 	} else if node.Children[targetIdx].Type == parser.NODE_SYMBOL_REF {
-		symbolName := node.Children[targetIdx].Value.(string)
+		symbolName := node.Children[targetIdx].Token.Literal
 		if addr, exists := cg.symbolTable[symbolName]; exists {
 			// Calculate relative offset
 			target = addr - cg.currentAddr
 		} else {
-			cg.errors = append(cg.errors, fmt.Errorf("undefined symbol %s at line %d", symbolName, node.Line))
+			cg.addError(fmt.Sprintf("Undefined symbol: %s", symbolName),
+				node.Children[targetIdx].Line, node.Children[targetIdx].Column)
 			target = 0
 		}
 	} else {
 		target, err = cg.getImmediateValue(node.Children[targetIdx])
 		if err != nil {
-			cg.errors = append(cg.errors, err)
-			target = 0 // Use 0 as a fallback
+			cg.addError(fmt.Sprintf("Invalid jump target: %s", err.Error()),
+				node.Children[targetIdx].Line, node.Children[targetIdx].Column)
+			target = 0
 		}
 	}
 
@@ -751,7 +753,6 @@ func (cg *CodeGenerator) generateJFormat(node *parser.AST, encoding InstructionE
 
 	// Emit the instruction
 	cg.emitUint32(instruction)
-	cg.currentAddr += 4
 
 	return nil
 }
@@ -805,23 +806,9 @@ func (cg *CodeGenerator) generateVFormat(node *parser.AST, encoding InstructionE
 
 			rd, rs1, rs2 := 0, 0, 0
 
-			rd, err = cg.getRegisterNumber(opNode.Children[0])
-			if err != nil {
-				cg.addError(err.Error(), opNode.Line, opNode.Column)
-				rd = 0
-			}
-
-			rs1, err = cg.getRegisterNumber(opNode.Children[1])
-			if err != nil {
-				cg.addError(err.Error(), opNode.Line, opNode.Column)
-				rs1 = 0
-			}
-
-			rs2, err = cg.getRegisterNumber(opNode.Children[2])
-			if err != nil {
-				cg.addError(err.Error(), opNode.Line, opNode.Column)
-				rs2 = 0
-			}
+			rd = int(cg.getRegisterFromNode(opNode.Children[0]))
+			rs1 = int(cg.getRegisterFromNode(opNode.Children[1]))
+			rs2 = int(cg.getRegisterFromNode(opNode.Children[2]))
 
 			// Encode in VLIW-compressed R-format
 			opCode = uint32(opEncoding.Type) << 29    // Type (3 bits)
@@ -843,11 +830,7 @@ func (cg *CodeGenerator) generateVFormat(node *parser.AST, encoding InstructionE
 			rd, rs1 := 0, 0
 			imm := 0
 
-			rd, err = cg.getRegisterNumber(opNode.Children[0])
-			if err != nil {
-				cg.addError(err.Error(), opNode.Line, opNode.Column)
-				rd = 0
-			}
+			rd = int(cg.getRegisterFromNode(opNode.Children[0]))
 
 			// Handle memory references specially
 			if opNode.Children[1].Type == parser.NODE_MEMORY_REF {
@@ -859,19 +842,11 @@ func (cg *CodeGenerator) generateVFormat(node *parser.AST, encoding InstructionE
 						imm = 0
 					}
 
-					rs1, err = cg.getRegisterNumber(memRef.Children[1])
-					if err != nil {
-						cg.addError(err.Error(), memRef.Line, memRef.Column)
-						rs1 = 0
-					}
+					rs1 = int(cg.getRegisterFromNode(memRef.Children[1]))
 				}
 			} else {
 				// Regular immediate format
-				rs1, err = cg.getRegisterNumber(opNode.Children[1])
-				if err != nil {
-					cg.addError(err.Error(), opNode.Line, opNode.Column)
-					rs1 = 0
-				}
+				rs1 = int(cg.getRegisterFromNode(opNode.Children[1]))
 
 				if len(opNode.Children) >= 3 {
 					imm, err = cg.getImmediateValue(opNode.Children[2])
@@ -1002,4 +977,274 @@ func (cg *CodeGenerator) endVLIW() {
 
 	// Reset the VLIW buffer
 	cg.vliwBuffer = nil
+}
+
+// emitUint32 writes a 32-bit value to the binary output
+func (cg *CodeGenerator) emitUint32(value uint32) {
+	// Create a 4-byte buffer
+	buf := make([]byte, 4)
+
+	// Write the value in little-endian format
+	binary.LittleEndian.PutUint32(buf, value)
+
+	// Append to the binary output
+	cg.machineCode = append(cg.machineCode, buf...)
+
+	// Increment the current position
+	cg.currentAddr += 4
+}
+
+// getRegisterNumber converts a register token to its numeric value
+func (cg *CodeGenerator) getRegisterNumber(reg string) (uint8, error) {
+	// Handle general purpose registers
+	if len(reg) == 2 && reg[0] == 'T' && reg[1] >= '0' && reg[1] <= '6' {
+		return uint8(reg[1] - '0'), nil
+	}
+
+	// Handle special registers
+	switch reg {
+	case "TA":
+		return 7, nil
+	case "TB":
+		return 8, nil
+	case "TC":
+		return 9, nil
+	case "TS":
+		return 10, nil
+	case "TI":
+		return 11, nil
+	case "VA":
+		return 12, nil
+	case "VB":
+		return 13, nil
+	case "VC":
+		return 14, nil
+	case "FA":
+		return 15, nil
+	case "FB":
+		return 16, nil
+	case "FC":
+		return 17, nil
+	}
+
+	return 0, fmt.Errorf("invalid register: %s", reg)
+}
+
+// processDirective handles assembly directives
+func (cg *CodeGenerator) processDirective(node *parser.AST) error {
+	directive := node.Token.Literal
+
+	switch directive {
+	case ".ORG":
+		// Set the current address
+		if len(node.Children) != 1 {
+			return cg.addError("ORG directive requires one argument", node.Line, node.Column)
+		}
+
+		// Parse the address
+		address, err := cg.evaluateImmediate(node.Children[0])
+		if err != nil {
+			return err
+		}
+
+		// Set the current address
+		cg.currentAddr = int(address)
+
+	case ".DB", ".DW", ".DT":
+		// Define data bytes, words, or ternary values
+		for _, child := range node.Children {
+			value, err := cg.evaluateImmediate(child)
+			if err != nil {
+				return err
+			}
+
+			if directive == ".DB" {
+				// Emit 8-bit value
+				cg.machineCode = append(cg.machineCode, byte(value))
+				cg.currentAddr++
+			} else if directive == ".DW" {
+				// Emit 16-bit value
+				buf := make([]byte, 2)
+				binary.LittleEndian.PutUint16(buf, uint16(value))
+				cg.machineCode = append(cg.machineCode, buf...)
+				cg.currentAddr += 2
+			} else if directive == ".DT" {
+				// Emit 32-bit value for ternary
+				cg.emitUint32(uint32(value))
+			}
+		}
+
+	case ".ALIGN":
+		// Align the current address
+		if len(node.Children) != 1 {
+			return cg.addError("ALIGN directive requires one argument", node.Line, node.Column)
+		}
+
+		// Parse the alignment value
+		alignment, err := cg.evaluateImmediate(node.Children[0])
+		if err != nil {
+			return err
+		}
+
+		// Calculate padding needed
+		alignmentVal := int(alignment)
+		remainder := cg.currentAddr % alignmentVal
+		if remainder > 0 {
+			padding := alignmentVal - remainder
+			// Add padding bytes
+			for i := 0; i < padding; i++ {
+				cg.machineCode = append(cg.machineCode, 0)
+				cg.currentAddr++
+			}
+		}
+
+	case ".SPACE":
+		// Reserve space
+		if len(node.Children) != 1 {
+			return cg.addError("SPACE directive requires one argument", node.Line, node.Column)
+		}
+
+		// Parse the size
+		size, err := cg.evaluateImmediate(node.Children[0])
+		if err != nil {
+			return err
+		}
+
+		// Add the space
+		sizeVal := int(size)
+		for i := 0; i < sizeVal; i++ {
+			cg.machineCode = append(cg.machineCode, 0)
+			cg.currentAddr++
+		}
+
+	case ".EQU":
+		// Define a constant
+		if len(node.Children) != 2 {
+			return cg.addError("EQU directive requires two arguments", node.Line, node.Column)
+		}
+
+		// Get the identifier
+		if node.Children[0].Type != parser.NODE_SYMBOL_REF {
+			return cg.addError("First argument of EQU must be an identifier", node.Line, node.Column)
+		}
+
+		// Get the value
+		value, err := cg.evaluateImmediate(node.Children[1])
+		if err != nil {
+			return err
+		}
+
+		// Add to symbol table
+		cg.symbolTable[node.Children[0].Token.Literal] = int(value)
+
+	case ".INCLUDE":
+		// Include another file
+		// This would normally be handled by the parser, but we'll add a placeholder here
+		return cg.addError("INCLUDE directive not implemented in this version", node.Line, node.Column)
+
+	case ".SECTION":
+		// Define a section
+		// This would normally change the current section, but we'll add a placeholder here
+		return cg.addError("SECTION directive not implemented in this version", node.Line, node.Column)
+
+	default:
+		return cg.addError(fmt.Sprintf("Unknown directive: %s", directive), node.Line, node.Column)
+	}
+
+	return nil
+}
+
+// evaluateImmediate evaluates an immediate value node
+func (cg *CodeGenerator) evaluateImmediate(node *parser.AST) (int64, error) {
+	if node == nil {
+		return 0, fmt.Errorf("nil node passed to evaluateImmediate")
+	}
+
+	switch node.Type {
+	case parser.NODE_IMMEDIATE:
+		// Direct immediate value
+		literal := node.Token.Literal
+
+		// Check the type from the token
+		switch node.Token.Type {
+		case lexer.DECIMAL:
+			// Parse decimal
+			value, err := strconv.ParseInt(literal, 10, 64)
+			if err != nil {
+				return 0, cg.addError(fmt.Sprintf("Invalid decimal: %s", literal), node.Line, node.Column)
+			}
+			return value, nil
+
+		case lexer.HEXADECIMAL:
+			// Parse hexadecimal (remove 0x prefix)
+			value, err := strconv.ParseInt(strings.TrimPrefix(literal, "0x"), 16, 64)
+			if err != nil {
+				return 0, cg.addError(fmt.Sprintf("Invalid hexadecimal: %s", literal), node.Line, node.Column)
+			}
+			return value, nil
+
+		case lexer.BINARY:
+			// Parse binary (remove 0b prefix)
+			value, err := strconv.ParseInt(strings.TrimPrefix(literal, "0b"), 2, 64)
+			if err != nil {
+				return 0, cg.addError(fmt.Sprintf("Invalid binary: %s", literal), node.Line, node.Column)
+			}
+			return value, nil
+
+		case lexer.TERNARY:
+			// Parse balanced ternary (remove 0t prefix)
+			ternaryStr := strings.TrimPrefix(literal, "0t")
+			value := int64(0)
+
+			// Process each ternary digit
+			for i := 0; i < len(ternaryStr); i++ {
+				// Shift existing value
+				value *= 3
+
+				// Add new digit
+				switch ternaryStr[i] {
+				case '+':
+					value += 1
+				case '-':
+					value -= 1
+				case '0':
+					// No change
+				default:
+					return 0, cg.addError(fmt.Sprintf("Invalid ternary digit: %c", ternaryStr[i]), node.Line, node.Column)
+				}
+			}
+
+			return value, nil
+		}
+
+	case parser.NODE_SYMBOL_REF:
+		// Symbol reference
+		symbol := node.Token.Literal
+
+		// Look up in symbol table
+		value, exists := cg.symbolTable[symbol]
+		if !exists {
+			return 0, cg.addError(fmt.Sprintf("Undefined symbol: %s", symbol), node.Line, node.Column)
+		}
+
+		return int64(value), nil
+	}
+
+	return 0, cg.addError(fmt.Sprintf("Cannot evaluate node as immediate: %v", node.Type), node.Line, node.Column)
+}
+
+// getImmediateValue evaluates an immediate value from a node and returns as integer
+func (cg *CodeGenerator) getImmediateValue(node *parser.AST) (int, error) {
+	if node == nil {
+		return 0, fmt.Errorf("nil node passed to getImmediateValue")
+	}
+
+	// Evaluate the immediate value
+	value, err := cg.evaluateImmediate(node)
+	if err != nil {
+		return 0, err
+	}
+
+	// Convert to integer (possibly truncating)
+	return int(value), nil
 }

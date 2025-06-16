@@ -1,6 +1,6 @@
 # VTX1 Assembler
 
-The VTX1 Assembler is a modern assembly language tool for the VTX1 architecture, implemented in Go. It combines lexical analysis, parsing, and code generation into a single efficient tool.
+The VTX Assembler is a modern assembly language tool for the VTX1 architecture, implemented in Go. It combines lexical analysis, parsing, and code generation into a single efficient tool.
 
 ## Architecture
 
@@ -31,15 +31,17 @@ The VTX1 assembly language is designed for the VTX1 processor architecture, feat
 
 ## Building
 
+[Taskfile](https://taskfile.dev/) build system used for a variety of project-related tasks.
+
 ```bash
 # Build the assembler
-go build -o vtxasm ./cmd/vtxasm
+task build
 
 # Run tests
 go test ./...
 
 # Install locally
-go install ./cmd/vtxasm
+task install
 ```
 
 ## Usage
