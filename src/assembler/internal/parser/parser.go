@@ -77,6 +77,11 @@ type Parser struct {
 	includePaths  []string        // Search paths for include files
 	includedFiles map[string]bool // Track included files to prevent circular inclusion
 	baseDir       string          // Base directory for relative include paths
+
+	// Section handling
+	sections       map[string]SectionInfo // Track sections by name
+	currentSection string                 // Current active section
+	defaultSection string                 // Default section name
 }
 
 // SymbolInfo holds information about a symbol
@@ -88,14 +93,33 @@ type SymbolInfo struct {
 	Column  int
 }
 
+// SectionInfo holds information about an assembly section
+type SectionInfo struct {
+	Name           string   // Section name
+	StartAddress   uint32   // Section start address
+	CurrentAddress uint32   // Current position within the section
+	Attributes     uint32   // Section attributes (e.g., read-only, executable)
+	DefinedAt      TokenPos // Where the section was defined
+}
+
+// TokenPos stores a token's position information
+type TokenPos struct {
+	Line   int
+	Column int
+	File   string
+}
+
 // New creates a new parser for the given lexer
 func New(l *lexer.Lexer) *Parser {
 	return &Parser{
-		lexer:         l,
-		symbols:       make(map[string]SymbolInfo),
-		currentAddr:   0,
-		includePaths:  []string{".", "include", "src/include"},
-		includedFiles: make(map[string]bool),
+		lexer:          l,
+		symbols:        make(map[string]SymbolInfo),
+		currentAddr:    0,
+		includePaths:   []string{".", "include", "src/include"},
+		includedFiles:  make(map[string]bool),
+		sections:       make(map[string]SectionInfo),
+		currentSection: ".text", // Default to .text section
+		defaultSection: ".text", // Default section name
 	}
 }
 
@@ -539,7 +563,7 @@ func (p *Parser) parseDirective() *AST {
 				// Align to the specified boundary
 				alignment := uint32(alignVal)
 				if alignment > 0 {
-					// Calculate new aligned address
+					// Calculate a new aligned address
 					mask := alignment - 1
 					newAddr := (p.currentAddr + mask) & ^mask
 
@@ -644,7 +668,7 @@ func (p *Parser) readAndTokenizeFile(filePath string, directiveToken lexer.Token
 	if err != nil {
 		p.error(fmt.Sprintf("Errors while parsing included file %s: %s", filePath, err), directiveToken)
 
-		// Copy errors from included file to main parser for better reporting
+		// Copy errors from an included file to the main parser for better reporting
 		for _, incErr := range includedParser.errors {
 			incErr.Message = fmt.Sprintf("[%s] %s", filepath.Base(filePath), incErr.Message)
 			p.errors = append(p.errors, incErr)
