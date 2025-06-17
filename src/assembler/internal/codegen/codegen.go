@@ -1215,6 +1215,8 @@ func (cg *CodeGenerator) evaluateImmediate(node *parser.AST) (int64, error) {
 			}
 
 			return value, nil
+		default:
+			// No modifier, do nothing
 		}
 
 	case parser.NODE_SYMBOL_REF:
@@ -1228,6 +1230,8 @@ func (cg *CodeGenerator) evaluateImmediate(node *parser.AST) (int64, error) {
 		}
 
 		return int64(value), nil
+	default:
+		// No modifier, do nothing
 	}
 
 	return 0, cg.addError(fmt.Sprintf("Cannot evaluate node as immediate: %v", node.Type), node.Line, node.Column)

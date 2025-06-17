@@ -46,14 +46,15 @@ The VTX1 system implements sophisticated peripheral controllers with advanced fe
 
 **DMA Integration:**
 
-```verilog
+[source,verilog]
+----
 // GPIO DMA Interface
 output wire gpio_dma_req;           // DMA request signal
 input  wire gpio_dma_ack;           // DMA acknowledge
 output wire [7:0] gpio_dma_data;    // DMA data output
 input  wire [7:0] gpio_dma_input;   // DMA data input
 output wire [4:0] gpio_dma_pin;     // Pin number for DMA operation
-```
+----
 
 ==== Enhanced UART Controller
 
@@ -93,7 +94,8 @@ output wire [4:0] gpio_dma_pin;     // Pin number for DMA operation
 
 **DMA Integration Example:**
 
-```verilog
+[source,verilog]
+----
 // UART DMA Interface
 output wire uart_tx_dma_req;        // TX DMA request
 output wire uart_rx_dma_req;        // RX DMA request
@@ -101,7 +103,7 @@ input  wire uart_tx_dma_ack;        // TX DMA acknowledge
 input  wire uart_rx_dma_ack;        // RX DMA acknowledge
 input  wire [7:0] uart_tx_dma_data; // TX DMA data
 output wire [7:0] uart_rx_dma_data; // RX DMA data
-```
+----
 
 ==== Enhanced SPI Controller
 

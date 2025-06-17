@@ -23,61 +23,6 @@ func ParseEBNF(filename string) (*Grammar, error) {
 	return ParseGrammar(filename)
 }
 
-// parseAlternatives splits a rule definition into alternatives
-func parseAlternatives(definition string) []string {
-	// This is enhanced to handle parentheses and quoted strings properly
-	if !strings.Contains(definition, "|") {
-		return []string{strings.TrimSpace(definition)}
-	}
-
-	// We need to handle cases where | appears inside parentheses or quotes
-	var alternatives []string
-	var current strings.Builder
-	inQuotes := false
-	quoteChar := rune(0)
-	parenLevel := 0
-
-	for _, c := range definition {
-		switch c {
-		case '\'', '"':
-			if inQuotes && c == quoteChar {
-				inQuotes = false
-			} else if !inQuotes {
-				inQuotes = true
-				quoteChar = c
-			}
-			current.WriteRune(c)
-		case '(':
-			if !inQuotes {
-				parenLevel++
-			}
-			current.WriteRune(c)
-		case ')':
-			if !inQuotes && parenLevel > 0 {
-				parenLevel--
-			}
-			current.WriteRune(c)
-		case '|':
-			if !inQuotes && parenLevel == 0 {
-				// This is a top-level alternative separator
-				alternatives = append(alternatives, strings.TrimSpace(current.String()))
-				current.Reset()
-			} else {
-				current.WriteRune(c)
-			}
-		default:
-			current.WriteRune(c)
-		}
-	}
-
-	// Don't forget the last part
-	if current.Len() > 0 {
-		alternatives = append(alternatives, strings.TrimSpace(current.String()))
-	}
-
-	return alternatives
-}
-
 // GenerateTestCases generates test cases based on the grammar
 func (g *Grammar) GenerateTestCases() []string {
 	// Generate simple examples of each rule

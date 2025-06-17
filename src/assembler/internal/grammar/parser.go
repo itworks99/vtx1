@@ -234,6 +234,8 @@ func (p *Parser) parseTerm() (string, error) {
 				return "", err
 			}
 			result.WriteString(p.current.Value)
+		default:
+			// No modifier, do nothing
 		}
 	}
 
