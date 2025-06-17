@@ -538,16 +538,63 @@ func (p *Parser) parseDirective() *AST {
 		// .SECTION expects an identifier (section name)
 		if p.check(lexer.IDENTIFIER) {
 			sectionToken := p.advance()
+			sectionName := sectionToken.Literal
 			dir.Children = append(dir.Children, &AST{
 				Type:   NODE_SYMBOL_REF,
 				Token:  sectionToken,
-				Value:  sectionToken.Literal,
+				Value:  sectionName,
 				Line:   sectionToken.Line,
 				Column: sectionToken.Column,
 			})
 
-			// TODO: Implement section handling
-			p.warning("Section directive not yet fully implemented", dirToken)
+			// Prepare section attributes (default is 0)
+			var attributes uint32 = 0
+
+			// Check if there are optional attributes
+			p.skipWhitespace()
+			if p.match(lexer.COMMA) {
+				p.skipWhitespace()
+				// Parse section attributes (e.g., "code", "data", "rodata")
+				if p.check(lexer.IDENTIFIER) {
+					attrToken := p.advance()
+					attrName := attrToken.Literal
+
+					// Handle different attribute types
+					switch attrName {
+					case "code", "text":
+						attributes |= 1 // Executable
+					case "rodata":
+						attributes |= 2 // Read-only
+					case "data":
+						attributes |= 4 // Writable
+					case "bss":
+						attributes |= 8 // Zero-initialized
+					default:
+						p.warning(fmt.Sprintf("Unknown section attribute: %s", attrName), attrToken)
+					}
+
+					// Add attribute node to AST
+					dir.Children = append(dir.Children, &AST{
+						Type:   NODE_SYMBOL_REF,
+						Token:  attrToken,
+						Value:  attrName,
+						Line:   attrToken.Line,
+						Column: attrToken.Column,
+					})
+				} else {
+					p.error("Expected attribute name after comma in .SECTION directive", p.peek())
+				}
+			}
+
+			// Create token position for error reporting
+			pos := TokenPos{
+				Line:   sectionToken.Line,
+				Column: sectionToken.Column,
+				File:   "", // File information is not available in the token
+			}
+
+			// Switch to the named section
+			p.SwitchToSection(sectionName, attributes, pos)
 		} else {
 			p.error("Expected section name after .SECTION directive", p.peek())
 		}
@@ -1054,6 +1101,59 @@ func (p *Parser) isImmediateToken(token lexer.Token) bool {
 		token.Type == lexer.HEXADECIMAL ||
 		token.Type == lexer.BINARY ||
 		token.Type == lexer.TERNARY
+}
+
+// Implementation of section handling
+
+// SwitchToSection switches to a named section, creating it if it doesn't exist
+func (p *Parser) SwitchToSection(name string, attributes uint32, pos TokenPos) {
+	// If the section exists, just switch to it
+	if section, exists := p.sections[name]; exists {
+		p.currentSection = name
+		p.currentAddr = section.CurrentAddress
+		return
+	}
+
+	// Create a new section
+	p.sections[name] = SectionInfo{
+		Name:           name,
+		StartAddress:   p.currentAddr, // Start at the current address
+		CurrentAddress: p.currentAddr,
+		Attributes:     attributes,
+		DefinedAt:      pos,
+	}
+
+	p.currentSection = name
+}
+
+// GetCurrentSection returns the current section info
+func (p *Parser) GetCurrentSection() SectionInfo {
+	if section, exists := p.sections[p.currentSection]; exists {
+		return section
+	}
+
+	// Return default section info if no section exists
+	return SectionInfo{
+		Name:           p.defaultSection,
+		StartAddress:   0,
+		CurrentAddress: 0,
+	}
+}
+
+// UpdateSectionAddress updates the current address for the active section
+func (p *Parser) UpdateSectionAddress(newAddr uint32) {
+	if section, exists := p.sections[p.currentSection]; exists {
+		section.CurrentAddress = newAddr
+		p.sections[p.currentSection] = section
+	}
+
+	// Keep the global current address in sync
+	p.currentAddr = newAddr
+}
+
+// GetSections returns all defined sections
+func (p *Parser) GetSections() map[string]SectionInfo {
+	return p.sections
 }
 
 // GetErrors returns the list of parsing errors
