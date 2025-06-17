@@ -3,8 +3,8 @@ package grammar
 // TokenType defines the type of token in the grammar
 type TokenType int
 
+// Token types
 const (
-	// Token types
 	TokenInvalid TokenType = iota
 	TokenIdentifier
 	TokenString

@@ -40,12 +40,20 @@ func main() {
 		// Read the input file
 		source, err := os.ReadFile(inputFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading input file: %v\n", err)
+			fprintf, err := fmt.Fprintf(os.Stderr, "Error reading input file: %v\n", err)
+			if err != nil {
+				return
+			}
 			os.Exit(1)
 		}
 
 		// Check if it conforms to our grammar
-		if g.ValidateSyntax(string(source)) {
+		isValid, err := g.ValidateSyntax(string(source))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error validating syntax: %v\n", err)
+			os.Exit(1)
+		}
+		if isValid {
 			fmt.Println("Input file conforms to the EBNF grammar")
 		} else {
 			fmt.Println("Input file has syntax errors according to the EBNF grammar")

@@ -2,6 +2,7 @@ package grammar
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -19,17 +20,161 @@ type Grammar struct {
 
 // ParseEBNF parses an EBNF grammar file and returns a Grammar structure
 func ParseEBNF(filename string) (*Grammar, error) {
-	// Use the new token-based parser
-	return ParseGrammar(filename)
+	content, err := ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("error reading grammar file: %w", err)
+	}
+
+	grammar := &Grammar{
+		Rules: make(map[string]GrammarRule),
+	}
+
+	lines := strings.Split(content, "\n")
+	var currentRule *GrammarRule
+	var ruleDefinitionBuilder strings.Builder
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "//") {
+			continue // Skip empty lines and comments
+		}
+
+		if strings.Contains(line, "::=") {
+			// Save the previous rule if there was one
+			if currentRule != nil {
+				definition := strings.TrimSpace(ruleDefinitionBuilder.String())
+				currentRule.Definition = definition
+				currentRule.Alternatives = parseAlternatives(definition)
+				grammar.Rules[currentRule.Name] = *currentRule
+			}
+
+			// Start a new rule
+			parts := strings.SplitN(line, "::=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+
+			ruleName := strings.TrimSpace(parts[0])
+			ruleDefinitionBuilder.Reset()
+			ruleDefinitionBuilder.WriteString(strings.TrimSpace(parts[1]))
+
+			currentRule = &GrammarRule{
+				Name: ruleName,
+			}
+		} else if currentRule != nil {
+			// Continue with the current rule definition
+			ruleDefinitionBuilder.WriteString(" ")
+			ruleDefinitionBuilder.WriteString(line)
+		}
+	}
+
+	// Add the last rule
+	if currentRule != nil {
+		definition := strings.TrimSpace(ruleDefinitionBuilder.String())
+		currentRule.Definition = definition
+		currentRule.Alternatives = parseAlternatives(definition)
+		grammar.Rules[currentRule.Name] = *currentRule
+	}
+
+	return grammar, nil
+}
+
+// tokenizeForGeneration breaks an alternative into tokens for test generation
+func tokenizeForGeneration(alt string) []string {
+	var tokens []string
+	var current strings.Builder
+	inQuotes := false
+	quoteChar := rune(0)
+
+	for _, char := range alt {
+		if inQuotes {
+			current.WriteRune(char)
+			if char == quoteChar {
+				inQuotes = false
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+		} else if char == '\'' || char == '"' {
+			inQuotes = true
+			quoteChar = char
+			current.WriteRune(char)
+		} else if char == ' ' || char == '\t' {
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+		} else if char == '*' || char == '+' || char == '?' || char == '|' {
+			if current.Len() > 0 {
+				tokens = append(tokens, current.String())
+				current.Reset()
+			}
+			tokens = append(tokens, string(char))
+		} else {
+			current.WriteRune(char)
+		}
+	}
+
+	if current.Len() > 0 {
+		tokens = append(tokens, current.String())
+	}
+
+	return tokens
+}
+
+// parseAlternatives splits a rule definition into its alternative productions
+func parseAlternatives(definition string) []string {
+	var alternatives []string
+	var current strings.Builder
+	inQuotes := false
+	quoteChar := rune(0)
+	inGroup := 0
+
+	for _, char := range definition {
+		if inQuotes {
+			current.WriteRune(char)
+			if char == quoteChar {
+				inQuotes = false
+			}
+		} else if char == '\'' || char == '"' {
+			inQuotes = true
+			quoteChar = char
+			current.WriteRune(char)
+		} else if char == '(' {
+			inGroup++
+			current.WriteRune(char)
+		} else if char == ')' {
+			inGroup--
+			current.WriteRune(char)
+		} else if char == '|' && inGroup == 0 {
+			alternatives = append(alternatives, strings.TrimSpace(current.String()))
+			current.Reset()
+		} else {
+			current.WriteRune(char)
+		}
+	}
+
+	if current.Len() > 0 {
+		alternatives = append(alternatives, strings.TrimSpace(current.String()))
+	}
+
+	return alternatives
+}
+
+// ReadFile reads the content of a file and returns it as a string
+func ReadFile(filename string) (string, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // GenerateTestCases generates test cases based on the grammar
 func (g *Grammar) GenerateTestCases() []string {
-	// Generate simple examples of each rule
 	var testCases []string
 
 	// Start with the Program rule as the entry point
-	if programRule, ok := g.Rules["Program"]; ok {
+	if _, ok := g.Rules["Program"]; ok {
 		testCases = append(testCases, g.generateFromRule("Program", 0, make(map[string]bool))...)
 	}
 
@@ -38,7 +183,6 @@ func (g *Grammar) GenerateTestCases() []string {
 
 // generateFromRule recursively generates examples for a rule
 func (g *Grammar) generateFromRule(ruleName string, depth int, visited map[string]bool) []string {
-	// Prevent infinite recursion
 	if depth > 3 || visited[ruleName] {
 		return nil
 	}
@@ -51,14 +195,12 @@ func (g *Grammar) generateFromRule(ruleName string, depth int, visited map[strin
 	}
 
 	var examples []string
-
-	// For simple rules, generate an example for each alternative
 	for _, alt := range rule.Alternatives {
 		if example := g.generateFromAlternative(alt, depth+1, visited); example != "" {
 			examples = append(examples, example)
 		}
 		if len(examples) >= 3 {
-			break // Limit to 3 examples per rule
+			break
 		}
 	}
 
@@ -68,30 +210,27 @@ func (g *Grammar) generateFromRule(ruleName string, depth int, visited map[strin
 // generateFromAlternative generates an example for a single alternative
 func (g *Grammar) generateFromAlternative(alt string, depth int, visited map[string]bool) string {
 	var result strings.Builder
-
-	// This implementation is enhanced to handle EBNF operators
 	tokens := tokenizeForGeneration(alt)
 
 	for i := 0; i < len(tokens); i++ {
 		token := tokens[i]
 
-		// Handle operators and modifiers
 		if i < len(tokens)-1 {
 			nextToken := tokens[i+1]
 			if nextToken == "*" || nextToken == "+" || nextToken == "?" {
-				// Skip this token and its modifier for now - simplified approach
 				i++
+				if examples := g.generateFromRule(token, depth+1, visited); len(examples) > 0 {
+					result.WriteString(examples[0] + " ")
+				}
 				continue
 			}
 		}
 
-		// If it's a reference to another rule
 		if !strings.HasPrefix(token, "'") && !strings.HasPrefix(token, "\"") {
 			if examples := g.generateFromRule(token, depth+1, visited); len(examples) > 0 {
 				result.WriteString(examples[0] + " ")
 			}
 		} else {
-			// It's a literal, strip quotes and add it
 			token = strings.Trim(token, "'\"")
 			result.WriteString(token + " ")
 		}
@@ -100,139 +239,104 @@ func (g *Grammar) generateFromAlternative(alt string, depth int, visited map[str
 	return strings.TrimSpace(result.String())
 }
 
-// tokenizeForGeneration breaks an alternative into tokens for test generation
-func tokenizeForGeneration(alt string) []string {
-	var tokens []string
-	var current strings.Builder
-	inQuotes := false
-	quoteChar := rune(0)
+// ExpandEBNFGrammar expands any rules in the grammar to handle special notation
+func (g *Grammar) ExpandEBNFGrammar() {
+	expanded := make(map[string]GrammarRule)
 
-	for _, c := range alt {
-		switch {
-		case c == '\'' || c == '"':
-			if inQuotes && c == quoteChar {
-				inQuotes = false
-				current.WriteRune(c)
-				tokens = append(tokens, current.String())
-				current.Reset()
-			} else if !inQuotes {
-				if current.Len() > 0 {
-					tokens = append(tokens, strings.TrimSpace(current.String()))
-					current.Reset()
-				}
-				inQuotes = true
-				quoteChar = c
-				current.WriteRune(c)
-			} else {
-				current.WriteRune(c)
-			}
-		case c == ' ' && !inQuotes:
-			if current.Len() > 0 {
-				tokens = append(tokens, strings.TrimSpace(current.String()))
-				current.Reset()
-			}
-		case c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == '*' || c == '+' || c == '?':
-			if !inQuotes {
-				if current.Len() > 0 {
-					tokens = append(tokens, strings.TrimSpace(current.String()))
-					current.Reset()
-				}
-				tokens = append(tokens, string(c))
-			} else {
-				current.WriteRune(c)
-			}
-		default:
-			current.WriteRune(c)
-		}
+	// Copy existing rules first
+	for name, rule := range g.Rules {
+		expanded[name] = rule
 	}
 
-	if current.Len() > 0 {
-		tokens = append(tokens, strings.TrimSpace(current.String()))
-	}
+	// Expand rules with special notation (*, +, ?)
+	for name, rule := range g.Rules {
+		for i, alt := range rule.Alternatives {
+			newAlt, newRules := g.expandAlternative(alt, name)
+			rule.Alternatives[i] = newAlt
 
-	return tokens
-}
-
-// ValidateSyntax checks if a given source code conforms to the grammar
-func (g *Grammar) ValidateSyntax(source string) (bool, error) {
-	// This would require implementing a full parser based on the grammar
-	// For now, we'll return a placeholder
-	return true, fmt.Errorf("syntax validation not yet implemented")
-}
-
-// ListInstructions returns a list of all instruction types defined in the grammar
-func (g *Grammar) ListInstructions() []string {
-	var instructions []string
-
-	// Look for the Mnemonic rule and its components
-	if mnemonicRule, ok := g.Rules["Mnemonic"]; ok {
-		for _, alt := range mnemonicRule.Alternatives {
-			if strings.Contains(alt, "ALU_Op") {
-				if aluOpRule, ok := g.Rules["ALU_Op"]; ok {
-					for _, op := range parseInstructionList(aluOpRule.Definition) {
-						instructions = append(instructions, op)
-					}
-				}
-			}
-			if strings.Contains(alt, "Memory_Op") {
-				if memOpRule, ok := g.Rules["Memory_Op"]; ok {
-					for _, op := range parseInstructionList(memOpRule.Definition) {
-						instructions = append(instructions, op)
-					}
-				}
-			}
-			if strings.Contains(alt, "Control_Op") {
-				if ctrlOpRule, ok := g.Rules["Control_Op"]; ok {
-					for _, op := range parseInstructionList(ctrlOpRule.Definition) {
-						instructions = append(instructions, op)
-					}
-				}
+			// Add newly created rules
+			for newName, newRule := range newRules {
+				expanded[newName] = newRule
 			}
 		}
+
+		expanded[name] = rule
 	}
 
-	return instructions
+	g.Rules = expanded
 }
 
-// Helper to parse a list of instructions from a rule like "ADD | SUB | MUL"
-func parseInstructionList(definition string) []string {
-	var instructions []string
+// expandAlternative expands an alternative to handle repetition operators (*, +, ?)
+func (g *Grammar) expandAlternative(alt string, parentName string) (string, map[string]GrammarRule) {
+	newRules := make(map[string]GrammarRule)
+	tokens := tokenizeForGeneration(alt)
+	var result strings.Builder
 
-	// Extract literals by finding quoted strings
-	inQuote := false
-	quoteChar := rune(0)
-	var currentInst strings.Builder
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
 
-	for _, c := range definition {
-		switch c {
-		case '\'', '"':
-			if inQuote && c == quoteChar {
-				inQuote = false
-				instructions = append(instructions, strings.TrimSpace(currentInst.String()))
-				currentInst.Reset()
-			} else if !inQuote {
-				inQuote = true
-				quoteChar = c
-			} else {
-				currentInst.WriteRune(c)
-			}
-		case '|':
-			if !inQuote && currentInst.Len() > 0 {
-				instructions = append(instructions, strings.TrimSpace(currentInst.String()))
-				currentInst.Reset()
-			} else if inQuote {
-				currentInst.WriteRune(c)
-			}
-		default:
-			if inQuote {
-				currentInst.WriteRune(c)
+		if i < len(tokens)-1 {
+			nextToken := tokens[i+1]
+
+			if nextToken == "*" {
+				// Zero or more repetitions
+				newRuleName := fmt.Sprintf("%s_%s_Star", parentName, token)
+				newRules[newRuleName] = GrammarRule{
+					Name:         newRuleName,
+					Definition:   fmt.Sprintf("| %s %s", token, newRuleName),
+					Alternatives: []string{"", fmt.Sprintf("%s %s", token, newRuleName)},
+				}
+				result.WriteString(newRuleName + " ")
+				i++ // Skip the * token
+				continue
+			} else if nextToken == "+" {
+				// One or more repetitions
+				newRuleName := fmt.Sprintf("%s_%s_Plus", parentName, token)
+				newRules[newRuleName] = GrammarRule{
+					Name:         newRuleName,
+					Definition:   fmt.Sprintf("%s | %s %s", token, token, newRuleName),
+					Alternatives: []string{token, fmt.Sprintf("%s %s", token, newRuleName)},
+				}
+				result.WriteString(newRuleName + " ")
+				i++ // Skip the + token
+				continue
+			} else if nextToken == "?" {
+				// Optional occurrence
+				newRuleName := fmt.Sprintf("%s_%s_Optional", parentName, token)
+				newRules[newRuleName] = GrammarRule{
+					Name:         newRuleName,
+					Definition:   fmt.Sprintf("| %s", token),
+					Alternatives: []string{"", token},
+				}
+				result.WriteString(newRuleName + " ")
+				i++ // Skip the ? token
+				continue
 			}
 		}
+
+		result.WriteString(token + " ")
 	}
 
-	if currentInst.Len() > 0 && inQuote {
-		instructions = append(instructions, strings.TrimSpace(currentInst.String()))
+	return strings.TrimSpace(result.String()), newRules
+}
+
+// PrintGrammar prints the grammar rules in a readable format
+func (g *Grammar) PrintGrammar() string {
+	var result strings.Builder
+
+	for name, rule := range g.Rules {
+		result.WriteString(name)
+		result.WriteString(" ::= ")
+		result.WriteString(rule.Definition)
+		result.WriteString("\n")
 	}
 
-	return instructions
+	return result.String()
+}
+
+// ValidateSyntax checks if a string matches the grammar
+func (g *Grammar) ValidateSyntax(input string, startRule string) bool {
+	// Placeholder for a real validation implementation
+	// A proper validation would require a parsing algorithm like LL(1) or recursive descent
+	return true
 }

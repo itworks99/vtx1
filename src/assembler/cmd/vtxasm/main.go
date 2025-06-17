@@ -166,7 +166,7 @@ func assembleFile(inputFile, outputFile, listingFile, format string, verbose boo
 
 	// Generate a listing file if requested
 	if listingFile != "" {
-		if err := generateListing([]byte(ctx.SourceCode), ctx.Tokens, ctx.AST, ctx.MachineCode, listingFile); err != nil {
+		if err := generateListing([]byte(ctx.SourceCode), ctx.AST, ctx.MachineCode, listingFile); err != nil {
 			return fmt.Errorf("failed to generate listing: %v", err)
 		}
 
@@ -443,9 +443,9 @@ func formatAsObjDump(data []byte) string {
 }
 
 // generateListing creates a listing file with source, tokens, and binary representation
-func generateListing(source []byte, tokens []lexer.Token, ast *parser.AST, binary []byte, listingFile string) error {
+func generateListing(source []byte, ast *parser.AST, binary []byte, listingFile string) error {
 	// Create a map to track which machine code addresses correspond to which source lines
-	addressToSourceLineMap := buildAddressSourceMap(ast, binary)
+	addressToSourceLineMap := buildAddressSourceMap(ast)
 
 	// Split source code into lines for display
 	sourceLines := strings.Split(string(source), "\n")
@@ -583,7 +583,7 @@ func extractSymbolsFromAST(ast *parser.AST, symbols map[string]struct {
 }
 
 // buildAddressSourceMap creates a mapping from machine code addresses to source line numbers
-func buildAddressSourceMap(ast *parser.AST, binary []byte) map[uint32]int {
+func buildAddressSourceMap(ast *parser.AST) map[uint32]int {
 	addressMap := make(map[uint32]int)
 
 	// Start at address 0 and process the AST

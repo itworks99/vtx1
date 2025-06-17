@@ -286,7 +286,7 @@ func TestRealAssemblyFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	err := tempFile.Close()
+	err = tempFile.Close()
 	if err != nil {
 		return
 	}

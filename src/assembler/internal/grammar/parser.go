@@ -24,18 +24,6 @@ func NewParser(r io.Reader) *Parser {
 	}
 }
 
-// ParseGrammar parses a full EBNF grammar
-func ParseGrammar(filename string) (*Grammar, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open grammar file: %w", err)
-	}
-	defer file.Close()
-
-	parser := NewParser(file)
-	return parser.Parse()
-}
-
 // Parse parses the grammar from the input
 func (p *Parser) Parse() (*Grammar, error) {
 	grammar := &Grammar{
