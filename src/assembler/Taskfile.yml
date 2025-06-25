@@ -6,7 +6,7 @@ version: "3"
 vars:
   PROJECT_NAME: "VTX assembler"
   DOCS_DIR: docs
-  MAIN_ASM_FILE: cmd/vtxasm/main.go
+  MAIN_ASM_FILE: main.go
   RELEASE_DIR: ../../release
 
 set:
@@ -21,18 +21,39 @@ tasks:
         - echo "Available tasks:"
         - echo "Task Name              Description"
         - echo "---------------------- -------------------------------------------------"
-        - echo "build                  Build the assembler"
         - echo "install                Install dependencies"
+        - echo "build                  Build the assembler"
+        - echo "build-linux            Build the assembler for Linux"
+        - echo "build-osx              Build the assembler for macOS (arm64 and amd64)"
+        - echo "release                Build, package and copy build artifacts"
         - echo "parse                  Parse the assembler source files"
         - echo "clean                  Clean build artifacts"
+        - echo "generate-parser        Regenerate ANTLR parser and lexer"
         silent: true
 
     build:
         desc: Build the assembler
         cmds:
         - echo "Building {{.PROJECT_NAME}}..."
-        - go build -o vtxasm.exe {{.MAIN_ASM_FILE}}
+        - go build -o vtxasm-amd64-win.exe main.go
         - echo "{{.PROJECT_NAME}} build completed successfully."
+        silent: true
+
+    build-linux:
+        desc: Build the assembler for Linux
+        cmds:
+        - echo "Building {{.PROJECT_NAME}} for Linux..."
+        - GOOS=linux GOARCH=amd64 go build -o vtxasm-arm64-linux main.go
+        - echo "{{.PROJECT_NAME}} for Linux build completed successfully."
+        silent: true
+
+    build-osx:
+        desc: Build the assembler for macOS
+        cmds:
+        - echo "Building {{.PROJECT_NAME}} for macOS..."
+        - GOOS=darwin GOARCH=arm64 go build -o vtxasm-arm64-macos main.go
+        - GOOS=darwin GOARCH=amd64 go build -o vtxasm-amd64-macos main.go
+        - echo "{{.PROJECT_NAME}} for macOS build completed successfully."
         silent: true
 
     install:
@@ -42,3 +63,39 @@ tasks:
         - go mod download
         - echo "Dependencies installed successfully."
         silent: true
+
+    release:
+        desc: Build, package and copy build artifacts
+        deps:
+        - build
+        - build-linux
+        - build-osx
+        cmds:
+        - echo "Creating release artifacts for {{.PROJECT_NAME}}..."
+        - zip -r {{.RELEASE_DIR}}/vtxasm-amd64-win.zip vtxasm-amd64-win.exe
+        - zip -r {{.RELEASE_DIR}}/vtxasm-arm64-linux.zip vtxasm-arm64-linux
+        - zip -r {{.RELEASE_DIR}}/vtxasm-arm64-macos.zip vtxasm-arm64-macos
+        - zip -r {{.RELEASE_DIR}}/vtxasm-amd64-macos.zip vtxasm-amd64-macos
+        - echo "Release artifacts created successfully."
+        - echo "Cleaning up build artifacts..."
+        - task: clean
+        silent: true
+
+    clean:
+        desc: Clean build artifacts
+        cmds:
+        - echo "Cleaning build artifacts..."
+        - rm -f vtxasm-amd64-win.exe 2>/dev/null || true
+        - rm -f vtxasm-arm64-linux 2>/dev/null || true
+        - rm -f vtxasm-arm64-macos 2>/dev/null || true
+        - rm -f vtxasm-amd64-macos 2>/dev/null || true
+        - echo "Build artifacts cleaned up."
+        silent: true
+    generate-parser:
+        desc: Regenerate ANTLR parser and lexer from grammar/vtx1_grammar.g4
+        dir: .
+        cmds:
+        - echo "Regenerating ANTLR parser and lexer..."
+        - ./tools/antlr4.sh -Dlanguage=Go -visitor -listener grammar/vtx1_grammar.g4
+        - echo "ANTLR parser and lexer regenerated."
+        silent: false

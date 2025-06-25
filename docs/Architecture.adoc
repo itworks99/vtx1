@@ -1,6 +1,6 @@
 
 = VTX1 Ternary SoC Architecture
-{author} -- version {revnumber}, {revdate}
+version {revnumber}, {revdate}
 :doctype: book
 :title: VTX1 Ternary SoC Architecture
 :description: VTX1 Ternary SoC Architecture
@@ -11,8 +11,17 @@
 :revremark: Initial release
 :url-repo: https://github.com/itworks99/vtx1
 :source-highlighter: rouge
+:rouge-theme: github
 :stem: latexmath
 :toc:
+
+<<<
+== Authors
+[source]
+----
+include::../AUTHORS[]
+----
+<<<
 
 include::overview.adoc[]
 include::system.adoc[]

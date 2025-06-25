@@ -6,13 +6,16 @@ font:
   catalog:
     merge: true
     Fira:
-      normal: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Regular.ttf
-      italic: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Italic.ttf
-      bold: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-Bold.ttf
-      bold-italic: c:\Users\KVany\Projects\vtx1\docs\fonts\Fira\FiraSans-BoldItalic.ttf
+      normal: /home/itworks/Projects/vtx1/docs/fonts/Fira/FiraSans-Regular.ttf
+      italic: /home/itworks/Projects/vtx1/docs/fonts/Fira/FiraSans-Italic.ttf
+      bold: /home/itworks/Projects/vtx1/docs/fonts/Fira/FiraSans-Bold.ttf
+      bold-italic: /home/itworks/Projects/vtx1/docs/fonts/Fira/FiraSans-BoldItalic.ttf
     FiraCode:
-      normal: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Regular.ttf
-      bold: c:\Users\KVany\Projects\vtx1\docs\fonts\FiraCode\FiraCode-Bold.ttf
+      normal: /home/itworks/Projects/vtx1/docs/fonts/FiraCode/FiraCode-Regular.ttf
+      bold: /home/itworks/Projects/vtx1/docs/fonts/FiraCode/FiraCode-Bold.ttf
+title-page:
+  background-image: images/asm_title_page_background.svg
+  font-color: #999999
 heading:
   font-family: Fira
 code:

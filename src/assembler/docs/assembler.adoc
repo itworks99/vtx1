@@ -6,7 +6,18 @@
 :source-highlighter: rouge
 :sectnums:
 :imagesdir: ../images
+:source-highlighter: rouge
+:rouge-theme: github
+:stem: latexmath
+:toc:
 
+<<<
+== Authors
+[source]
+----
+include::../AUTHORS[]
+----
+<<<
 == Introduction
 
 This document provides comprehensive documentation for the VTX1 assembler, which is designed to convert assembly language code into binary machine code for the VTX1 ternary processor.

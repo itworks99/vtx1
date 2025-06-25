@@ -54,7 +54,7 @@ tasks:
   test-consolidated:
     desc: Test complete VTX1 consolidated system
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Testing VTX1 Consolidated System..."
       - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -I src/testbench -o build/vtx1_consolidated_test src/vtx1_top_consolidated.v src/testbench/tb_vtx1_consolidated.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
       - vvp build/vtx1_consolidated_test
@@ -63,11 +63,11 @@ tasks:
   test-optimized:
     desc: "Run optimized consolidated system test with I2C state fix"
     cmds:
-      - powershell -Command "Remove-Item build\* -Force -ErrorAction SilentlyContinue"
-      - powershell -Command "New-Item -ItemType Directory -Path build -Force | Out-Null"
+      - task: os-clean-build
+      - task: os-mkdir-build
       - echo "Compiling VTX1 system with I2C state machine fixes..."
-      - powershell -Command "iverilog -I src\common -I src\cache -o build\vtx1_optimized_test src\vtx1_top_consolidated.v src\testbench\tb_vtx1_consolidated.v src\common\*.v src\cpu\*.v src\memory\*.v src\system\*.v src\cache\*.v"
-      - powershell -Command "if ($LASTEXITCODE -eq 0) { Write-Host 'Running optimized test with I2C fixes...' -ForegroundColor Green; .\build\vtx1_optimized_test } else { Write-Host 'Compilation failed' -ForegroundColor Red }"
+      - task: os-iverilog-optimized
+      - task: os-run-optimized
 
   test-all:
     desc: Run all VTX1 tests
@@ -81,7 +81,7 @@ tasks:
   test-microcode:
     desc: Test microcode system with comprehensive validation
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Testing microcode system..."
       - iverilog -I src/common -I src/cpu -I src/system -I src/testbench -o build/microcode_test src/testbench/tb_microcode_system.v src/cpu/*.v src/common/*.v src/system/*.v
       - vvp build/microcode_test
@@ -90,7 +90,7 @@ tasks:
   test-microcode-simple:
     desc: Quick microcode validation tests
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Running simple microcode tests..."
       - iverilog -g2012 -I src/common -I src/cpu -I src/testbench -o build/microcode_simple_test src/testbench/tb_microcode_simple.v src/cpu/*.v src/common/*.v
       - vvp build/microcode_simple_test
@@ -99,7 +99,7 @@ tasks:
   test-pipeline:
     desc: Test CPU pipeline integration and performance
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Testing CPU pipeline integration..."
       - iverilog -g2012 -I src/common -I src/cpu -I src/testbench -o build/pipeline_test src/testbench/test_integrated_pipeline.v src/cpu/*.v src/common/*.v
       - vvp build/pipeline_test
@@ -109,7 +109,7 @@ tasks:
   test-i2c-fix:
     desc: Test I2C controller state machine fix
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Testing I2C controller with fixed state constants..."
       - iverilog -g2012 -I src/common -o build/i2c_fix_test src/system/i2c_controller.v src/common/vtx1_state_constants.v src/common/vtx1_error_macros.v src/common/ternary_*.v src/common/vtx1_clock_divider.v
       - echo "I2C controller compilation successful - state constants fixed"
@@ -119,7 +119,7 @@ tasks:
     cmds:
       - echo "=== VTX1 System Status Check ==="
       - echo "Available testbenches:"
-      - powershell -Command "Get-ChildItem src\testbench\*.v | Select-Object Name, Length | Format-Table -AutoSize"
+      - task: os-list-testbenches
       - echo "Running quick consolidated test..."
       - task: test-optimized
 
@@ -141,7 +141,7 @@ tasks:
   synth:
     desc: Synthesize VTX1 consolidated design with Yosys
     cmds:
-      - powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+      - task: os-mkdir-build
       - echo "Synthesizing VTX1 Consolidated System..."
       - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_top_consolidated.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/instruction_decoder.v src/cpu/hazard_detection.v src/cpu/microcode_rom.v src/cpu/forwarding_unit.v src/cpu/microcode_sequencer.v src/cpu/cpu_core.v src/cpu/tcu_enhanced_interface.v src/cpu/register_file.v src/memory/memory_controller.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; synth -top vtx1_top_consolidated; write_verilog build/vtx1_consolidated_synth.v; write_json build/vtx1_consolidated_synth.json"
       - echo "VTX1 Consolidated synthesis completed. Output in build/vtx1_consolidated_synth.v"
@@ -150,31 +150,98 @@ tasks:
   clean:
     desc: Clean build artifacts
     cmds:
-      - powershell -Command "Remove-Item -Recurse -Force -Path build -ErrorAction SilentlyContinue"
-      - powershell -Command "Remove-Item -Force -Path *.vcd -ErrorAction SilentlyContinue"
-      - powershell -Command "Remove-Item -Force -Path *.out -ErrorAction SilentlyContinue"
+      - task: os-clean-build
       - echo "Build artifacts cleaned"
 
   doc:
     desc: Generate documentation in PDF
     cmds:
       - echo "Generating documentation..."
-      - asciidoctor-pdf --theme docs/Architecture.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-architecture.pdf" docs/Architecture.adoc
-      - asciidoctor-pdf --theme src/assembler/docs/assembler.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-assembler.pdf" src/assembler/docs/assembler.adoc
+      - task: os-doc-arch
+      - task: os-doc-asm
       - echo "Documentation generated in {{.RELEASE_DIR}}"
 
-  install:
-    desc: Install required tools
+  os-mkdir-build:
+    desc: Create build directory (OS aware)
     cmds:
-      - echo "Installing development tools..."
-      - scoop install iverilog
-      - scoop install yosys
-      - echo "Installing Asciidoctor documentation tools..."
-      - scoop install ruby msys2
-      - ridk install 3
-      - gem install asciidoctor asciidoctor-pdf asciidoctor-diagram rouge bigdecimal
-      - npm install -g @mermaid-js/mermaid-cli
-      - npm install -g wavedrom-cli
-      - npm install -g bytefield-svg
-      - echo "All tools installed successfully."
-    silent: false
+      - |
+        if [ "${OS}" = "windows" ]; then
+          powershell -Command "New-Item -ItemType Directory -Force -Path build | Out-Null"
+        else
+          mkdir -p build
+        fi
+    silent: true
+
+  os-clean-build:
+    desc: Clean build directory and artifacts (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          powershell -Command "Remove-Item -Recurse -Force -Path build -ErrorAction SilentlyContinue"
+          powershell -Command "Remove-Item -Force -Path *.vcd -ErrorAction SilentlyContinue"
+          powershell -Command "Remove-Item -Force -Path *.out -ErrorAction SilentlyContinue"
+        else
+          rm -rf build
+          rm -f *.vcd
+          rm -f *.out
+        fi
+    silent: true
+
+  os-list-testbenches:
+    desc: List testbenches (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          powershell -Command "Get-ChildItem src\testbench\*.v | Select-Object Name, Length | Format-Table -AutoSize"
+        else
+          ls -lh src/testbench/*.v
+        fi
+    silent: true
+
+  os-iverilog-optimized:
+    desc: Compile optimized test (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          powershell -Command "iverilog -I src\common -I src\cache -o build\vtx1_optimized_test src\vtx1_top_consolidated.v src\testbench\tb_vtx1_consolidated.v src\common\*.v src\cpu\*.v src\memory\*.v src\system\*.v src\cache\*.v"
+        else
+          iverilog -I src/common -I src/cache -o build/vtx1_optimized_test src/vtx1_top_consolidated.v src/testbench/tb_vtx1_consolidated.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+        fi
+    silent: true
+
+  os-run-optimized:
+    desc: Run optimized test (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          powershell -Command "if ($LASTEXITCODE -eq 0) { Write-Host 'Running optimized test with I2C fixes...' -ForegroundColor Green; .\build\vtx1_optimized_test } else { Write-Host 'Compilation failed' -ForegroundColor Red }"
+        else
+          ./build/vtx1_optimized_test || echo "Compilation failed"
+        fi
+    silent: true
+
+  os-doc-arch:
+    desc: Generate architecture PDF (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          asciidoctor-pdf --theme docs/Architecture.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-architecture.pdf" docs/Architecture.adoc
+        else
+          export GEM_HOME="$HOME/.gem"; export PATH="$GEM_HOME/ruby/$(ruby -e 'print RUBY_VERSION')/bin:$PATH"; \
+          asciidoctor-pdf --version; \
+          asciidoctor-pdf --theme docs/Architecture.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-architecture.pdf" docs/Architecture.adoc
+        fi
+    silent: true
+
+  os-doc-asm:
+    desc: Generate assembler PDF (OS aware)
+    cmds:
+      - |
+        if [ "${OS}" = "windows" ]; then
+          asciidoctor-pdf --theme src/assembler/docs/assembler.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-assembler.pdf" src/assembler/docs/assembler.adoc
+        else
+          export GEM_HOME="$HOME/.gem"; export PATH="$GEM_HOME/ruby/$(ruby -e 'print RUBY_VERSION')/bin:$PATH"; \
+          asciidoctor-pdf --version; \
+          asciidoctor-pdf --theme src/assembler/docs/assembler.yml -r asciidoctor-diagram -o "{{.RELEASE_DIR}}/vtx1-assembler.pdf" src/assembler/docs/assembler.adoc
+        fi
+    silent: true

@@ -74,9 +74,9 @@ The assembler operates in multiple passes:
 
 == Implementation Choices
 
-=== Programming Language
+=== Programming Language - GoLang
 
-The initial prototype will be implemented in Python for rapid development and ease of maintenance. Key considerations:
+Key considerations:
 
 * Excellent string processing capabilities
 * Rich library ecosystem
