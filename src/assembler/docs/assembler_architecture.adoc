@@ -66,11 +66,22 @@ Generates the final output in the required format:
 
 == Processing Flow
 
-The assembler operates in multiple passes:
+The assembler operates in the following stages:
 
-1. *Pass 1*: Lexical analysis and parsing, build initial symbol table
-2. *Pass 2*: Resolve symbols and calculate addresses
-3. *Pass 3*: Generate code and produce binary output
+1. *Lexical Analysis (ANTLR Lexer)*: Converts source code into tokens using the ANTLR-generated lexer based on `vtx1_grammar.g4`.
+2. *Parsing (ANTLR Parser)*: Parses the token stream into a parse tree using the ANTLR-generated parser. Handles instruction recognition, operand validation, VLIW grouping, and directive processing.
+3. *Symbol Table Management*: Tracks label definitions, references, and symbol resolution, including forward references and address calculation.
+4. *Code Generation*: Converts the parse tree (or AST) into binary machine code, handling VLIW packing, ternary encoding, and directive processing.
+5. *Error Handling*: Collects and reports errors and warnings at each stage, providing line/column/source context.
+6. *Output Formatting*: Generates binary, hex, or objdump output, as well as optional listing and debug information.
+
+=== Module Responsibilities
+
+- `cmd/`: Orchestrates the assembly process, CLI, and high-level flow.
+- `grammar/`: Contains ANTLR grammar and generated lexer/parser code.
+- `internal/` (future): Will contain symbol table, codegen, and supporting logic.
+- `test/`, `examples/`: Contain test cases and sample programs.
+- `docs/`: Contains architecture, syntax, and implementation documentation.
 
 == Implementation Choices
 
@@ -101,3 +112,27 @@ VLIW instructions (multiple operations per instruction word) will be handled thr
 * Automatic validation of illegal operation combinations
 * Resource conflict detection
 * Pipeline hazard warnings
+
+== Module Interfaces
+
+The assembler is structured with clear interfaces between its major components:
+
+=== Lexer/Parser (ANTLR)
+- **Input:** Source code string
+- **Output:** ANTLR parse tree (`antlr.ParseTree`)
+- **Interface:** ANTLR-generated Go interfaces/classes
+
+=== Parser → Codegen
+- **Input:** ANTLR parse tree (and/or custom AST)
+- **Output:** Calls to codegen functions to emit binary
+- **Interface:** Go interface for AST traversal and code emission
+
+=== Symbol Table
+- **Input:** Label definitions, references, and directives from parser
+- **Output:** Resolved addresses and symbol errors
+- **Interface:** Go struct with lookup, insert, and resolve methods
+
+=== Error Handling
+- **Input:** Errors from lexer, parser, codegen, and symbol table
+- **Output:** Aggregated error/warning list with context
+- **Interface:** Go struct with methods for add, summarize, and report

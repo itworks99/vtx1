@@ -123,12 +123,6 @@ func (s *Basevtx1_grammarListener) EnterDataList(ctx *DataListContext) {}
 // ExitDataList is called when production dataList is exited.
 func (s *Basevtx1_grammarListener) ExitDataList(ctx *DataListContext) {}
 
-// EnterDataItem is called when production dataItem is entered.
-func (s *Basevtx1_grammarListener) EnterDataItem(ctx *DataItemContext) {}
-
-// ExitDataItem is called when production dataItem is exited.
-func (s *Basevtx1_grammarListener) ExitDataItem(ctx *DataItemContext) {}
-
 // EnterMacroDefinition is called when production macroDefinition is entered.
 func (s *Basevtx1_grammarListener) EnterMacroDefinition(ctx *MacroDefinitionContext) {}
 
@@ -140,9 +134,3 @@ func (s *Basevtx1_grammarListener) EnterMacroBody(ctx *MacroBodyContext) {}
 
 // ExitMacroBody is called when production macroBody is exited.
 func (s *Basevtx1_grammarListener) ExitMacroBody(ctx *MacroBodyContext) {}
-
-// EnterLabelledDirective is called when production labelledDirective is entered.
-func (s *Basevtx1_grammarListener) EnterLabelledDirective(ctx *LabelledDirectiveContext) {}
-
-// ExitLabelledDirective is called when production labelledDirective is exited.
-func (s *Basevtx1_grammarListener) ExitLabelledDirective(ctx *LabelledDirectiveContext) {}

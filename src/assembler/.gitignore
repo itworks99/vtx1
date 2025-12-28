@@ -31,3 +31,8 @@ go.work.sum
 *linux*
 
 __pycache__
+
+# Misc
+
+debug_output.txt
+*.bin

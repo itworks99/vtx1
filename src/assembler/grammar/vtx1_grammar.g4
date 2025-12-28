@@ -7,11 +7,15 @@ options {
 // === Parser Rules ===
 
 program
-    : line* EOF
+    : (line | blankLine)* (END_DIRECTIVE (EOL)?)? EOF
     ;
 
 line
-    : label? (instruction | directive | vliwInstruction)? comment? EOL
+    : (label | instruction | directive | labelledDirective | vliwInstruction | macroDefinition | comment) (comment)? EOL
+    ;
+
+blankLine
+    : EOL
     ;
 
 label
@@ -50,10 +54,15 @@ operand
     | immediate
     | memoryOperand
     | IDENTIFIER
+    | IDENTIFIER PLUS immediate
+    | IDENTIFIER PLUS IDENTIFIER
+    | immediate PLUS IDENTIFIER
+    | immediate PLUS immediate
     ;
 
 register
-    : GPR
+    : TB_REG
+    | GPR
     | SPECIAL_REG
     | VECTOR_REG
     | FP_REG
@@ -94,12 +103,28 @@ directive
     ;
 
 dataList
-    : immediate (COMMA immediate)*
+    : dataItem (COMMA dataItem)*
+    ;
+
+dataItem
+    : immediate
+    | STRING
+    ;
+
+// Macro definition
+macroDefinition
+    : MACRO_DIRECTIVE IDENTIFIER (IDENTIFIER)* EOL
+      macroBody
+      ENDM_DIRECTIVE EOL
+    ;
+
+macroBody
+    : line+
     ;
 
 // === Lexer Rules ===
 
-WHITESPACE      : [ \t\r\n]+ -> channel(HIDDEN);
+WHITESPACE      : [ \t]+ -> channel(HIDDEN);
 COMMENT         : ';' ~[\r\n]*;
 EOL             : ('\r'? '\n')+;
 
@@ -141,8 +166,8 @@ COMPLEX_MEM     : 'CACHE' | 'FLUSH' | 'MEMBAR';
 COMPLEX_SYS     : 'SYSCALL' | 'BREAK' | 'HALT';
 
 // Registers
-GPR             : 'T'[0-6];
 TB_REG          : 'TB';
+GPR             : 'T'[0-6];
 SPECIAL_REG     : 'TA' | 'TC' | 'TS' | 'TI';
 VECTOR_REG      : 'VA' | 'VT' | 'VB';
 FP_REG          : 'FA' | 'FT' | 'FB';
@@ -169,6 +194,14 @@ INCLUDE_DIRECTIVE : '.INCLUDE';
 SECTION_DIRECTIVE : '.SECTION';
 ALIGN_DIRECTIVE : '.ALIGN';
 SPACE_DIRECTIVE : '.SPACE';
-
-// Identifiers
+END_DIRECTIVE   : 'END';
 IDENTIFIER      : [a-zA-Z_] [a-zA-Z0-9_]*;
+
+// Add lexer rules for macros
+MACRO_DIRECTIVE : '.MACRO';
+ENDM_DIRECTIVE  : '.ENDM';
+
+// Add this rule after label:
+labelledDirective
+    : IDENTIFIER (COLON)? directive
+    ;

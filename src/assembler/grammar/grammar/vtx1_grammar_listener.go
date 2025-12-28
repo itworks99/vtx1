@@ -59,17 +59,11 @@ type vtx1_grammarListener interface {
 	// EnterDataList is called when entering the dataList production.
 	EnterDataList(c *DataListContext)
 
-	// EnterDataItem is called when entering the dataItem production.
-	EnterDataItem(c *DataItemContext)
-
 	// EnterMacroDefinition is called when entering the macroDefinition production.
 	EnterMacroDefinition(c *MacroDefinitionContext)
 
 	// EnterMacroBody is called when entering the macroBody production.
 	EnterMacroBody(c *MacroBodyContext)
-
-	// EnterLabelledDirective is called when entering the labelledDirective production.
-	EnterLabelledDirective(c *LabelledDirectiveContext)
 
 	// ExitProgram is called when exiting the program production.
 	ExitProgram(c *ProgramContext)
@@ -122,15 +116,9 @@ type vtx1_grammarListener interface {
 	// ExitDataList is called when exiting the dataList production.
 	ExitDataList(c *DataListContext)
 
-	// ExitDataItem is called when exiting the dataItem production.
-	ExitDataItem(c *DataItemContext)
-
 	// ExitMacroDefinition is called when exiting the macroDefinition production.
 	ExitMacroDefinition(c *MacroDefinitionContext)
 
 	// ExitMacroBody is called when exiting the macroBody production.
 	ExitMacroBody(c *MacroBodyContext)
-
-	// ExitLabelledDirective is called when exiting the labelledDirective production.
-	ExitLabelledDirective(c *LabelledDirectiveContext)
 }

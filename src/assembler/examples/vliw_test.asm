@@ -1,0 +1,4 @@
+[ADD T0, T1, T2] [NOP] [ADD T3, T4, T5]
+
+END
+

@@ -31,7 +31,7 @@ tasks:
         - echo "generate-parser        Regenerate ANTLR parser and lexer"
         silent: true
 
-    build:
+    build-win:
         desc: Build the assembler
         cmds:
         - echo "Building {{.PROJECT_NAME}}..."
@@ -39,7 +39,7 @@ tasks:
         - echo "{{.PROJECT_NAME}} build completed successfully."
         silent: true
 
-    build-linux:
+    build:
         desc: Build the assembler for Linux
         cmds:
         - echo "Building {{.PROJECT_NAME}} for Linux..."
@@ -67,7 +67,7 @@ tasks:
     release:
         desc: Build, package and copy build artifacts
         deps:
-        - build
+        - build-win
         - build-linux
         - build-osx
         cmds:
