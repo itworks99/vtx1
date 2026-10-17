@@ -4,22 +4,28 @@
 
 # VTX1 Ternary SoC
 
-A personal project for a hardware-optimized, balanced ternary logic-based System-on-Chip (SoC) designed for both FPGA prototyping and silicon fabrication. VTX1 explores the possibilities of ternary logic and implements a complete code-to-silicon development chain.
+A personal project: a balanced-ternary System-on-Chip with a complete, verified code-to-silicon chain. The same trit-encoded binary assembles, runs in the ISA simulator, executes on the CPU RTL, and executes through the full SoC — and all of them agree.
+
+```
+$ task test-soc
+SoC says: "Hello, VTX1!"
+Cycles: 911  Retired: 93
+PASS: VTX1 SoC executed hello_world end to end
+```
 
 ---
 
 ## Table of Contents
 
 - [Project Description](#project-description)
-- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Toolchain](#toolchain)
 - [Project Status](#project-status)
-- [Implementation](#implementation)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
+- [Project Layout](#project-layout)
 - [Documentation](#documentation)
 - [Build, Develop and Contribute](#build-develop-and-contribute)
-- [Versioning](#versioning)
-- [Changelog](#changelog)
 - [License](#license)
 - [Contact](#contact)
 
@@ -27,96 +33,121 @@ A personal project for a hardware-optimized, balanced ternary logic-based System
 
 ## Project Description
 
-VTX1 leverages the computational advantages of balanced ternary logic (trits: -1, 0, +1, represented digitally using standard CMOS voltage levels) to achieve efficient computation, analog compatibility, and seamless integration with modern embedded systems.
+VTX1 explores what a computer looks like when its number system is balanced ternary (trits: −1, 0, +1). The machine is binary on the outside — ordinary buses, memories, and I/O carry trits as 2-bit pairs — and ternary on the inside: the instruction set, registers, arithmetic, and addressing are all native balanced ternary.
 
-### Included Components
+That buys properties binary machines have to work for:
 
-- Verilog source files
-- Assembler, compiler, and ISA description
-- Microcode for the CPU
-- Testbench and validation suite
-- Documentation (asciidoc format)
+- **Negation is free** (tritwise flip, no carry) — subtraction is addition
+- **Multiplication is natively Booth-encoded** — multiplier digits are already {−1, 0, +1}
+- **Truncation rounds to nearest** — lower error accumulation in MAC chains
+- **Symmetric number range** — no `abs(INT_MIN)` overflow class of bugs
+- **Three-way compare is native** — one `CMP` yields the full sign (−1/0/+1)
+- **Signed-by-construction** — "unsigned" doesn't exist, so neither do its bugs
 
-## Key Features
+## Architecture
 
-- **Balanced ternary logic** internally, with binary interfaces externally
-- **Optimized for mathematical operations** and signal processing
-- **Vector processing capabilities** for enhanced performance
-- **Low power consumption** via efficient ternary operations
-- **FPGA-ready design** with silicon fabrication considerations
-- **Complete toolchain** from RTL to documentation generation
+- **18-trit machine words** (36 bits at 2 bits/trit), word-addressed memory
+- **Trit-native ISA**: 4-trit opcodes (69 assigned, 12 reserved of the 3⁴ space), balanced-ternary immediates and PC-relative branches, a TZ zero register, negative addresses reserved for MMIO. The all-zero-trit word is NOP.
+- **VLIW bundles**: 3 operation words = 54 trits = 108 bits, with assembler-enforced packing rules
+- **No microcode**: hardwired control plus dedicated multi-cycle units (divider, vector reductions). Transcendentals are software over the ternary primitives.
+- **Single source of truth**: the entire ISA lives in [`src/assembler/isa/isa.go`](src/assembler/isa/isa.go); the Verilog constants and decode tables are generated from it, so the toolchain and the RTL cannot drift apart.
+
+The RTL (`src/`) is plain Verilog, simulated with Icarus: `vtx1_decoder` (combinational trit-native decoder), `vtx1_core` (multi-cycle CPU with a bus-handshake memory port), and `vtx1_soc` (the full chip: bus matrix, memory controller, cache, UART/SPI/I2C/GPIO/DMA, debug/JTAG, external SRAM pins).
+
+## Toolchain
+
+Written in Go, under `src/assembler/`:
+
+- **`vtxasm`** — assembler with a preprocessor (`.INCLUDE`, parameterized `.MACRO`), VLIW packing validation (resource conflicts are errors, read-after-write hazards are warnings), and output as raw words, VLIW bundles, Intel HEX, a trit-level `objdump` disassembly, or `$readmemh` memory images
+- **`vtxsim`** — ISA-level simulator with balanced-ternary semantics; reports dynamic instruction counts, memory traffic, and branch behavior for architecture evaluation
+- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results, the basis for the planned equal-information comparison against a binary RISC-V control core
+
+The chain is kept honest by cross-checks at every seam: the Verilog decoder is tested against real assembler output word by word, and the RTL core's retired-instruction count must match the simulator exactly.
 
 ## Project Status
 
-**✅ Completed:**
-- Core ternary arithmetic and logic modules
-- CPU pipeline (hardwired control; the microcode sequencer is retired in favor of dedicated multi-cycle units)
-- Memory controller and cache system
-- I/O controllers (UART, SPI, I2C, GPIO, DMA)
-- Complete build and test automation with Taskfile
-- Comprehensive test suite with multiple validation scenarios
-- Synthesis flow optimized for die production (JSON output)
-- Documentation framework with PDF generation
+**✅ Working today:**
+- Trit-native ISA, single-sourced, with generated Verilog headers
+- Assembler, ISA simulator, and benchmark suite (all Go-tested)
+- CPU RTL executing programs, cross-checked against the simulator
+- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins
+- Build and test automation with Taskfile; Yosys synthesis flow
 
-**🚧 In Progress:**
-- System integration testing and optimization
-- I2C state machine fixes and validation
-- Physical design preparation for silicon
+**🚧 In progress:**
+- RISC-V control-core benchmarks (the binary side of the ternary-vs-binary comparison)
+- Performance: tightly-coupled instruction RAM, parallel VLIW bundle issue (SoC CPI is ~9.8 today)
+- Stack ABI (PUSH/POP), iterative divider FSM for synthesis
 
 **🔮 Planned:**
-- OpenROAD/OpenLane integration for place & route
-- FPGA prototype validation on development boards
-- Silicon tape-out preparation with SkyWater 130nm PDK
-- Advanced debugging and monitoring features
-
-## Implementation
-
-VTX1 is written in [Icarus Verilog](https://bleyer.org/icarus/), a free compiler for the IEEE-1364 Verilog hardware description language.
-
-The project uses a [Taskfile](https://taskfile.dev/) build system for automation.
+- SPICE-characterized ternary cells on SkyWater 130nm device models (circuit-level evaluation)
+- Ternary-weight MAC/matrix accelerator (weights in {−1, 0, +1} need no multipliers)
+- OpenROAD/OpenLane place & route; FPGA demonstrator
 
 ## Prerequisites
 
-- [Icarus Verilog](https://bleyer.org/icarus/)
-- [Taskfile](https://taskfile.dev/)
-- Python 3.x (for scripts and tooling)
-- Make (for some build steps)
-- Git
+- [Go](https://go.dev/) 1.24+ (assembler, simulator, ISA generator)
+- [Icarus Verilog](https://bleyer.org/icarus/) (RTL simulation)
+- [Task](https://taskfile.dev/) (build automation)
+- Optional: Java (only to regenerate the ANTLR parser), [Yosys](https://yosyshq.net/yosys/) (synthesis), GTKWave (waveforms)
 
 ## Quick Start
 
-Clone this repository and build the project:
-
 ```sh
-git clone https://github.com/yourusername/vtx1.git
+git clone https://github.com/itworks99/vtx1.git
 cd vtx1
-task build
+
+task test-all      # decoder vs assembler output, hello_world on the CPU RTL,
+                   # hello_world through the full SoC
+
+task bench         # Tier A benchmarks in the ISA simulator
+task sim-hello     # assemble + run hello_world in vtxsim
 ```
 
-To run tests:
+Assemble and inspect a program by hand:
 
 ```sh
-task test
+cd src/assembler && go build -o vtxasm . && cd ../..
+src/assembler/vtxasm -f objdump -o hello.dump src/assembler/examples/hello_world.asm
+```
+
+```
+word      trits               disassembly
+--------  ------------------  -----------
+00000000  -+0+---00+-0-0-+-0  LEA T0, 0x100E
+00000001  -+0+--000++-+-0++-  LEA T1, 0x2000
+00000004  0-0--0-+--00000+-0  BEQ T3, 0, PC+6
+00000006  ---0------+000000+  ADD T0, T0, 1
+```
+
+Toolchain unit and execution tests:
+
+```sh
+cd src/assembler && go test ./...
+```
+
+## Project Layout
+
+```
+src/assembler/        Go toolchain: assembler, ISA definition, simulator, benchmarks
+src/assembler/isa/    THE ISA - single source of truth + Verilog header generator
+src/cpu/              vtx1_decoder.v, vtx1_core.v (trit-native, no microcode)
+src/common/           ternary arithmetic/logic + generated ISA headers
+src/memory/ src/cache/ src/system/   memory controller, cache, bus matrix, peripherals
+src/vtx1_soc.v        the SoC top level
+src/testbench/        decoder, core, and full-SoC testbenches
+docs/                 architecture documentation (AsciiDoc)
 ```
 
 ## Documentation
 
-Comprehensive documentation is available in the `/docs` directory. The documentation is written in asciidoc format and can be generated in both HTML and PDF formats:
-
-- [Architecture Specification](docs/Architecture.adoc) — Detailed architecture description
-- [PDF version](release/vtx1-architecture.pdf) of the document
+- [Architecture Specification](docs/Architecture.adoc) ([PDF](release/vtx1-architecture.pdf))
+- [Instruction encoding](src/assembler/docs/vliw_encoding.adoc) — the trit-native format reference
+- [Benchmark methodology and results](src/assembler/benchmarks/README.md)
+- [`src/assembler/todo.md`](src/assembler/todo.md) — detailed design notes and decision log
 
 ## Build, Develop and Contribute
 
 Contributions are welcome! See [CONTRIBUTE.MD](CONTRIBUTE.MD) for guidelines.
-
-## Versioning
-
-This project uses [Semantic Versioning](https://semver.org/). Version tags are managed via Git and published on the [GitHub Releases](https://github.com/itworks99/vtx1/releases) page.
-
-## Changelog
-
-All notable changes are documented in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
