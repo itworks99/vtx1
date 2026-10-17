@@ -12,9 +12,9 @@
 ;===============================================================================
 main:
         ; Initialize registers
-        LD T0, string        ; Load address of string
-        LD T1, 0x2000        ; Destination address for output
-        LD T2, 0             ; Initialize counter
+        LEA T0, string       ; Load address of string
+        LEA T1, 0x2000       ; Destination address for output
+        LEA T2, 0            ; Initialize counter
 
 loop:
         LD T3, [T0]          ; Load character from string
@@ -31,7 +31,7 @@ done:
         ST T2, 0x2100
 
         ; Signal completion (store 1 at 0x2104 to indicate program finished)
-        LD T0, 1
+        LEA T0, 1
         ST T0, 0x2104
 
         ; Wait for further instructions

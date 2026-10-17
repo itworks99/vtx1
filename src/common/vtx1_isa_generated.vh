@@ -135,4 +135,23 @@
 `define VTX1_REG_FB  6'b01_10_10  // 0++ (index 17)
 `define VTX1_REG_TZ  6'b10_00_00  // +-- (index 18)
 
+// Operand formats
+`define VTX1_FMT_NONE   3'd0
+`define VTX1_FMT_R3     3'd1
+`define VTX1_FMT_R2     3'd2
+`define VTX1_FMT_R1     3'd3
+`define VTX1_FMT_MEM    3'd4
+`define VTX1_FMT_BRANCH 3'd5
+`define VTX1_FMT_JUMP   3'd6
+`define VTX1_FMT_BAD    3'd7
+
+// Operation categories
+`define VTX1_CAT_ALU  3'd0
+`define VTX1_CAT_MEM  3'd1
+`define VTX1_CAT_CTRL 3'd2
+`define VTX1_CAT_VEC  3'd3
+`define VTX1_CAT_FP   3'd4
+`define VTX1_CAT_SYS  3'd5
+
+
 `endif // VTX1_ISA_GENERATED_VH

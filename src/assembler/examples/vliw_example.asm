@@ -12,12 +12,12 @@
 ;===============================================================================
 main:
         ; Initialize array data
-        LD TB, array_data    ; Base pointer to array
+        LEA TB, array_data   ; Base pointer to array
         LD T0, array_length  ; Number of elements
-        LD T1, 0             ; Initialize sum to 0
-        LD T2, 0             ; Initialize index to 0
-        LD T3, 0             ; Initialize max to 0
-        LD T4, 0             ; Initialize min to 0
+        LEA T1, 0            ; Initialize sum to 0
+        LEA T2, 0            ; Initialize index to 0
+        LEA T3, 0            ; Initialize max to 0
+        LEA T4, 0            ; Initialize min to 0
 
         ; Set initial min value (first array element)
         LD T4, [TB]
@@ -78,7 +78,7 @@ check_loop:
         ST T5, result_avg
 
         ; Signal completion
-        LD T0, 1
+        LEA T0, 1
         ST T0, 0x2000
 
         ; End program

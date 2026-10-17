@@ -1,7 +1,6 @@
 // Code generated from grammar/vtx1_grammar.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package parser // vtx1_grammar
-
 import (
 	"fmt"
 	"strconv"
@@ -412,6 +411,16 @@ func (s *ProgramContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *ProgramContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitProgram(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) Program() (localctx IProgramContext) {
 	localctx = NewProgramContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 0, vtx1_grammarParserRULE_program)
@@ -730,6 +739,16 @@ func (s *LineContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *LineContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitLine(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) Line() (localctx ILineContext) {
 	localctx = NewLineContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 2, vtx1_grammarParserRULE_line)
@@ -894,6 +913,16 @@ func (s *BlankLineContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *BlankLineContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitBlankLine(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) BlankLine() (localctx IBlankLineContext) {
 	localctx = NewBlankLineContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 4, vtx1_grammarParserRULE_blankLine)
@@ -992,6 +1021,16 @@ func (s *LabelContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *LabelContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitLabel(s)
+	}
+}
+
+func (s *LabelContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitLabel(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -1096,6 +1135,16 @@ func (s *CommentContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *CommentContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitComment(s)
+	}
+}
+
+func (s *CommentContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitComment(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -1257,6 +1306,16 @@ func (s *InstructionContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *InstructionContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitInstruction(s)
+	}
+}
+
+func (s *InstructionContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitInstruction(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -1451,6 +1510,16 @@ func (s *VliwInstructionContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *VliwInstructionContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitVliwInstruction(s)
+	}
+}
+
+func (s *VliwInstructionContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitVliwInstruction(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -1667,6 +1736,16 @@ func (s *MnemonicContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *MnemonicContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitMnemonic(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) Mnemonic() (localctx IMnemonicContext) {
 	localctx = NewMnemonicContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 14, vtx1_grammarParserRULE_mnemonic)
@@ -1852,6 +1931,16 @@ func (s *OperandContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *OperandContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitOperand(s)
+	}
+}
+
+func (s *OperandContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitOperand(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -2096,6 +2185,16 @@ func (s *RegisterContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *RegisterContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitRegister(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) Register() (localctx IRegisterContext) {
 	localctx = NewRegisterContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 18, vtx1_grammarParserRULE_register)
@@ -2258,6 +2357,16 @@ func (s *MemoryOperandContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *MemoryOperandContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitMemoryOperand(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) MemoryOperand() (localctx IMemoryOperandContext) {
 	localctx = NewMemoryOperandContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 20, vtx1_grammarParserRULE_memoryOperand)
@@ -2414,6 +2523,16 @@ func (s *BaseRegisterContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *BaseRegisterContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitBaseRegister(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) BaseRegister() (localctx IBaseRegisterContext) {
 	localctx = NewBaseRegisterContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 22, vtx1_grammarParserRULE_baseRegister)
@@ -2512,6 +2631,16 @@ func (s *IndexRegisterContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *IndexRegisterContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitIndexRegister(s)
+	}
+}
+
+func (s *IndexRegisterContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitIndexRegister(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -2623,6 +2752,16 @@ func (s *OffsetImmediateContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *OffsetImmediateContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitOffsetImmediate(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) OffsetImmediate() (localctx IOffsetImmediateContext) {
 	localctx = NewOffsetImmediateContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 26, vtx1_grammarParserRULE_offsetImmediate)
@@ -2727,6 +2866,16 @@ func (s *ImmediateContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *ImmediateContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitImmediate(s)
+	}
+}
+
+func (s *ImmediateContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitImmediate(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -2907,6 +3056,16 @@ func (s *DirectiveContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *DirectiveContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitDirective(s)
+	}
+}
+
+func (s *DirectiveContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitDirective(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -3185,6 +3344,16 @@ func (s *DataListContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *DataListContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitDataList(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) DataList() (localctx IDataListContext) {
 	localctx = NewDataListContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 32, vtx1_grammarParserRULE_dataList)
@@ -3321,6 +3490,16 @@ func (s *DataItemContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *DataItemContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitDataItem(s)
+	}
+}
+
+func (s *DataItemContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitDataItem(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -3479,6 +3658,16 @@ func (s *MacroDefinitionContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *MacroDefinitionContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitMacroDefinition(s)
+	}
+}
+
+func (s *MacroDefinitionContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitMacroDefinition(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 
@@ -3678,6 +3867,16 @@ func (s *MacroBodyContext) ExitRule(listener antlr.ParseTreeListener) {
 	}
 }
 
+func (s *MacroBodyContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitMacroBody(s)
+
+	default:
+		return t.VisitChildren(s)
+	}
+}
+
 func (p *vtx1_grammarParser) MacroBody() (localctx IMacroBodyContext) {
 	localctx = NewMacroBodyContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 38, vtx1_grammarParserRULE_macroBody)
@@ -3807,6 +4006,16 @@ func (s *LabelledDirectiveContext) EnterRule(listener antlr.ParseTreeListener) {
 func (s *LabelledDirectiveContext) ExitRule(listener antlr.ParseTreeListener) {
 	if listenerT, ok := listener.(vtx1_grammarListener); ok {
 		listenerT.ExitLabelledDirective(s)
+	}
+}
+
+func (s *LabelledDirectiveContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
+	switch t := visitor.(type) {
+	case vtx1_grammarVisitor:
+		return t.VisitLabelledDirective(s)
+
+	default:
+		return t.VisitChildren(s)
 	}
 }
 

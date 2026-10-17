@@ -1,7 +1,6 @@
 // Code generated from grammar/vtx1_grammar.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package parser // vtx1_grammar
-
 import "github.com/antlr4-go/antlr/v4"
 
 // A complete Visitor for a parse tree produced by vtx1_grammarParser.
@@ -59,9 +58,15 @@ type vtx1_grammarVisitor interface {
 	// Visit a parse tree produced by vtx1_grammarParser#dataList.
 	VisitDataList(ctx *DataListContext) interface{}
 
+	// Visit a parse tree produced by vtx1_grammarParser#dataItem.
+	VisitDataItem(ctx *DataItemContext) interface{}
+
 	// Visit a parse tree produced by vtx1_grammarParser#macroDefinition.
 	VisitMacroDefinition(ctx *MacroDefinitionContext) interface{}
 
 	// Visit a parse tree produced by vtx1_grammarParser#macroBody.
 	VisitMacroBody(ctx *MacroBodyContext) interface{}
+
+	// Visit a parse tree produced by vtx1_grammarParser#labelledDirective.
+	VisitLabelledDirective(ctx *LabelledDirectiveContext) interface{}
 }

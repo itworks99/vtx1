@@ -1,7 +1,6 @@
 // Code generated from grammar/vtx1_grammar.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package parser // vtx1_grammar
-
 import "github.com/antlr4-go/antlr/v4"
 
 type Basevtx1_grammarVisitor struct {
@@ -76,10 +75,18 @@ func (v *Basevtx1_grammarVisitor) VisitDataList(ctx *DataListContext) interface{
 	return v.VisitChildren(ctx)
 }
 
+func (v *Basevtx1_grammarVisitor) VisitDataItem(ctx *DataItemContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *Basevtx1_grammarVisitor) VisitMacroDefinition(ctx *MacroDefinitionContext) interface{} {
 	return v.VisitChildren(ctx)
 }
 
 func (v *Basevtx1_grammarVisitor) VisitMacroBody(ctx *MacroBodyContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
+func (v *Basevtx1_grammarVisitor) VisitLabelledDirective(ctx *LabelledDirectiveContext) interface{} {
 	return v.VisitChildren(ctx)
 }

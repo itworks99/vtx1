@@ -173,7 +173,7 @@ VECTOR_REG      : 'VA' | 'VT' | 'VB';
 FP_REG          : 'FA' | 'FT' | 'FB';
 
 // Literals
-DECIMAL         : [0-9]+;
+DECIMAL         : '-'? [0-9]+;
 HEXADECIMAL     : '0x' [0-9a-fA-F]+;
 BINARY          : '0b' [01]+;
 TERNARY         : '0t' [+\-0]+;

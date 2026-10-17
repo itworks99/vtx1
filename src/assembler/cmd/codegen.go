@@ -14,10 +14,24 @@ import (
 // words, and each data item one word.
 type CodeGenerator struct {
 	Output      []byte
+	Words       []EmittedWord // every emitted word with its address (preserves .ORG layout)
 	SymbolTable *SymbolTable
 	CurrentAddr uint32 // in words
 	Labels      map[string]uint32
 	Equs        map[string]uint32
+}
+
+// EmittedWord is one 18-trit machine word at its word address.
+type EmittedWord struct {
+	Addr uint32
+	Data []byte // isa.WordBytes bytes
+}
+
+// appendWord records one encoded word at the current address and advances it.
+func (cg *CodeGenerator) appendWord(data []byte) {
+	cg.Output = append(cg.Output, data...)
+	cg.Words = append(cg.Words, EmittedWord{Addr: cg.CurrentAddr, Data: data})
+	cg.CurrentAddr++
 }
 
 // NewCodeGenerator creates a new code generator with the given symbol table.
@@ -105,6 +119,7 @@ func dataItemCount(params []OperandNode) int {
 // Pass 2: Emit code/data, resolving symbols
 func (cg *CodeGenerator) Generate(ast *AST) error {
 	cg.Output = make([]byte, 0)
+	cg.Words = nil
 	cg.CurrentAddr = 0
 	cg.Labels = make(map[string]uint32)
 	cg.Equs = make(map[string]uint32)
@@ -163,8 +178,7 @@ func (cg *CodeGenerator) emitInstruction(instr *InstructionNode) error {
 	if err != nil {
 		return err
 	}
-	cg.Output = append(cg.Output, slot.Bytes()...)
-	cg.CurrentAddr++
+	cg.appendWord(slot.Bytes())
 	return nil
 }
 
@@ -238,8 +252,9 @@ func (cg *CodeGenerator) emitVLIWInstruction(vliw *VLIWInstructionNode) error {
 		}
 	}
 
-	cg.Output = append(cg.Output, bundle...)
-	cg.CurrentAddr += isa.VLIWSlots
+	for i := 0; i < isa.VLIWSlots; i++ {
+		cg.appendWord(bundle[i*isa.WordBytes : (i+1)*isa.WordBytes])
+	}
 	return nil
 }
 
@@ -314,8 +329,7 @@ func (cg *CodeGenerator) emitDataWord(v int64, line int) error {
 	if err != nil {
 		return fmt.Errorf("data value at line %d: %v", line, err)
 	}
-	cg.Output = append(cg.Output, isa.EncodeTrits(trits)...)
-	cg.CurrentAddr++
+	cg.appendWord(isa.EncodeTrits(trits))
 	return nil
 }
 

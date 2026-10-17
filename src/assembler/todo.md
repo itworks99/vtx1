@@ -206,7 +206,17 @@ The VTX1 assembler processes input in the following stages:
 - Memory is word-addressed; immediates, addresses and branch offsets are balanced ternary and therefore naturally signed (branches are PC-relative ±3280 words, direct addresses ±29524, jumps ±2391484; negative addresses reserved for MMIO).
 - TZ (index 18) is the architectural zero register; it encodes compare-against-zero branches and plain `[base]` addressing.
 - All example programs assemble end to end as valid trit streams (`cmd/integration_test.go` covers every example x word size x format).
-- NEXT STEP (hardware): rewrite `src/cpu/instruction_decoder.v` field extraction and opcode compares against the generated header, and update the microcode dispatch values to match. Until then, assembled binaries do not execute on the RTL.
+- `LD` always reads memory; load-immediate is spelled `LEA` (the effective address of a direct operand is the immediate). The examples use this convention.
+- The assembler also emits Verilog memory images (`-f memh`: 36-bit words with @address markers preserving the .ORG layout) for $readmemh and the simulator.
+
+---
+
+## Decoder & Simulator Note
+
+- `src/cpu/vtx1_decoder.v` is the trit-native hardware decoder (combinational slot decoder + 3-slot bundle wrapper), built on the generated headers (`vtx1_isa_generated.vh` defines, `vtx1_isa_decode.vh` per-opcode format/category table). `task test-decoder` assembles hello_world and verifies the RTL decode of every word against the ISA - the toolchain <-> RTL contract test.
+- `vtxsim` (src/assembler/vtxsim, engine in src/assembler/sim) is the ISA-level simulator: executes memh images with balanced-ternary semantics and reports dynamic instruction counts, memory traffic and branch behavior. `task sim-hello` runs hello_world ("Hello, VTX1!" lands at 0x2000); `task bench` runs the Tier A kernels in src/assembler/benchmarks (results asserted by `go test -run TestBenchmarkKernels`).
+- Provisional ABI decisions to ratify: TA is the link register (JAL/JALR/CALL write it, RET jumps to it); PUSH/POP trap until a stack ABI is defined; BLTU/BGEU execute as signed (unsigned comparison is meaningless in balanced ternary - consider removing them from the ISA).
+- NEXT STEP (hardware): port cpu_core/microcode_sequencer to vtx1_decoder (the old instruction_decoder.v still implements the dead binary format), then run hello_world on the RTL and cross-check cycle counts against vtxsim instruction counts.
 
 ---
 

@@ -20,14 +20,14 @@
 
 ; Signal completion through the status port
 .MACRO DONE
-        LD T6, 1
+        LEA T6, 1
         ST T6, STATUS_PORT
 .ENDM
 
         .ORG 0x1000
 
 main:
-        LD T0, 42            ; Load a value
+        LEA T0, 42           ; Load a value
         MOV T1, T0           ; Macro: expands to ADD T1, T0, 0
         STORE_PAIR T0, T1, OUTPUT_PORT
         DONE

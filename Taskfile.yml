@@ -105,6 +105,38 @@ tasks:
       - vvp build/pipeline_test
       - echo "CPU pipeline tests completed. View waveforms with gtkwave pipeline_test.vcd"
 
+  test-decoder:
+    desc: Verify trit-native decoder against real assembler output
+    cmds:
+      - task: os-mkdir-build
+      - echo "Building VTX1 assembler..."
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - echo "Assembling hello_world.asm to a memory image..."
+      - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
+      - echo "Running trit-native decoder testbench..."
+      - iverilog -g2012 -I src/common -o build/vtx1_decoder_test src/cpu/vtx1_decoder.v src/testbench/tb_vtx1_decoder.v
+      - vvp build/vtx1_decoder_test
+
+  bench:
+    desc: Run Tier A architecture benchmarks in the ISA simulator
+    cmds:
+      - task: os-mkdir-build
+      - cd src/assembler && go build -o ../../build/vtxasm . && go build -o ../../build/vtxsim ./vtxsim
+      - ./build/vtxasm -f memh -o build/dot_product.memh src/assembler/benchmarks/dot_product.asm
+      - ./build/vtxasm -f memh -o build/sign_count.memh src/assembler/benchmarks/sign_count.asm
+      - ./build/vtxasm -f memh -o build/abs_sum.memh src/assembler/benchmarks/abs_sum.asm
+      - echo "=== dot_product (expect -107) ===" && ./build/vtxsim -dump 0x1200:1 build/dot_product.memh
+      - echo "=== sign_count (expect 6/4/6) ===" && ./build/vtxsim -dump 0x1200:3 build/sign_count.memh
+      - echo "=== abs_sum (expect 114) ===" && ./build/vtxsim -dump 0x1200:1 build/abs_sum.memh
+
+  sim-hello:
+    desc: Assemble and run hello_world in the ISA simulator
+    cmds:
+      - task: os-mkdir-build
+      - cd src/assembler && go build -o ../../build/vtxasm . && go build -o ../../build/vtxsim ./vtxsim
+      - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
+      - ./build/vtxsim -dump 0x2000:16 build/hello_world.memh
+
   # Debug and Issue Resolution Tasks
   test-i2c-fix:
     desc: Test I2C controller state machine fix

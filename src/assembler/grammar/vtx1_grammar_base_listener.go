@@ -1,7 +1,6 @@
 // Code generated from grammar/vtx1_grammar.g4 by ANTLR 4.13.1. DO NOT EDIT.
 
 package parser // vtx1_grammar
-
 import "github.com/antlr4-go/antlr/v4"
 
 // Basevtx1_grammarListener is a complete listener for a parse tree produced by vtx1_grammarParser.

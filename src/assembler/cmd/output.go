@@ -19,6 +19,17 @@ import (
 //
 // The legacy "8" and "ternary" sizes from the binary-slot era are gone:
 // every word is already balanced ternary.
+//
+// writeOutputCtx additionally supports the "memh" format: a Verilog
+// $readmemh-loadable image of 36-bit words with @address markers, which
+// preserves the .ORG memory layout (unlike the flat stream formats).
+func writeOutputCtx(ctx *CompilationContext, outputFile, format, wordSize string) error {
+	if format == "memh" {
+		return ioutil.WriteFile(outputFile, []byte(formatAsMemh(ctx.MachineWords)), 0644)
+	}
+	return writeOutput(ctx.MachineCode, outputFile, format, wordSize)
+}
+
 func writeOutput(binary []byte, outputFile, format, wordSize string) error {
 	var data []byte
 	switch wordSize {
@@ -66,6 +77,30 @@ func packBundles(data []byte) []byte {
 		out = append(out, isa.EncodeTrits(trits)...)
 	}
 	return out
+}
+
+// --- Verilog $readmemh output ---
+
+// formatAsMemh renders the emitted words as a $readmemh image for a
+// reg [35:0] memory: one 9-hex-digit word per line, with @address markers
+// wherever the word address is not contiguous (i.e. at .ORG boundaries).
+func formatAsMemh(words []EmittedWord) string {
+	var sb strings.Builder
+	sb.WriteString("// VTX1 memory image: 36-bit words (18 trits, 2 bits/trit), word-addressed\n")
+	next := uint32(0xFFFFFFFF)
+	for _, w := range words {
+		if w.Addr != next {
+			sb.WriteString(fmt.Sprintf("@%X\n", w.Addr))
+		}
+		next = w.Addr + 1
+		// 5 stored bytes carry 36 bits left-aligned; right-align into 9 hex digits.
+		var v uint64
+		for _, b := range w.Data {
+			v = v<<8 | uint64(b)
+		}
+		sb.WriteString(fmt.Sprintf("%09X\n", v>>4))
+	}
+	return sb.String()
 }
 
 // --- Intel HEX output ---

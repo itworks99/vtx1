@@ -115,10 +115,73 @@ func main() {
 			r.Name, bits(p), tritsString(p), r.Index)
 	}
 
+	// Decode helper defines live in the guarded header; the function itself
+	// goes to a separate unguarded file (vtx1_isa_decode.vh) because Verilog
+	// functions must be included inside each module body that uses them.
+	sb.WriteString(`
+// Operand formats
+` + "`define" + ` VTX1_FMT_NONE   3'd0
+` + "`define" + ` VTX1_FMT_R3     3'd1
+` + "`define" + ` VTX1_FMT_R2     3'd2
+` + "`define" + ` VTX1_FMT_R1     3'd3
+` + "`define" + ` VTX1_FMT_MEM    3'd4
+` + "`define" + ` VTX1_FMT_BRANCH 3'd5
+` + "`define" + ` VTX1_FMT_JUMP   3'd6
+` + "`define" + ` VTX1_FMT_BAD    3'd7
+
+// Operation categories
+` + "`define" + ` VTX1_CAT_ALU  3'd0
+` + "`define" + ` VTX1_CAT_MEM  3'd1
+` + "`define" + ` VTX1_CAT_CTRL 3'd2
+` + "`define" + ` VTX1_CAT_VEC  3'd3
+` + "`define" + ` VTX1_CAT_FP   3'd4
+` + "`define" + ` VTX1_CAT_SYS  3'd5
+
+`)
 	sb.WriteString("\n`endif // VTX1_ISA_GENERATED_VH\n")
+
+	// Second file: the decode function, unguarded, for inclusion inside a
+	// module body.
+	var fb strings.Builder
+	fb.WriteString(`// VTX1 opcode decode helper
+// GENERATED FILE - DO NOT EDIT. Source of truth: src/assembler/isa/isa.go
+// Include INSIDE a module body (no include guard: each module needs its own
+// copy of the function). Requires vtx1_isa_generated.vh for the defines.
+//
+// vtx1_opcode_info(value) = {microcoded, category[2:0], format[2:0]}
+// where value = 40 + 27*t0 + 9*t1 + 3*t2 + t3 over the signed opcode trits.
+`)
+	fb.WriteString("function [6:0] vtx1_opcode_info(input [6:0] value);\n")
+	fb.WriteString("    case (value)\n")
+	fmtName := map[isa.Format]string{
+		isa.FormatNone: "`VTX1_FMT_NONE", isa.FormatR3: "`VTX1_FMT_R3",
+		isa.FormatR2: "`VTX1_FMT_R2", isa.FormatR1: "`VTX1_FMT_R1",
+		isa.FormatMem: "`VTX1_FMT_MEM", isa.FormatBranch: "`VTX1_FMT_BRANCH",
+		isa.FormatJump: "`VTX1_FMT_JUMP",
+	}
+	catName := map[isa.Category]string{
+		isa.CatALU: "`VTX1_CAT_ALU", isa.CatMEM: "`VTX1_CAT_MEM",
+		isa.CatCTRL: "`VTX1_CAT_CTRL", isa.CatVEC: "`VTX1_CAT_VEC",
+		isa.CatFP: "`VTX1_CAT_FP", isa.CatSYS: "`VTX1_CAT_SYS",
+	}
+	for _, ins := range instrs {
+		micro := "1'b0"
+		if ins.Microcoded {
+			micro = "1'b1"
+		}
+		fmt.Fprintf(&fb, "        7'd%-2d: vtx1_opcode_info = {%s, %s, %s}; // %s\n",
+			ins.Value, micro, catName[ins.Category], fmtName[ins.Format], ins.Name)
+	}
+	fb.WriteString("        default: vtx1_opcode_info = {1'b0, 3'd7, `VTX1_FMT_BAD};\n")
+	fb.WriteString("    endcase\nendfunction\n")
 
 	if err := ioutil.WriteFile(*out, []byte(sb.String()), 0644); err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("wrote %s (%d opcodes, %d registers)\n", *out, len(instrs), len(isa.Registers))
+	decodeOut := strings.TrimSuffix(*out, ".vh") + "_decode.vh"
+	decodeOut = strings.Replace(decodeOut, "generated_decode", "decode", 1)
+	if err := ioutil.WriteFile(decodeOut, []byte(fb.String()), 0644); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("wrote %s and %s (%d opcodes, %d registers)\n", *out, decodeOut, len(instrs), len(isa.Registers))
 }

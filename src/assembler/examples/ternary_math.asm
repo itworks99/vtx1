@@ -12,8 +12,8 @@
 ;===============================================================================
 main:
         ; Initialize ternary values using literal notation
-        LD T0, 0t+0-         ; Load first ternary value (+0-) = 3-1 = 2
-        LD T1, 0t+-0         ; Load second ternary value (+-0) = 3-9 = -6
+        LEA T0, 0t+0-        ; Load first ternary value (+0-) = 3-1 = 2
+        LEA T1, 0t+-0        ; Load second ternary value (+-0) = 3-9 = -6
 
         ; Basic arithmetic operations
         ADD T2, T0, T1       ; T2 = T0 + T1 = 2 + (-6) = -4
@@ -56,7 +56,7 @@ main:
         ST T5, result_vec_add+1
 
         ; Completion signal
-        LD T0, 1
+        LEA T0, 1
         ST T0, 0x2000
 
         ; Program end

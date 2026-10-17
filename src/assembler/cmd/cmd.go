@@ -60,8 +60,9 @@ type CompilationContext struct {
 	SymbolTable *SymbolTable
 
 	// Code generation outputs
-	MachineCode []byte            // Generated machine code
-	Symbols     map[string]uint32 // Symbol table for debugging
+	MachineCode  []byte            // Generated machine code (flat word stream)
+	MachineWords []EmittedWord     // Every word with its address (preserves .ORG layout)
+	Symbols      map[string]uint32 // Symbol table for debugging
 }
 
 // Minimal stub for ErrorManager
@@ -239,7 +240,7 @@ func assembleFile(inputFile, outputFile, listingFile, format string, verbose boo
 	}
 
 	// Write output based on format
-	if err := writeOutput(ctx.MachineCode, outputFile, format, wordSize); err != nil {
+	if err := writeOutputCtx(ctx, outputFile, format, wordSize); err != nil {
 		return fmt.Errorf("failed to write output: %v", err)
 	}
 	if verbose {
@@ -355,6 +356,7 @@ func runCodeGeneration(ctx *CompilationContext) error {
 		return fmt.Errorf("code generation failed: %v", err)
 	}
 	ctx.MachineCode = cg.Output
+	ctx.MachineWords = cg.Words
 
 	if ctx.Verbose {
 		fmt.Printf("Generated %d bytes of machine code.\n", len(ctx.MachineCode))
