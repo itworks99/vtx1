@@ -248,7 +248,9 @@ module spi_controller (
   localparam DEFAULT_WORD = 36'h015555555;
 
   // Special handling for DATA register FIFO operations
-  always @(posedge clk or negedge rst_n)
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+  always @(posedge clk)
   begin
     if (!rst_n)
     begin
@@ -287,7 +289,9 @@ module spi_controller (
     end
   end
   // Main state machine logic
-  always @(posedge clk or negedge rst_n)
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+  always @(posedge clk)
   begin
     if (!rst_n)
     begin

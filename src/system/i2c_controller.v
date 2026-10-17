@@ -244,7 +244,9 @@ module i2c_controller (
     end
 
     // Dedicated FIFO operations - separated for clarity
-    always @(posedge clk or negedge rst_n) begin
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+    always @(posedge clk) begin
         if (!rst_n) begin
             tx_fifo_wr_ptr <= 6'h0;
             rx_fifo_rd_ptr <= 6'h0;
@@ -273,7 +275,9 @@ module i2c_controller (
         end
     end
       // Main state machine logic
-    always @(posedge clk or negedge rst_n) begin
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+    always @(posedge clk) begin
         if (!rst_n) begin
             state <= IDLE;
             i2c_ready <= 1'b0;

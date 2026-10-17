@@ -270,7 +270,9 @@ end
 // REGISTER ACCESS LOGIC
 // =============================================================================
 
-always @(posedge clk or negedge rst_n) begin
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+always @(posedge clk) begin
     if (!rst_n) begin
         // Reset all configuration registers
         control_reg <= 32'h00000000;
@@ -460,7 +462,9 @@ end
 // UART RECEIVER
 // =============================================================================
 
-always @(posedge clk or negedge rst_n) begin
+  // Synchronous reset: this block writes a memory array, and memories
+  // cannot live in async-reset processes (required for RAM inference).
+always @(posedge clk) begin
     if (!rst_n) begin
         rx_state <= 4'h0;
         rx_bit_count <= 4'h0;

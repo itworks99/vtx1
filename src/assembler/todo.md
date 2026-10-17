@@ -225,6 +225,30 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Synthesis Findings (2026-10-18)
+
+- `vtx1_decoder` synthesizes cleanly with Yosys: 5,562 cells, purely
+  combinational, CHECK-clean, 17 s (`task synth`).
+- `vtx1_core` does NOT practically synthesize: the v1 conversion ALU's
+  b2t function (72-bit signed div/mod, 18 iterations, ~20 call sites)
+  unrolls into hundreds of wide dividers and ABC never converges. The
+  "swap in a native trit datapath later" note is therefore a synthesis
+  REQUIREMENT, not an optimization: the next hardware task is a native
+  balanced-ternary ALU (per-trit adder cell -> 18-trit ripple/carry-select
+  adder; SUB = add(neg); CMP from the subtract sign; value-to-trit
+  conversion then only needed at the LEA/immediate boundary, which is
+  constant-folded by the assembler anyway... immediates arrive as trits
+  in the instruction word, so the datapath can be conversion-free).
+- Fixed for synthesis along the way: FIFO memories in spi/i2c/uart were
+  written inside async-reset always blocks (Yosys cannot infer RAMs
+  there); those blocks now use synchronous reset.
+- Full-SoC synthesis is parked behind `task synth-soc` (marked BLOCKED)
+  until the native-trit ALU lands. Also note: cache_controller clears its
+  data arrays in reset, which forces flip-flop mapping (~4.6k FFs) instead
+  of RAM inference - worth fixing in the same pass.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip
