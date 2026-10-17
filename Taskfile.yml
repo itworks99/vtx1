@@ -100,9 +100,12 @@ tasks:
       - ./build/vtxasm -f memh -o build/dot_product.memh src/assembler/benchmarks/dot_product.asm
       - ./build/vtxasm -f memh -o build/sign_count.memh src/assembler/benchmarks/sign_count.asm
       - ./build/vtxasm -f memh -o build/abs_sum.memh src/assembler/benchmarks/abs_sum.asm
+      - ./build/vtxasm -f memh -o build/sign_sum.memh src/assembler/benchmarks/sign_sum.asm
       - echo "=== dot_product (expect -107) ===" && ./build/vtxsim -dump 0x1200:1 build/dot_product.memh
       - echo "=== sign_count (expect 6/4/6) ===" && ./build/vtxsim -dump 0x1200:3 build/sign_count.memh
       - echo "=== abs_sum (expect 114) ===" && ./build/vtxsim -dump 0x1200:1 build/abs_sum.memh
+      - echo "=== sign_sum (expect -2) ===" && ./build/vtxsim -dump 0x1200:1 build/sign_sum.memh
+      - echo "=== RV32IM control core ===" && cd src/assembler && go test ./rvsim/ -run TestComparisonStats -v | grep static
 
   sim-hello:
     desc: Assemble and run hello_world in the ISA simulator

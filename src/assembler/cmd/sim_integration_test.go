@@ -88,6 +88,12 @@ func TestBenchmarkKernels(t *testing.T) {
 			t.Errorf("abs sum = %d, want 114", got)
 		}
 	})
+	t.Run("sign_sum", func(t *testing.T) {
+		m := runProgram(t, "../benchmarks/sign_sum.asm")
+		if got := m.ReadWord(0x1200); got != -2 {
+			t.Errorf("sign sum = %d, want -2", got)
+		}
+	})
 }
 
 // TestMacroDemoExecutes runs the preprocessor demo end to end.

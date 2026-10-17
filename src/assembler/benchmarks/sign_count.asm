@@ -1,9 +1,10 @@
 ;===============================================================================
-; sign_count.asm - three-way sign classification
+; sign_count.asm - three-way sign classification (branching)
 ;===============================================================================
-; Tier A benchmark kernel playing to balanced ternary's strength: CMP yields
-; the full three-valued sign (-1/0/+1) in one instruction, and the counts
-; fall out of two branches.
+; Tier A benchmark kernel: classify each element by sign using two branches.
+; Structurally identical on binary ISAs - this is a neutral control-flow
+; workload. (The three-valued CMP showcase is sign_sum.asm, where the sign
+; is a stored value.)
 ; Expected results: 6 negative, 4 zero, 6 positive
 ;===============================================================================
 
@@ -19,9 +20,8 @@ main:
 
 loop:
         LD  T5, [TB+T4]
-        CMP T6, T5, 0        ; T6 = sign(element): -1, 0, or +1
-        BLT T6, 0, is_neg
-        BGT T6, 0, is_pos
+        BLT T5, 0, is_neg
+        BGT T5, 0, is_pos
         ADD T2, T2, 1        ; zero
         JMP next
 is_neg:

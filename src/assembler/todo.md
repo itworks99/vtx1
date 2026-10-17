@@ -239,7 +239,24 @@ The VTX1 assembler processes input in the following stages:
 - The architecture-level ternary wins to measure in Tier A: Booth-free
   multiplication, free negation, truncation-rounds-to-nearest (lower error
   accumulation in MAC chains), symmetric range (no abs(INT_MIN) overflow),
-  and native three-way compare (see sign_count).
+  and native three-way compare (see sign_sum).
+
+---
+
+## Tier A Result (2026-10-18)
+
+- The binary control core exists: `src/assembler/rvsim` is a minimal RV32IM
+  interpreter sharing vtxsim's Stats counting rules, with the four kernels
+  hand-written in idiomatic RISC-V and results asserted by go test.
+- Measured (dynamic instructions, 16-element kernels): sign_sum -34%,
+  abs_sum -30%, dot_product -16%, sign_count -3% (deliberately neutral).
+  Static code: -19..-27% in stored bits except sign_count (~par).
+  Full table and caveats: benchmarks/README.md.
+- Verdict: the ternary architecture wins exactly where its thesis says it
+  should (three-valued compare as a value, ABS, signed MAC with base+index
+  addressing) and holds parity on neutral control flow. This justifies
+  proceeding toward Tier B (SPICE-characterized ternary cells) and the
+  ternary-weight MAC accelerator.
 
 ---
 

@@ -1,66 +1,89 @@
-# VTX1 Tier A Benchmarks
+# VTX1 Tier A Benchmarks: Balanced Ternary vs Binary (RV32IM)
 
-Architecture-level benchmark kernels for evaluating balanced ternary against
-a binary control architecture **without any hardware**: the metrics below are
-substrate-independent (they would be identical on FPGA, on silicon, or in
-simulation), so they are measured with the ISA simulator.
+Architecture-level comparison of VTX1 against a binary RISC-V control core,
+measured **without any hardware**: the metrics are substrate-independent
+(identical on FPGA, silicon, or in simulation), so both sides run in
+ISA-level simulators with identical instrumentation:
+
+- **VTX1**: assembly in this directory, assembled by `vtxasm`, executed by
+  `vtxsim` (`src/assembler/sim`)
+- **RV32IM**: the same kernels in idiomatic RISC-V assembly, executed by
+  `rvsim` (`src/assembler/rvsim`), which shares vtxsim's `Stats` counting
+  rules exactly
+
+Both sides are hand-written assembly over the same 16-element data sets, and
+every result is asserted by `go test` on both sides, so the table cannot
+silently rot.
+
+## Results (dynamic, 16-element inputs)
+
+| Kernel | VTX1 instr | RV32IM instr | Δ | VTX1 loads/stores | RV loads/stores | Branches (taken) — both |
+|---|---|---|---|---|---|---|
+| `dot_product` | **103** | 123 | **−16%** | 33 / 1 | 32 / 1 | 16 (15) |
+| `sign_count`  | **110** | 113 | −3% | 17 / 3 | 16 / 3 | 42 (27) |
+| `abs_sum`     | **119** | 171 | **−30%** | 33 / 1 | 32 / 1 | 16 (15) |
+| `sign_sum`    | **103** | 155 | **−34%** | 33 / 1 | 32 / 1 | 16 (15) |
+
+Static code size (instructions, and stored bits: VTX1 word = 36 bits at
+2 bits/trit; RV32I instruction = 32 bits):
+
+| Kernel | VTX1 instr | RV32IM instr | VTX1 bits | RV bits | Δ bits |
+|---|---|---|---|---|---|
+| `dot_product` | **13** | 18 | **468** | 576 | −19% |
+| `sign_count`  | **20** | 23 | 720 | 736 | −2% |
+| `abs_sum`     | **14** | 21 | **504** | 672 | −25% |
+| `sign_sum`    | **13** | 20 | **468** | 640 | −27% |
+
+On a true ternary storage medium a VTX1 word is 18 trits (≈28.5 bits of
+information), which would widen the code-size advantage further; the table
+uses the 2-bit-encoded storage cost, the honest number for binary substrates.
+
+## Reading the results
+
+- **`sign_sum` (−34%) and `abs_sum` (−30%)** are the designed showcases, and
+  they deliver: VTX1's `CMP` produces the three-valued sign as a value in one
+  instruction where RV32IM needs `slt`+`slt`+`sub`, and `ABS` is one
+  instruction versus the branchless `srai`+`xor`+`sub` idiom.
+- **`dot_product` (−16%)** is the neutral workload; the win comes from
+  `[base+index]` addressing (one index increment serves both arrays) versus
+  RISC-V's two pointer bumps per iteration.
+- **`sign_count` (−3%)** is deliberately structurally identical on both ISAs
+  (two branches per element) — parity here is evidence the comparison is
+  fair, not rigged.
+- Wide balanced immediates also show up in setup code: loading an address
+  like 0x1100 is one `LEA` on VTX1 (±29524 direct range) but `lui`+`addi`
+  on RV32I (12-bit immediates).
+
+## Caveats (read before quoting)
+
+1. These are **architecture** metrics (dynamic instruction count, memory
+   traffic, code size), not performance: neither simulator models cycles.
+   Cycle comparisons belong to the RTL (VTX1's `task test-soc` vs a binary
+   core like PicoRV32 under the same memory model).
+2. The RV32IM baseline is granted the M extension (VTX1 has MUL in hardware)
+   and is hand-written by the same author as the VTX1 kernels — idiomatic,
+   but not compiler-optimized output.
+3. Small kernels, one data size. The deltas measure ISA expressiveness for
+   signed/three-valued arithmetic, which is exactly VTX1's design thesis —
+   workloads outside that thesis (e.g. bit manipulation, unsigned hashing)
+   would favor binary.
+4. Minor asymmetry: VTX1 kernels load the element count from memory
+   (1 extra load) while the RV versions use a build-time end pointer.
 
 ## Running
 
-From the repository root:
-
 ```sh
-task bench
+task bench                                   # VTX1 side (vtxsim)
+cd src/assembler && go test ./rvsim/ -run TestComparisonStats -v   # RV side
+go test ./cmd/ -run TestBenchmarkKernels     # VTX1 results asserted
+go test ./rvsim/                             # RV32IM results asserted
 ```
-
-or manually:
-
-```sh
-go build -C src/assembler -o ../../build/vtxasm .
-go build -C src/assembler -o ../../build/vtxsim ./vtxsim
-./build/vtxasm -f memh -o build/dot_product.memh src/assembler/benchmarks/dot_product.asm
-./build/vtxsim build/dot_product.memh -dump 0x1200:1
-```
-
-Every kernel's result is also asserted by `go test ./cmd/ -run TestBenchmarkKernels`
-in `src/assembler`, so the numbers cannot silently rot.
 
 ## Kernels
 
-| Kernel | What it exercises | Result (verified) |
+| Kernel | What it exercises | Result (asserted both sides) |
 |---|---|---|
-| `dot_product` | signed multiply-accumulate loop, base+index addressing | -107 |
-| `sign_count` | three-way classification: one `CMP` yields the full sign (-1/0/+1) | 6 neg / 4 zero / 6 pos |
-| `abs_sum` | sum of absolute differences, microcoded `ABS` | 114 |
-
-## Current VTX1 numbers (dynamic, 16-element inputs)
-
-| Kernel | Instructions | ALU | Memory | Control | Loads | Stores | Branches (taken) |
-|---|---|---|---|---|---|---|---|
-| `dot_product` | 103 | 48 | 38 | 16 | 33 | 1 | 16 (15) |
-| `sign_count`  | 126 | 48 | 25 | 52 | 17 | 3 | 42 (27) |
-| `abs_sum`     | 119 | 64 | 38 | 16 | 33 | 1 | 16 (15) |
-
-Code size: count the emitted words (`vtxasm -f objdump`); one word = 18 trits
-= 18·log2(3) ≈ 28.5 bits of information for normalized comparison.
-
-## Methodology for the binary comparison (next step)
-
-The control core is RV32I (e.g. PicoRV32 for cycle-level runs). Fairness
-rules, following the equal-information convention from the ternary-vs-binary
-literature:
-
-1. Same algorithm, same inputs, idiomatic assembly on both sides.
-2. Compare dynamic instruction counts, memory traffic, and code size in
-   information units (trits x log2(3) vs bits), not raw digit counts.
-3. Cycle counts come later from the RTL (Icarus) on both sides; the ISA
-   simulator deliberately does not model timing.
-
-The RISC-V side needs a cross toolchain or emulator (not yet in this
-repository); the C reference implementations of these kernels are a
-straightforward port of the assembly above.
-
-Points of interest already visible: `sign_count` is where balanced ternary
-should shine (one CMP produces a three-valued result a binary ISA needs two
-compares or arithmetic tricks for), while `dot_product` is the neutral
-workload.
+| `dot_product` | signed multiply-accumulate, base+index addressing | −107 |
+| `sign_count` | three-way classification by branching (neutral) | 6 / 4 / 6 |
+| `abs_sum` | sum of absolute differences | 114 |
+| `sign_sum` | sum of three-valued signs — the `CMP` showcase | −2 |
