@@ -176,9 +176,16 @@ func tritMin(x, y int) int { if x < y { return x }; return y }
 func tritMax(x, y int) int { if x > y { return x }; return y }
 func tritMul(x, y int) int { return x * y }
 
+// shiftTrits shifts/rotates by trit positions. The amount is the value of
+// the LOW 4 TRITS of the second operand (range +-40) reduced modulo 18 -
+// the same rule the hardware ALU implements.
 func shiftTrits(v int64, n int64, left bool, rotate bool) int64 {
 	trits, _ := isa.BalancedTrits(WrapWord(v), isa.SlotTrits)
-	k := int(((n % 18) + 18) % 18)
+	m := ((n % 81) + 81) % 81
+	if m > 40 {
+		m -= 81
+	}
+	k := int(((m % 18) + 18) % 18)
 	out := make([]int, isa.SlotTrits)
 	for i := range out {
 		var src int

@@ -75,6 +75,7 @@ tasks:
     desc: Run all VTX1 tests
     cmds:
       - task: test-decoder
+      - task: test-alu
       - task: test-core
       - task: test-optimized
       - echo "All VTX1 tests completed successfully"
@@ -115,13 +116,20 @@ tasks:
       - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
       - ./build/vtxsim -dump 0x2000:16 build/hello_world.memh
 
+  test-alu:
+    desc: Verify the native balanced-ternary ALU against a binary reference
+    cmds:
+      - task: os-mkdir-build
+      - iverilog -g2012 -I src/common -o build/vtx1_alu_test src/cpu/vtx1_alu.v src/testbench/tb_vtx1_alu.v
+      - vvp build/vtx1_alu_test
+
   test-core:
     desc: Run hello_world on the trit-native RTL core (code-to-silicon loop)
     cmds:
       - task: os-mkdir-build
       - cd src/assembler && go build -o ../../build/vtxasm .
       - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
-      - iverilog -g2012 -I src/common -o build/vtx1_core_test src/cpu/vtx1_decoder.v src/cpu/vtx1_core.v src/testbench/tb_vtx1_core.v
+      - iverilog -g2012 -I src/common -o build/vtx1_core_test src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_core.v src/testbench/tb_vtx1_core.v
       - vvp build/vtx1_core_test
 
   # Debug and Issue Resolution Tasks
@@ -158,21 +166,18 @@ tasks:
       - echo "VTX1 Consolidated syntax check completed"
 
   synth:
-    desc: Synthesize the trit-native decoder with Yosys (CPU/SoC synthesis is blocked on the native-trit ALU, see todo.md)
+    desc: Synthesize the trit-native CPU (decoder + ALU + core) with Yosys
     cmds:
       - task: os-mkdir-build
-      - echo "Synthesizing vtx1_decoder..."
-      - yosys -p "read_verilog -I src/common src/cpu/vtx1_decoder.v; synth -top vtx1_decoder; stat; write_json build/vtx1_decoder_synth.json" | tail -30
-      - echo "Decoder synthesis completed. Netlist in build/vtx1_decoder_synth.json"
+      - echo "Synthesizing the trit-native CPU..."
+      - yosys -p "read_verilog -I src/common src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_core.v; synth -top vtx1_core; stat; write_json build/vtx1_core_synth.json" | tail -35
+      - echo "CPU synthesis completed. Netlist in build/vtx1_core_synth.json"
 
-  # Full-SoC synthesis is parked: vtx1_core's v1 conversion ALU (b2t uses
-  # 72-bit div/mod chains at ~20 call sites) does not converge in ABC.
-  # Re-enable once the native balanced-ternary datapath replaces it.
   synth-soc:
-    desc: "BLOCKED: full SoC synthesis (hangs in ABC; needs the native-trit ALU first)"
+    desc: Synthesize the full SoC with Yosys (slow; tens of minutes)
     cmds:
       - task: os-mkdir-build
-      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
+      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
 
   # Utilities
   clean:

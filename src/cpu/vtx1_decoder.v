@@ -53,6 +53,12 @@ module vtx1_decoder (
     // Memory addressing mode (FMT_MEM only)
     output wire [1:0]  mem_mode,      // 0 direct, 1 base+index, 2 base+offset
 
+    // The immediate as a TRIT WORD: the instruction's immediate field placed
+    // in the low trits of an all-zero-trit word. Because padding balanced
+    // ternary with zero trits preserves the value (no sign extension is ever
+    // needed), this is the immediate ready for the native-trit datapath.
+    output wire [35:0] imm_trits,
+
     // Full word interpreted as an 18-trit balanced number (for data words)
     output wire signed [35:0] word_value
 );
@@ -145,6 +151,29 @@ module vtx1_decoder (
                    || (format == `VTX1_FMT_BRANCH)
                    || (format == `VTX1_FMT_JUMP)
                    || ((format == `VTX1_FMT_MEM) && (mem_mode != MEM_BASE_INDEX));
+
+    // Immediate as trits: select the field, place at the low end of a
+    // zero-trit word. Field positions are in MSB-first trit coordinates;
+    // trit t occupies bits [35-2t:34-2t], so field trits map to the low
+    // bits directly.
+    localparam [35:0] ZERO_TRITS = 36'h555555555;
+
+    function [35:0] place(input [35:0] w, input integer field_trits);
+        integer i;
+        begin
+            place = ZERO_TRITS;
+            // The field's least significant trit is trit 17 (bits [1:0]).
+            for (i = 0; i < field_trits; i = i + 1)
+                place[2*i+1 -: 2] = w[2*i+1 -: 2];
+        end
+    endfunction
+
+    assign imm_trits =
+        (format == `VTX1_FMT_JUMP)   ? place(word, 14) :
+        (format == `VTX1_FMT_BRANCH) ? place(word, 8) :
+        (format == `VTX1_FMT_MEM)    ? ((mem_mode == MEM_DIRECT) ? place(word, 10)
+                                                                 : place(word, 7)) :
+        r3_imm_mode                  ? place(word, 7) : ZERO_TRITS;
 
     assign imm = (format == `VTX1_FMT_JUMP)   ? tgt14 :
                  (format == `VTX1_FMT_BRANCH) ? rel8 :

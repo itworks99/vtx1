@@ -62,8 +62,12 @@ vector reductions), which stall the pipeline until done.
 
 Because every numeric field is balanced ternary, immediates, offsets and
 branch displacements are naturally signed and symmetric around zero -- there
-is no sign bit and no two's-complement asymmetry. Negative absolute addresses
-are architecturally legal and reserved for memory-mapped I/O.
+is no sign bit and no two's-complement asymmetry.
+
+Negative absolute addresses are architecturally legal and reserved for
+memory-mapped I/O. Shift and rotate amounts are the value of the low 4 trits
+of the second source operand (range ±40), reduced modulo 18; negative amounts
+shift the opposite direction.
 
 == Addressing
 

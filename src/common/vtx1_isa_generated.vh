@@ -102,6 +102,77 @@
 `define VTX1_OPC_BREAK    8'b10_10_10_01  // +++0 (value 79, system)
 `define VTX1_OPC_HALT     8'b10_10_10_10  // ++++ (value 80, system)
 
+// Opcode VALUES (binary 0..80, as produced by vtx1_decoder)
+`define VTX1_OPV_VADD     7'd0
+`define VTX1_OPV_ADD      7'd1
+`define VTX1_OPV_SUB      7'd2
+`define VTX1_OPV_MUL      7'd3
+`define VTX1_OPV_AND      7'd4
+`define VTX1_OPV_OR       7'd5
+`define VTX1_OPV_NOT      7'd6
+`define VTX1_OPV_XOR      7'd7
+`define VTX1_OPV_SHL      7'd8
+`define VTX1_OPV_SHR      7'd9
+`define VTX1_OPV_ROL      7'd10
+`define VTX1_OPV_ROR      7'd11
+`define VTX1_OPV_CMP      7'd12
+`define VTX1_OPV_TEST     7'd13
+`define VTX1_OPV_INC      7'd14
+`define VTX1_OPV_DEC      7'd15
+`define VTX1_OPV_NEG      7'd16
+`define VTX1_OPV_LD       7'd17
+`define VTX1_OPV_ST       7'd18
+`define VTX1_OPV_VLD      7'd19
+`define VTX1_OPV_VST      7'd20
+`define VTX1_OPV_FLD      7'd21
+`define VTX1_OPV_FST      7'd22
+`define VTX1_OPV_LEA      7'd23
+`define VTX1_OPV_PUSH     7'd24
+`define VTX1_OPV_POP      7'd25
+`define VTX1_OPV_JMP      7'd26
+`define VTX1_OPV_JAL      7'd27
+`define VTX1_OPV_JR       7'd28
+`define VTX1_OPV_JALR     7'd29
+`define VTX1_OPV_BEQ      7'd30
+`define VTX1_OPV_BNE      7'd31
+`define VTX1_OPV_BLT      7'd32
+`define VTX1_OPV_BGE      7'd33
+`define VTX1_OPV_BGT      7'd36
+`define VTX1_OPV_BLE      7'd37
+`define VTX1_OPV_CALL     7'd38
+`define VTX1_OPV_RET      7'd39
+`define VTX1_OPV_NOP      7'd40
+`define VTX1_OPV_VSUB     7'd41
+`define VTX1_OPV_VMUL     7'd42
+`define VTX1_OPV_VAND     7'd43
+`define VTX1_OPV_VOR      7'd44
+`define VTX1_OPV_VNOT     7'd45
+`define VTX1_OPV_VSHL     7'd46
+`define VTX1_OPV_VSHR     7'd47
+`define VTX1_OPV_FADD     7'd48
+`define VTX1_OPV_FSUB     7'd49
+`define VTX1_OPV_FMUL     7'd50
+`define VTX1_OPV_FCMP     7'd51
+`define VTX1_OPV_FMOV     7'd52
+`define VTX1_OPV_FNEG     7'd53
+`define VTX1_OPV_WFI      7'd54
+`define VTX1_OPV_DIV      7'd55
+`define VTX1_OPV_MOD      7'd56
+`define VTX1_OPV_SQRT     7'd59
+`define VTX1_OPV_ABS      7'd60
+`define VTX1_OPV_VDOT     7'd69
+`define VTX1_OPV_VREDUCE  7'd70
+`define VTX1_OPV_VMAX     7'd71
+`define VTX1_OPV_VMIN     7'd72
+`define VTX1_OPV_VSUM     7'd73
+`define VTX1_OPV_VPERM    7'd74
+`define VTX1_OPV_CACHE    7'd75
+`define VTX1_OPV_FLUSH    7'd76
+`define VTX1_OPV_MEMBAR   7'd77
+`define VTX1_OPV_SYSCALL  7'd78
+`define VTX1_OPV_BREAK    7'd79
+`define VTX1_OPV_HALT     7'd80
+
 // Registers (3 trits as 6 bits)
 `define VTX1_REG_T0  6'b00_00_00  // --- (index 0)
 `define VTX1_REG_T1  6'b00_00_01  // --0 (index 1)

@@ -1,24 +1,25 @@
 `timescale 1ns / 1ps
-// VTX1 Trit-Native CPU Core (v1: multi-cycle, word-serial)
+// VTX1 Trit-Native CPU Core (v2: native balanced-ternary datapath)
 // Part of the VTX1 Ternary System-on-Chip
 //
-// A clean core built around vtx1_decoder: hardwired control, no microcode.
+// A clean core built around vtx1_decoder and vtx1_alu: hardwired control,
+// no microcode, and NO binary<->ternary conversion in the datapath:
+//
+//   - registers, the PC, immediates, effective addresses and all ALU
+//     results are trit words end to end;
+//   - immediates come out of the decoder as trit fields placed in
+//     zero-trit-padded words (padding with zero trits preserves any
+//     balanced value - no sign extension exists or is needed);
+//   - the only trit->binary conversion is t2b() toward the memory address
+//     bus, which is a chain of x3 adds (synthesizes cleanly); there is no
+//     binary->trit conversion anywhere (the b2t divider chains of the v1
+//     core are gone - they were a synthesis blocker).
+//
 // Fetch model (a): one 18-trit instruction word per fetch, PC steps by one
-// word; a VLIW bundle executes as its three slots in sequence. (Parallel
-// bundle issue is a later performance mode; the assembler's packing rules
-// already guarantee bundle slots are independent.)
+// word; a VLIW bundle executes as its three slots in sequence.
 //
-// Registers and memory hold trit-encoded words (36 bits, 2 bits/trit,
-// canonical encoding). The v1 ALU converts trits -> signed binary ->
-// trits inline; this is functionally identical to native ternary
-// arithmetic (the ternary_arithmetic_unit in src/common does the same
-// conversion internally) and is the part to swap for native trit logic
-// when the datapath is optimized.
-//
-// Multi-cycle ISA ops: DIV/MOD execute here in one EXEC cycle using
-// operators (fine for simulation; synthesis wants the iterative divider
-// FSM noted in todo.md). SQRT, PUSH/POP (no stack ABI yet) and all
-// vector/FP operations trap.
+// DIV/MOD belong to the pending iterative divider FSM and trap for now;
+// SQRT, PUSH/POP (no stack ABI yet) and vector/FP operations trap.
 //
 // Memory interface: one word-addressed port with a ready handshake, so the
 // core connects equally to a simple synchronous RAM or to the SoC bus matrix.
@@ -32,9 +33,7 @@ module vtx1_core (
     input  wire        clk,
     input  wire        rst_n,
 
-    // Unified word-addressed memory port with ready handshake:
-    // the core holds mem_req until mem_ready is sampled high together
-    // with valid mem_rdata (reads) or write acceptance (writes).
+    // Unified word-addressed memory port with ready handshake
     output reg         mem_req,
     output reg         mem_wr,
     output reg  [31:0] mem_addr,
@@ -55,108 +54,65 @@ module vtx1_core (
     output wire [31:0] debug_pc
 );
 
-    // Canonical all-zero-trit word (18 x encoding 01)
-    localparam [35:0] ZERO_WORD = 36'h555555555;
+    // Canonical trit words
+    localparam [35:0] ZERO_WORD = 36'h555555555; // 18 zero trits
+    localparam [35:0] ONE_WORD  = 36'h555555556; // 0...0,+1
 
     // ------------------------------------------------------------------
-    // Balanced ternary <-> binary value helpers
+    // Trit helpers (no division anywhere: synthesizable)
     // ------------------------------------------------------------------
     function signed [2:0] tv(input [1:0] pair);
         case (pair)
             2'b00:   tv = -3'sd1;
-            2'b01:   tv = 3'sd0;
             2'b10:   tv = 3'sd1;
             default: tv = 3'sd0;
         endcase
     endfunction
 
-    // trit word -> signed value
+    // Trit word -> signed binary (x3 adds only). Used solely for the
+    // memory address bus and debug.
     function signed [35:0] t2b(input [35:0] w);
         integer i;
         begin
             t2b = 36'sd0;
-            for (i = 0; i < 18; i = i + 1)
-                t2b = t2b * 3 + tv(w[35-2*i -: 2]);
+            for (i = 17; i >= 0; i = i - 1) // from MST (bits [35:34]) down
+                t2b = t2b * 3 + tv(w[2*i+1 -: 2]);
         end
     endfunction
 
-    // signed value -> canonical trit word (wraps modulo 3^18, balanced)
-    function [35:0] b2t(input signed [71:0] v);
+    // Sign of a word: its most significant nonzero trit.
+    function [1:0] word_sign(input [35:0] w);
         integer i;
-        reg signed [71:0] x;
-        reg signed [3:0] r;
+        begin
+            word_sign = 2'b01;
+            for (i = 17; i >= 0; i = i - 1)
+                if (word_sign == 2'b01 && w[2*i+1 -: 2] != 2'b01)
+                    word_sign = w[2*i+1 -: 2];
+        end
+    endfunction
+
+    // CONSTANT function: binary -> trit word. Contains division, but it is
+    // evaluated at elaboration time only (reset vector), costing no gates.
+    function [35:0] const_b2t(input integer v);
+        integer i, x, r;
         begin
             x = v;
-            b2t = 36'h0;
-            for (i = 17; i >= 0; i = i - 1) begin
+            const_b2t = ZERO_WORD;
+            for (i = 0; i < 18; i = i + 1) begin
                 r = x % 3;
                 x = x / 3;
                 if (r == 2) begin r = -1; x = x + 1; end
                 if (r == -2) begin r = 1; x = x - 1; end
-                case (r)
-                    -1:      b2t[35-2*i -: 2] = 2'b00;
-                    0:       b2t[35-2*i -: 2] = 2'b01;
-                    default: b2t[35-2*i -: 2] = 2'b10;
-                endcase
+                const_b2t[2*i+1 -: 2] = (r == -1) ? 2'b00 : (r == 1) ? 2'b10 : 2'b01;
             end
         end
     endfunction
 
-    // Tritwise logic (balanced ternary conventions: AND=min, OR=max, XOR=product)
-    function [1:0] trit_enc(input signed [2:0] t);
-        case (t)
-            -3'sd1:  trit_enc = 2'b00;
-            3'sd0:   trit_enc = 2'b01;
-            default: trit_enc = 2'b10;
-        endcase
-    endfunction
-
-    function [35:0] tritwise_min(input [35:0] a, input [35:0] b);
-        integer i;
-        for (i = 0; i < 18; i = i + 1)
-            tritwise_min[35-2*i -: 2] = trit_enc(
-                (tv(a[35-2*i -: 2]) < tv(b[35-2*i -: 2])) ? tv(a[35-2*i -: 2]) : tv(b[35-2*i -: 2]));
-    endfunction
-
-    function [35:0] tritwise_max(input [35:0] a, input [35:0] b);
-        integer i;
-        for (i = 0; i < 18; i = i + 1)
-            tritwise_max[35-2*i -: 2] = trit_enc(
-                (tv(a[35-2*i -: 2]) > tv(b[35-2*i -: 2])) ? tv(a[35-2*i -: 2]) : tv(b[35-2*i -: 2]));
-    endfunction
-
-    function [35:0] tritwise_mul(input [35:0] a, input [35:0] b);
-        integer i;
-        for (i = 0; i < 18; i = i + 1)
-            tritwise_mul[35-2*i -: 2] = trit_enc(tv(a[35-2*i -: 2]) * tv(b[35-2*i -: 2]));
-    endfunction
-
-    function [35:0] tritwise_neg(input [35:0] a);
-        integer i;
-        for (i = 0; i < 18; i = i + 1)
-            tritwise_neg[35-2*i -: 2] = trit_enc(-tv(a[35-2*i -: 2]));
-    endfunction
-
-    // Trit shift/rotate: k trit positions (zero-trit fill for shifts)
-    function [35:0] trit_shift(input [35:0] a, input [4:0] k,
-                               input left, input rotate);
-        integer i, src;
-        begin
-            for (i = 0; i < 18; i = i + 1) begin
-                src = left ? i + k : i - k;
-                if (src >= 0 && src < 18)
-                    trit_shift[35-2*i -: 2] = a[35-2*src -: 2];
-                else if (rotate)
-                    trit_shift[35-2*i -: 2] = a[35-2*(((src % 18) + 18) % 18) -: 2];
-                else
-                    trit_shift[35-2*i -: 2] = 2'b01; // zero trit
-            end
-        end
-    endfunction
+    localparam [35:0] RESET_PC = const_b2t(32'h1000);
 
     // ------------------------------------------------------------------
     // Register file: unified index space 0..18 (TZ = 18 reads zero,
-    // writes discarded). Registers hold canonical trit-encoded words.
+    // writes discarded). Registers hold canonical trit words.
     // ------------------------------------------------------------------
     reg [35:0] regs [0:17];
 
@@ -172,8 +128,10 @@ module vtx1_core (
     localparam REG_TA = 5'd8; // link register (provisional ABI)
 
     // ------------------------------------------------------------------
-    // Decoder (combinational on the fetched word)
+    // Decoder (combinational on the instruction register)
     // ------------------------------------------------------------------
+    reg [35:0] ir; // fetched instruction word (stable through EXEC/LOAD/STORE)
+
     wire        dec_valid;
     wire [6:0]  opcode;
     wire [2:0]  format, category;
@@ -182,29 +140,73 @@ module vtx1_core (
     wire        uses_imm;
     wire signed [31:0] imm;
     wire [1:0]  mem_mode;
-    wire signed [35:0] word_value;
-
-    reg [35:0] ir; // fetched instruction word (stable through EXEC/LOAD/STORE)
+    wire [35:0] imm_trits;
 
     vtx1_decoder dec (
         .word(ir), .valid(dec_valid), .opcode(opcode),
         .format(format), .category(category), .multicycle(multicycle),
         .reg1(reg1), .reg2(reg2), .reg3(reg3),
         .uses_imm(uses_imm), .imm(imm), .mem_mode(mem_mode),
-        .word_value(word_value)
+        .imm_trits(imm_trits), .word_value()
     );
 
-    // Operand values
-    wire signed [35:0] val1 = t2b(regword(reg1));
-    wire signed [35:0] val2 = t2b(regword(reg2));
-    wire signed [35:0] val3 = t2b(regword(reg3));
-    wire signed [35:0] opb  = (format == `VTX1_FMT_R3 && uses_imm) ? imm : val3;
+    // ------------------------------------------------------------------
+    // Native-trit datapath
+    // ------------------------------------------------------------------
 
-    // Memory effective address
-    wire signed [35:0] ea =
-        (mem_mode == 2'd0) ? imm :
-        (mem_mode == 2'd1) ? val2 + val3 :
-                             val2 + imm;
+    // Program counter as a trit word; binary only at the address bus.
+    reg  [35:0] pc;
+    wire [35:0] pc_plus1;
+    vtx1_trit_adder u_pcinc (.a(pc), .b(ONE_WORD), .negate_b(1'b0), .sum(pc_plus1), .cout());
+
+    wire [35:0] branch_target;
+    vtx1_trit_adder u_btgt (.a(pc), .b(imm_trits), .negate_b(1'b0), .sum(branch_target), .cout());
+
+    wire [31:0] pc_bin = t2b(pc);
+    assign debug_pc = pc_bin;
+
+    // ALU operand selection
+    wire [35:0] alu_a =
+        (format == `VTX1_FMT_R1) ? regword(reg1) : regword(reg2);
+    wire [35:0] alu_b =
+        (format == `VTX1_FMT_R1) ? ONE_WORD :
+        uses_imm                 ? imm_trits : regword(reg3);
+
+    wire [35:0] alu_result;
+    wire        alu_unsup;
+    vtx1_alu u_alu (.a(alu_a), .b(alu_b), .opcode(opcode),
+                    .result(alu_result), .unsupported(alu_unsup));
+
+    // Branch compare: sign of (rs1 - rs2)
+    wire [35:0] br_diff;
+    wire [1:0]  br_cout;
+    vtx1_trit_adder u_brsub (.a(regword(reg1)), .b(regword(reg2)),
+                             .negate_b(1'b1), .sum(br_diff), .cout(br_cout));
+    // Overflow-correct compare: a nonzero carry trit is the true sign.
+    wire [1:0] br_sign = (br_cout != 2'b01) ? br_cout : word_sign(br_diff);
+
+    reg branch_take;
+    always @* begin
+        branch_take = 1'b0;
+        case (opcode)
+            `VTX1_OPV_BEQ: branch_take = (regword(reg1) == regword(reg2));
+            `VTX1_OPV_BNE: branch_take = (regword(reg1) != regword(reg2));
+            `VTX1_OPV_BLT: branch_take = (br_sign == 2'b00);
+            `VTX1_OPV_BGE: branch_take = (br_sign != 2'b00);
+            `VTX1_OPV_BGT: branch_take = (br_sign == 2'b10);
+            `VTX1_OPV_BLE: branch_take = (br_sign != 2'b10);
+            default: ;
+        endcase
+    end
+
+    // Effective address (trit add; binary only at the port)
+    wire [35:0] ea_sum;
+    vtx1_trit_adder u_ea (
+        .a(regword(reg2)),
+        .b((mem_mode == 2'd1) ? regword(reg3) : imm_trits),
+        .negate_b(1'b0), .sum(ea_sum), .cout());
+    wire [35:0] ea_trits = (mem_mode == 2'd0) ? imm_trits : ea_sum;
+    wire [31:0] ea_bin   = t2b(ea_trits);
 
     // ------------------------------------------------------------------
     // Control state machine
@@ -216,24 +218,19 @@ module vtx1_core (
     localparam S_HALT  = 3'd4;
 
     reg [2:0]  state;
-    reg [31:0] pc;
-    reg [31:0] ir_pc; // address of the instruction in IR (branches are relative to it)
-    reg [4:0]  ld_rd; // destination latched for the load writeback cycle
+    reg [4:0]  ld_rd;  // destination latched for the load writeback cycle
     reg [31:0] mem_ea; // effective address latched for LOAD/STORE
 
-    assign debug_pc = pc;
-
-    // Memory port control (combinational). The request is held until the
-    // ready handshake completes.
+    // Memory port control (combinational); the request is held until ready.
     always @* begin
         mem_req   = 1'b0;
         mem_wr    = 1'b0;
-        mem_addr  = pc;
+        mem_addr  = pc_bin;
         mem_wdata = regword(reg1);
         case (state)
             S_FETCH: begin
                 mem_req  = 1'b1;
-                mem_addr = pc;
+                mem_addr = pc_bin;
             end
             S_LOAD: begin
                 mem_req  = 1'b1;
@@ -248,11 +245,20 @@ module vtx1_core (
         endcase
     end
 
+    task do_trap;
+        begin
+            trap    <= 1'b1;
+            trap_pc <= pc_bin;
+            state   <= S_HALT;
+        end
+    endtask
+
     integer ri;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state   <= S_FETCH;
-            pc      <= 32'h1000;
+            pc      <= RESET_PC;
+            ir      <= ZERO_WORD;
             halted  <= 1'b0;
             trap    <= 1'b0;
             trap_pc <= 32'h0;
@@ -265,115 +271,67 @@ module vtx1_core (
             case (state)
                 S_FETCH: if (mem_ready) begin
                     ir    <= mem_rdata;
-                    ir_pc <= pc;
                     state <= S_EXEC;
                 end
 
                 S_EXEC: begin
                     retired <= retired + 1;
-                    pc      <= pc + 1; // default; control flow overrides
+                    pc      <= pc_plus1; // default; control flow overrides
                     state   <= S_FETCH;
 
-                    if (!dec_valid) begin
-                        trap <= 1'b1; trap_pc <= pc; state <= S_HALT;
-                    end else case (format)
+                    if (!dec_valid) do_trap;
+                    else case (format)
 
                         `VTX1_FMT_NONE: case (opcode)
-                            7'd40: ;                                   // NOP
-                            7'd54, 7'd80, 7'd78, 7'd79:                // WFI/HALT/SYSCALL/BREAK
+                            `VTX1_OPV_NOP: ;
+                            `VTX1_OPV_WFI, `VTX1_OPV_HALT,
+                            `VTX1_OPV_SYSCALL, `VTX1_OPV_BREAK:
                                 begin halted <= 1'b1; state <= S_HALT; end
-                            7'd39: pc <= t2b(regword(REG_TA));         // RET
-                            7'd75, 7'd76, 7'd77: ;                     // CACHE/FLUSH/MEMBAR
-                            default:
-                                begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
+                            `VTX1_OPV_RET: pc <= regword(REG_TA);
+                            `VTX1_OPV_CACHE, `VTX1_OPV_FLUSH, `VTX1_OPV_MEMBAR: ;
+                            default: do_trap;
                         endcase
 
                         `VTX1_FMT_R1: case (opcode)
-                            7'd14: writereg(reg1, b2t(val1 + 1));      // INC
-                            7'd15: writereg(reg1, b2t(val1 - 1));      // DEC
-                            7'd28: pc <= val1[31:0];                   // JR
-                            7'd29: begin                               // JALR
-                                writereg(REG_TA, b2t({4'h0, pc} + 1));
-                                pc <= val1[31:0];
+                            `VTX1_OPV_INC, `VTX1_OPV_DEC:
+                                writereg(reg1, alu_result);
+                            `VTX1_OPV_JR: pc <= regword(reg1);
+                            `VTX1_OPV_JALR: begin
+                                writereg(REG_TA, pc_plus1);
+                                pc <= regword(reg1);
                             end
-                            default: // PUSH/POP: no stack ABI yet
-                                begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
+                            default: do_trap; // PUSH/POP: no stack ABI yet
                         endcase
 
-                        `VTX1_FMT_R2: case (opcode)
-                            7'd6:  writereg(reg1, tritwise_neg(regword(reg2)));  // NOT
-                            7'd16: writereg(reg1, b2t(-val2));                   // NEG
-                            7'd60: writereg(reg1, b2t(val2 < 0 ? -val2 : val2)); // ABS
-                            default: // SQRT (FSM pending), vector/FP
-                                begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
-                        endcase
-
-                        `VTX1_FMT_R3: case (opcode)
-                            7'd1:  writereg(reg1, b2t(val2 + opb));             // ADD
-                            7'd2:  writereg(reg1, b2t(val2 - opb));             // SUB
-                            7'd3:  writereg(reg1, b2t(val2 * opb));             // MUL
-                            7'd12: writereg(reg1, b2t(                          // CMP: sign(a-b)
-                                       (val2 > opb) ? 72'sd1 :
-                                       (val2 < opb) ? -72'sd1 : 72'sd0));
-                            7'd13: writereg(reg1, b2t(                          // TEST: sign(a AND b)
-                                       t2b(tritwise_min(regword(reg2),
-                                           uses_imm ? b2t(imm) : regword(reg3)))));
-                            7'd4:  writereg(reg1, tritwise_min(regword(reg2),   // AND
-                                       uses_imm ? b2t(imm) : regword(reg3)));
-                            7'd5:  writereg(reg1, tritwise_max(regword(reg2),   // OR
-                                       uses_imm ? b2t(imm) : regword(reg3)));
-                            7'd7:  writereg(reg1, tritwise_mul(regword(reg2),   // XOR
-                                       uses_imm ? b2t(imm) : regword(reg3)));
-                            7'd8:  writereg(reg1, trit_shift(regword(reg2), opb[4:0], 1'b1, 1'b0)); // SHL
-                            7'd9:  writereg(reg1, trit_shift(regword(reg2), opb[4:0], 1'b0, 1'b0)); // SHR
-                            7'd10: writereg(reg1, trit_shift(regword(reg2), opb[4:0], 1'b1, 1'b1)); // ROL
-                            7'd11: writereg(reg1, trit_shift(regword(reg2), opb[4:0], 1'b0, 1'b1)); // ROR
-                            // DIV/MOD: single-cycle here for simulation;
-                            // synthesis needs the iterative divider FSM.
-                            7'd55: if (opb == 0) begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
-                                   else writereg(reg1, b2t(val2 / opb));        // DIV
-                            7'd56: if (opb == 0) begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
-                                   else writereg(reg1, b2t(val2 % opb));        // MOD
-                            default: // vector ops
-                                begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
-                        endcase
+                        `VTX1_FMT_R2, `VTX1_FMT_R3: begin
+                            if (alu_unsup) do_trap; // DIV/MOD (FSM pending), SQRT, vec/FP
+                            else writereg(reg1, alu_result);
+                        end
 
                         `VTX1_FMT_MEM: case (opcode)
-                            7'd17: begin                               // LD
+                            `VTX1_OPV_LD: begin
                                 ld_rd  <= reg1;
-                                mem_ea <= ea[31:0];
+                                mem_ea <= ea_bin;
                                 state  <= S_LOAD;
                             end
-                            7'd18: begin                               // ST
-                                mem_ea <= ea[31:0];
+                            `VTX1_OPV_ST: begin
+                                mem_ea <= ea_bin;
                                 state  <= S_STORE;
                             end
-                            7'd23: writereg(reg1, b2t(ea));            // LEA
-                            default: // VLD/VST/FLD/FST
-                                begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
+                            `VTX1_OPV_LEA: writereg(reg1, ea_trits);
+                            default: do_trap; // VLD/VST/FLD/FST
                         endcase
 
-                        `VTX1_FMT_BRANCH: begin
-                            case (opcode)
-                                7'd30: if (regword(reg1) == regword(reg2)) pc <= pc + imm; // BEQ
-                                7'd31: if (regword(reg1) != regword(reg2)) pc <= pc + imm; // BNE
-                                7'd32: if (val1 <  val2) pc <= pc + imm;                   // BLT
-                                7'd33: if (val1 >= val2) pc <= pc + imm;                   // BGE
-                                7'd36: if (val1 >  val2) pc <= pc + imm;                   // BGT
-                                7'd37: if (val1 <= val2) pc <= pc + imm;                   // BLE
-                                default:
-                                    begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
-                            endcase
-                        end
+                        `VTX1_FMT_BRANCH:
+                            if (branch_take) pc <= branch_target;
 
                         `VTX1_FMT_JUMP: begin
-                            if (opcode == 7'd27 || opcode == 7'd38)    // JAL/CALL
-                                writereg(REG_TA, b2t({4'h0, pc} + 1));
-                            pc <= imm[31:0];                           // JMP/JAL/CALL
+                            if (opcode == `VTX1_OPV_JAL || opcode == `VTX1_OPV_CALL)
+                                writereg(REG_TA, pc_plus1);
+                            pc <= imm_trits; // absolute target as trits
                         end
 
-                        default:
-                            begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
+                        default: do_trap;
                     endcase
                 end
 

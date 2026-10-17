@@ -108,6 +108,11 @@ func main() {
 			ins.Name, bits(p), tritsString(p), ins.Value, ins.Category, micro)
 	}
 
+	sb.WriteString("\n// Opcode VALUES (binary 0..80, as produced by vtx1_decoder)\n")
+	for _, ins := range instrs {
+		fmt.Fprintf(&sb, "`define VTX1_OPV_%-8s 7'd%d\n", ins.Name, ins.Value)
+	}
+
 	sb.WriteString("\n// Registers (3 trits as 6 bits)\n")
 	for _, r := range isa.Registers {
 		p := isa.RegPattern(r.Index)

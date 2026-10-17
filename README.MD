@@ -69,7 +69,7 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 **✅ Working today:**
 - Trit-native ISA, single-sourced, with generated Verilog headers
 - Assembler, ISA simulator, and benchmark suite (all Go-tested)
-- CPU RTL executing programs, cross-checked against the simulator
+- CPU RTL executing programs, cross-checked against the simulator — with a fully native balanced-ternary datapath (trit adders, multiplier tree, overflow-correct three-valued compare; no binary conversion anywhere) that synthesizes cleanly with Yosys
 - Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins
 - Ternary-vs-binary architecture comparison (VTX1 vs RV32IM, identical instrumentation)
 - Build and test automation with Taskfile; Yosys synthesis flow

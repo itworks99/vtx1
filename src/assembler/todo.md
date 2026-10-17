@@ -242,10 +242,44 @@ The VTX1 assembler processes input in the following stages:
 - Fixed for synthesis along the way: FIFO memories in spi/i2c/uart were
   written inside async-reset always blocks (Yosys cannot infer RAMs
   there); those blocks now use synchronous reset.
-- Full-SoC synthesis is parked behind `task synth-soc` (marked BLOCKED)
-  until the native-trit ALU lands. Also note: cache_controller clears its
-  data arrays in reset, which forces flip-flop mapping (~4.6k FFs) instead
-  of RAM inference - worth fixing in the same pass.
+- RESOLVED (same day): the native balanced-ternary ALU landed - see below.
+  Remaining from this pass: cache_controller clears its data arrays in
+  reset, which forces flip-flop mapping (~4.6k FFs) instead of RAM
+  inference - worth fixing eventually.
+
+---
+
+## Native Balanced-Ternary ALU (2026-10-18)
+
+- `src/cpu/vtx1_alu.v`: vtx1_trit_fa (balanced full-adder cell),
+  vtx1_trit_adder (18-trit ripple; negate_b gives subtraction free;
+  dropped carry = balanced wrap mod 3^18, matching vtxsim's WrapWord),
+  vtx1_trit_mul (18 partial products {-B,0,+B} reduced by an adder tree,
+  depth 5), plus tritwise min/max/product/negate, barrel shifter and the
+  sign unit. Verified against a binary reference model with 34,612
+  directed+random vectors (`task test-alu`).
+- vtx1_core v2: conversion-free datapath. Registers, PC, immediates, EAs
+  and results are trit words end to end; the decoder emits immediates as
+  zero-trit-padded words (balanced ternary needs no sign extension); the
+  only trit->binary conversion is t2b toward the memory address bus
+  (x3 add chains). The b2t divider chains are gone; the reset vector uses
+  a Verilog constant function (elaboration-time only).
+- SYNTHESIS UNBLOCKED: the CPU (decoder+ALU+core) synthesizes in 135 s:
+  ~37.7k cells, 853 FFs (`task synth`). Previously ABC did not converge
+  after 7 CPU-hours.
+- Design findings worth keeping:
+  - Overflow-correct compare: the adder's dropped carry trit IS the true
+    sign when subtraction overflows 18 trits. CMP and branch compares use
+    (cout != 0) ? cout : sign(diff) - the balanced-ternary equivalent of
+    the binary N^V trick, found by the ALU's randomized testing.
+  - NOT and NEG are the same operation in balanced ternary (tritwise
+    negation = arithmetic negation). Consider merging them in a future
+    ISA revision to free an opcode.
+  - Shift/rotate amount semantics RATIFIED: the value of the low 4 trits
+    of rs2 (+-40), reduced mod 18. vtxsim and the ALU implement the same
+    rule.
+- Still trapping in hardware (as designed): DIV/MOD await the iterative
+  divider FSM; SQRT, PUSH/POP, vector/FP ops.
 
 ---
 
