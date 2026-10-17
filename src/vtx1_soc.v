@@ -562,7 +562,7 @@ assign pwr_enable = pwr_good;
 // uart_tx, uart_rts outputs are from UART controller
 
 // JTAG interface (not implemented)
-assign jtag_tdo = 1'b0;
+// jtag_tdo is driven by debug_controller (was double-driven here)
 
 // Test points
 assign tp_clk_cpu = clk_cpu;
@@ -1001,7 +1001,7 @@ assign i2c_dma_tx_ack = dma_enable && i2c_dma_tx_req;   // I2C TX DMA acknowledg
 assign i2c_dma_rx_ack = dma_enable && i2c_dma_rx_req;   // I2C RX DMA acknowledge
 
 // DMA Data connections - placeholder zero data (needs proper arbitration in full implementation)
-assign uart_dma_tx_data = {VTX1_WORD_WIDTH{1'b0}};     // UART TX DMA data
+// uart_dma_tx_data is driven by uart_controller (was double-driven here)
 assign spi_dma_tx_data = {VTX1_WORD_WIDTH{1'b0}};      // SPI TX DMA data
 assign i2c_dma_tx_data = {VTX1_WORD_WIDTH{1'b0}};      // I2C TX DMA data
 
@@ -1037,7 +1037,7 @@ assign debug_halt_cpu = 1'b0;                     // Don't halt CPU
 assign debug_step_cpu = 1'b0;                     // No single stepping
 assign debug_reset_cpu = 1'b0;                    // Don't reset CPU
 assign debug_access_addr = {VTX1_ADDR_WIDTH{1'b0}}; // Debug access address (zero)
-assign debug_access_data = {VTX1_WORD_WIDTH{1'b0}}; // Debug access data (zero)
+// debug_access_data is an OUTPUT of debug_controller (was double-driven here)
 assign debug_access_wr = 1'b0;                    // No debug writes
 assign debug_access_req = 1'b0;                   // No debug requests
 
@@ -1046,10 +1046,9 @@ assign debug_access_req = 1'b0;                   // No debug requests
 // Cache controller connections - now handled by cache_controller module
 // Note: All cache signals are now connected through the cache_controller instantiation above
 // The cache controller manages both instruction and data caches and interfaces with memory controller
-assign cache_wr = 1'b0;
-// assign cache_addr = {VTX1_ADDR_WIDTH{1'b0}};
-// Remove forced constant assignment to cache_addr. The bus_matrix and cache_controller should drive this signal
-assign cache_wdata = {VTX1_CACHE_LINE_WIDTH{1'b0}};
+// cache_wr, cache_addr and cache_wdata are driven by the bus_matrix outputs;
+// the old constant tie-offs double-drove the nets (a synthesis error and an
+// x-resolution hazard in simulation).
 
 // =============================================================================
 // DEBUG OUTPUT (USING VTX1 PARAMETERS)

@@ -243,6 +243,13 @@ The VTX1 assembler processes input in the following stages:
   written inside async-reset always blocks (Yosys cannot infer RAMs
   there); those blocks now use synchronous reset.
 - RESOLVED (same day): the native balanced-ternary ALU landed - see below.
+- FULL SOC SYNTHESIS WORKS: 'task synth-soc' completes in ~195 s - 79,122
+  cells, ~12.3k FFs, netlist in build/vtx1_soc_synth.v. Getting there also
+  flushed out four double-driven nets in the top (cache_wr/cache_wdata
+  tied to constants while the bus matrix drives them; debug_access_data
+  and uart_dma_tx_data tied while their controllers drive them; jtag_tdo
+  tied to ground while the debug controller shifts data onto it) - real
+  latent bugs that simulation x-resolution had been masking.
   Remaining from this pass: cache_controller clears its data arrays in
   reset, which forces flip-flop mapping (~4.6k FFs) instead of RAM
   inference - worth fixing eventually.
