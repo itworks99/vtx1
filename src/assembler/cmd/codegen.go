@@ -1,18 +1,21 @@
 package cmd
 
 import (
-	"encoding/binary"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/kvany/vtx1/assembler/isa"
 )
 
-// CodeGenerator is responsible for traversing the AST and emitting machine code.
+// CodeGenerator traverses the AST and emits machine code as a stream of
+// 18-trit words, each stored as 5 bytes (see package isa). All addresses are
+// word addresses: a scalar instruction occupies 1 word, a VLIW bundle 3
+// words, and each data item one word.
 type CodeGenerator struct {
 	Output      []byte
 	SymbolTable *SymbolTable
-	CurrentAddr uint32
+	CurrentAddr uint32 // in words
 	Labels      map[string]uint32
 	Equs        map[string]uint32
 }
@@ -28,7 +31,30 @@ func NewCodeGenerator(symbolTable *SymbolTable) *CodeGenerator {
 	}
 }
 
-// Pass 1: Collect labels and .EQUs, handle .ORG/.SPACE for address tracking
+// statementWords returns how many machine words a statement occupies.
+func statementWords(stmt StatementNode) uint32 {
+	switch s := stmt.(type) {
+	case *InstructionNode:
+		return 1
+	case *VLIWInstructionNode:
+		return isa.VLIWSlots
+	case *DirectiveNode:
+		name := strings.ToUpper(s.Name)
+		switch name {
+		case ".DB", ".DW", ".DT":
+			return uint32(dataItemCount(s.Params))
+		case ".SPACE":
+			if len(s.Params) > 0 {
+				if imm, err := parseImmediateOperand(s.Params[0]); err == nil {
+					return uint32(imm)
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// Pass 1: Collect labels and .EQUs, handle .ORG for address tracking
 func (cg *CodeGenerator) collectSymbols(ast *AST) error {
 	addr := uint32(0)
 	for _, line := range ast.Program.Lines {
@@ -38,44 +64,46 @@ func (cg *CodeGenerator) collectSymbols(ast *AST) error {
 		if line.Statement == nil {
 			continue
 		}
-		switch stmt := line.Statement.(type) {
-		case *InstructionNode:
-			addr += 4
-		case *VLIWInstructionNode:
-			addr += 12
-		case *DirectiveNode:
-			name := strings.ToUpper(stmt.Name)
+		if dir, ok := line.Statement.(*DirectiveNode); ok {
+			name := strings.ToUpper(dir.Name)
 			switch name {
 			case ".ORG":
-				if len(stmt.Params) > 0 {
-					imm, _ := parseImmediateOperand(stmt.Params[0])
+				if len(dir.Params) > 0 {
+					imm, _ := parseImmediateOperand(dir.Params[0])
 					addr = uint32(imm)
 				}
-			case ".SPACE":
-				if len(stmt.Params) > 0 {
-					imm, _ := parseImmediateOperand(stmt.Params[0])
-					addr += uint32(imm)
-				}
-			case ".DW":
-				addr += 2 * uint32(len(stmt.Params))
-			case ".DB":
-				addr += uint32(len(stmt.Params))
+				continue
 			case ".EQU":
-				if len(stmt.Params) == 2 {
-					if id, ok := stmt.Params[0].(*IdentifierNode); ok {
-						imm, _ := parseImmediateOperand(stmt.Params[1])
+				if len(dir.Params) == 2 {
+					if id, ok := dir.Params[0].(*IdentifierNode); ok {
+						imm, _ := parseImmediateOperand(dir.Params[1])
 						cg.Equs[id.Name] = uint32(imm)
 					}
 				}
+				continue
 			}
 		}
+		addr += statementWords(line.Statement)
 	}
 	return nil
 }
 
+// dataItemCount returns the number of emitted words in a data directive,
+// expanding quoted strings to their character count (one word per character).
+func dataItemCount(params []OperandNode) int {
+	count := 0
+	for _, op := range params {
+		if imm, ok := op.(*ImmediateNode); ok && isQuotedString(imm.Value) {
+			count += len(unquoteString(imm.Value))
+		} else {
+			count++
+		}
+	}
+	return count
+}
+
 // Pass 2: Emit code/data, resolving symbols
 func (cg *CodeGenerator) Generate(ast *AST) error {
-	fmt.Println("[DEBUG] CodeGenerator.Generate called")
 	cg.Output = make([]byte, 0)
 	cg.CurrentAddr = 0
 	cg.Labels = make(map[string]uint32)
@@ -84,81 +112,26 @@ func (cg *CodeGenerator) Generate(ast *AST) error {
 		return err
 	}
 	cg.CurrentAddr = 0
-	for i, line := range ast.Program.Lines {
+	for _, line := range ast.Program.Lines {
 		if line.Statement == nil {
 			continue
 		}
-		typeName := reflect.TypeOf(line.Statement)
-		fmt.Printf("[DEBUG] Generate: line %d, reflect.TypeOf=%v, type=%T, label=%v, statement=%#v\n", i, typeName, line.Statement, line.Label, line.Statement)
 		switch stmt := line.Statement.(type) {
 		case *InstructionNode:
-			fmt.Printf("[DEBUG] emitInstruction called: %+v\n", stmt)
 			if err := cg.emitInstruction(stmt); err != nil {
 				return err
 			}
 		case *VLIWInstructionNode:
-			fmt.Printf("[DEBUG] emitVLIWInstruction called: %+v\n", stmt)
 			if err := cg.emitVLIWInstruction(stmt); err != nil {
 				return err
 			}
 		case *DirectiveNode:
-			fmt.Printf("[DEBUG] emitDirective called: %+v\n", stmt)
 			if err := cg.emitDirective(stmt); err != nil {
 				return err
 			}
-		default:
-			fmt.Printf("[DEBUG] Generate: unhandled node type %T\n", stmt)
 		}
 	}
-	fmt.Printf("[DEBUG] CodeGenerator output length: %d bytes\n", len(cg.Output))
 	return nil
-}
-
-// --- Instruction Encoding ---
-var opcodeMap = map[string]byte{
-	// ALU
-	"NOP": 0x00, "ADD": 0x01, "SUB": 0x02, "MUL": 0x03, "AND": 0x04, "OR": 0x05, "NOT": 0x06, "XOR": 0x07,
-	"SHL": 0x08, "SHR": 0x09, "ROL": 0x0A, "ROR": 0x0B, "CMP": 0x0C, "TEST": 0x0D, "INC": 0x0E, "DEC": 0x0F, "NEG": 0x10,
-	// MEM
-	"LD": 0x20, "ST": 0x21, "VLD": 0x22, "VST": 0x23, "FLD": 0x24, "FST": 0x25, "LEA": 0x26, "PUSH": 0x27, "POP": 0x28,
-	// CTRL
-	"JMP": 0x30, "JAL": 0x31, "JR": 0x32, "JALR": 0x33, "BEQ": 0x34, "BNE": 0x35, "BLT": 0x36, "BGE": 0x37, "BLTU": 0x38, "BGEU": 0x39, "BGT": 0x3A, "BLE": 0x3B, "CALL": 0x3C, "RET": 0x3D,
-	// VEC
-	"VADD": 0x40, "VSUB": 0x41, "VMUL": 0x42, "VAND": 0x43, "VOR": 0x44, "VNOT": 0x45, "VSHL": 0x46, "VSHR": 0x47,
-	// FP
-	"FADD": 0x50, "FSUB": 0x51, "FMUL": 0x52, "FCMP": 0x53, "FMOV": 0x54, "FNEG": 0x55,
-	// SYS
-	"WFI": 0x60,
-	// COMPLEX
-	"DIV": 0x70, "MOD": 0x71, "UDIV": 0x72, "UMOD": 0x73, "SQRT": 0x74, "ABS": 0x75, "SIN": 0x76, "COS": 0x77, "TAN": 0x78, "ASIN": 0x79, "ACOS": 0x7A, "ATAN": 0x7B, "EXP": 0x7C, "LOG": 0x7D,
-	// COMPLEX_VEC
-	"VDOT": 0x80, "VREDUCE": 0x81, "VMAX": 0x82, "VMIN": 0x83, "VSUM": 0x84, "VPERM": 0x85,
-	// COMPLEX_MEM
-	"CACHE": 0x90, "FLUSH": 0x91, "MEMBAR": 0x92,
-	// COMPLEX_SYS
-	"SYSCALL": 0xA0, "BREAK": 0xA1, "HALT": 0xA2,
-}
-
-func regNum(name string) (byte, error) {
-	if name == "TB" {
-		return 7, nil
-	}
-	if name == "TA" {
-		return 8, nil
-	}
-	if name == "TC" {
-		return 9, nil
-	}
-	if name == "TS" {
-		return 10, nil
-	}
-	if name == "TI" {
-		return 11, nil
-	}
-	if name == "T0" || name == "T1" || name == "T2" || name == "T3" || name == "T4" || name == "T5" || name == "T6" {
-		return name[1] - '0', nil
-	}
-	return 0, fmt.Errorf("unknown register: %s", name)
 }
 
 // Add a global set of deprecated mnemonics and directives
@@ -176,453 +149,115 @@ func AttachCodegenWarnings(w *[]error) {
 	codegenWarnings = w
 }
 
+func codegenWarn(format string, args ...interface{}) {
+	if codegenWarnings != nil {
+		*codegenWarnings = append(*codegenWarnings, fmt.Errorf(format, args...))
+	}
+}
+
 func (cg *CodeGenerator) emitInstruction(instr *InstructionNode) error {
-	fmt.Printf("[DEBUG] In emitInstruction: %+v\n", instr)
-	if deprecatedMnemonics[strings.ToUpper(instr.Mnemonic)] && codegenWarnings != nil {
-		*codegenWarnings = append(*codegenWarnings, fmt.Errorf("warning: instruction '%s' at line %d is deprecated", instr.Mnemonic, instr.Line))
+	if deprecatedMnemonics[strings.ToUpper(instr.Mnemonic)] {
+		codegenWarn("warning: instruction '%s' at line %d is deprecated", instr.Mnemonic, instr.Line)
 	}
-	opc, ok := opcodeMap[strings.ToUpper(instr.Mnemonic)]
-	if !ok {
-		return fmt.Errorf("unsupported instruction: %s at line %d", instr.Mnemonic, instr.Line)
+	slot, _, err := cg.encodeOperation(instr, cg.CurrentAddr)
+	if err != nil {
+		return err
 	}
-	var out [4]byte
-	out[0] = opc
-	// Encoding: opcode | dst | src1 | src2/imm
-	switch opc {
-	case 0x00: // NOP
-		// nothing more
-	case 0x01, 0x02, 0x03, 0x04, 0x05, 0x07: // ADD, SUB, MUL, AND, OR, XOR
-		if len(instr.Operands) != 3 {
-			return fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			rn, err := regNum(reg.Name)
-			if err != nil {
-				return err
-			}
-			out[i+1] = rn
-		}
-	case 0x06: // NOT
-		if len(instr.Operands) != 2 {
-			return fmt.Errorf("NOT requires 2 operands at line %d", instr.Line)
-		}
-		for i := 0; i < 2; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("NOT operand %d is not a register at line %d", i+1, instr.Line)
-			}
-			rn, err := regNum(reg.Name)
-			if err != nil {
-				return err
-			}
-			out[i+1] = rn
-		}
-	case 0x10: // LD
-		if len(instr.Operands) != 2 {
-			return fmt.Errorf("LD requires 2 operands at line %d", instr.Line)
-		}
-		dst, ok := instr.Operands[0].(*RegisterNode)
-		if !ok {
-			return fmt.Errorf("LD dst must be register")
-		}
-		out[1], _ = regNum(dst.Name)
-		// src can be ImmediateNode, IdentifierNode, or MemoryOperandNode
-		switch src := instr.Operands[1].(type) {
-		case *ImmediateNode:
-			imm, _ := parseImmediateOperand(src)
-			binary.BigEndian.PutUint16(out[2:], uint16(imm))
-		case *IdentifierNode:
-			addr := cg.resolveSymbol(src.Name)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		case *MemoryOperandNode:
-			addr := cg.resolveMemOperand(src)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		default:
-			return fmt.Errorf("LD src must be immediate, label, or memory")
-		}
-	case 0x11: // ST
-		if len(instr.Operands) != 2 {
-			return fmt.Errorf("ST requires 2 operands at line %d", instr.Line)
-		}
-		src, ok := instr.Operands[0].(*RegisterNode)
-		if !ok {
-			return fmt.Errorf("ST src must be register")
-		}
-		out[1], _ = regNum(src.Name)
-		switch dst := instr.Operands[1].(type) {
-		case *ImmediateNode:
-			imm, _ := parseImmediateOperand(dst)
-			binary.BigEndian.PutUint16(out[2:], uint16(imm))
-		case *IdentifierNode:
-			addr := cg.resolveSymbol(dst.Name)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		case *MemoryOperandNode:
-			addr := cg.resolveMemOperand(dst)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		default:
-			return fmt.Errorf("ST dst must be immediate, label, or memory")
-		}
-	case 0x20: // JMP
-		if len(instr.Operands) != 1 {
-			return fmt.Errorf("JMP requires 1 operand at line %d", instr.Line)
-		}
-		addr := cg.resolveOperandAddr(instr.Operands[0])
-		binary.BigEndian.PutUint16(out[2:], uint16(addr))
-	case 0x21, 0x22, 0x23, 0x24: // BEQ, BNE, BLT, BGT
-		if len(instr.Operands) != 3 {
-			return fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		for i := 0; i < 2; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			rn, err := regNum(reg.Name)
-			if err != nil {
-				return err
-			}
-			out[i+1] = rn
-		}
-		addr := cg.resolveOperandAddr(instr.Operands[2])
-		binary.BigEndian.PutUint16(out[2:], uint16(addr))
-	case 0x30: // WFI
-		// nothing more
-	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47: // VEC
-		if len(instr.Operands) != 3 {
-			return fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		vecRegs := map[string]byte{"VA": 0, "VT": 1, "VB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			vn, ok := vecRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a vector register (VA/VT/VB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = vn
-		}
-	case 0x50, 0x51, 0x52, 0x53, 0x54, 0x55: // FP
-		if len(instr.Operands) != 3 {
-			return fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		fpRegs := map[string]byte{"FA": 0, "FT": 1, "FB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			fn, ok := fpRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a floating point register (FA/FT/FB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = fn
-		}
-	case 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D: // COMPLEX
-		// Most are binary, some unary (e.g., SQRT, ABS, SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG)
-		unaryOps := map[string]bool{"SQRT": true, "ABS": true, "SIN": true, "COS": true, "TAN": true, "ASIN": true, "ACOS": true, "ATAN": true, "EXP": true, "LOG": true}
-		if unaryOps[strings.ToUpper(instr.Mnemonic)] {
-			if len(instr.Operands) != 2 {
-				return fmt.Errorf("%s requires 2 operands (dst, src) at line %d", instr.Mnemonic, instr.Line)
-			}
-			for i := 0; i < 2; i++ {
-				reg, ok := instr.Operands[i].(*RegisterNode)
-				if !ok {
-					return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-				}
-				rn, err := regNum(reg.Name)
-				if err != nil {
-					return err
-				}
-				out[i+1] = rn
-			}
-			out[3] = 0 // unused
-		} else {
-			if len(instr.Operands) != 3 {
-				return fmt.Errorf("%s requires 3 operands (dst, src1, src2) at line %d", instr.Mnemonic, instr.Line)
-			}
-			for i := 0; i < 3; i++ {
-				reg, ok := instr.Operands[i].(*RegisterNode)
-				if !ok {
-					return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-				}
-				rn, err := regNum(reg.Name)
-				if err != nil {
-					return err
-				}
-				out[i+1] = rn
-			}
-		}
-	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85: // COMPLEX_VEC
-		if len(instr.Operands) != 3 {
-			return fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		vecRegs := map[string]byte{"VA": 0, "VT": 1, "VB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			vn, ok := vecRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return fmt.Errorf("%s operand %d is not a vector register (VA/VT/VB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = vn
-		}
-	case 0x90, 0x91, 0x92: // COMPLEX_MEM
-		if len(instr.Operands) != 0 {
-			return fmt.Errorf("%s does not take any operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		// All bytes except opcode are zero
-		// No further action needed
-	case 0xA0, 0xA1, 0xA2: // COMPLEX_SYS
-		if len(instr.Operands) != 0 {
-			return fmt.Errorf("%s does not take any operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		// All bytes except opcode are zero
-		// No further action needed
-	default:
-		return fmt.Errorf("unsupported opcode: %02X", opc)
-	}
-	cg.Output = append(cg.Output, out[:]...)
-	cg.CurrentAddr += 4
-	fmt.Printf("[DEBUG] emitInstruction: appended %d bytes, opcode=%02X, addr=0x%X\n", len(out), out[0], cg.CurrentAddr)
+	cg.Output = append(cg.Output, slot.Bytes()...)
+	cg.CurrentAddr++
 	return nil
 }
 
+// emitVLIWInstruction packs up to 3 operations into one VLIW bundle
+// (3 x 18-trit words, NOP-padded) and enforces the packing rules from
+// docs/vliw_encoding.adoc:
+//  1. at most 3 operations per bundle
+//  2. at most 1 memory operation per bundle
+//  3. at most 1 control operation per bundle
+//  4. no two operations may write the same register
+//  5. read-after-write between slots is reported as a hazard warning
 func (cg *CodeGenerator) emitVLIWInstruction(vliw *VLIWInstructionNode) error {
-	fmt.Printf("[DEBUG] In emitVLIWInstruction: %+v\n", vliw)
-	const vliwWordSize = 12
-	var word [vliwWordSize]byte
-	usedDestRegs := make(map[byte]bool)
-	for i := 0; i < 3; i++ {
+	if len(vliw.Instructions) > isa.VLIWSlots {
+		return fmt.Errorf("VLIW bundle at line %d contains %d operations, maximum is %d",
+			vliw.Line, len(vliw.Instructions), isa.VLIWSlots)
+	}
+
+	baseAddr := cg.CurrentAddr
+	infos := make([]opInfo, isa.VLIWSlots)
+	catCount := make(map[isa.Category]int)
+	var bundle []byte
+
+	for i := 0; i < isa.VLIWSlots; i++ {
 		var instr *InstructionNode
 		if i < len(vliw.Instructions) {
 			instr = vliw.Instructions[i]
 		} else {
 			instr = &InstructionNode{Mnemonic: "NOP", Operands: nil, Line: vliw.Line}
 		}
-		enc, destReg, err := cg.encodeVLIWSubInstr(instr)
+		slot, info, err := cg.encodeOperation(instr, baseAddr)
 		if err != nil {
 			return fmt.Errorf("VLIW error at line %d: %v", instr.Line, err)
 		}
-		if destReg != 0xFF {
-			if usedDestRegs[destReg] {
-				return fmt.Errorf("VLIW resource conflict: destination register T%d written by more than one instruction in the same VLIW word (line %d)", destReg, instr.Line)
-			}
-			usedDestRegs[destReg] = true
+		infos[i] = info
+		if info.Mnemonic != "NOP" {
+			catCount[info.Category]++
 		}
-		copy(word[i*4:(i+1)*4], enc[:])
+		bundle = append(bundle, slot.Bytes()...)
 	}
-	cg.Output = append(cg.Output, word[:]...)
-	cg.CurrentAddr += vliwWordSize
+
+	if catCount[isa.CatMEM] > 1 {
+		return fmt.Errorf("VLIW packing violation at line %d: %d memory operations in one bundle, maximum is 1",
+			vliw.Line, catCount[isa.CatMEM])
+	}
+	if catCount[isa.CatCTRL] > 1 {
+		return fmt.Errorf("VLIW packing violation at line %d: %d control operations in one bundle, maximum is 1",
+			vliw.Line, catCount[isa.CatCTRL])
+	}
+
+	// Rule 4: no two slots may write the same register.
+	writtenBy := make(map[string]string)
+	for _, info := range infos {
+		for _, reg := range info.Writes {
+			if other, dup := writtenBy[reg]; dup {
+				return fmt.Errorf("VLIW resource conflict at line %d: register %s written by both %s and %s in the same bundle",
+					vliw.Line, reg, other, info.Mnemonic)
+			}
+			writtenBy[reg] = info.Mnemonic
+		}
+	}
+
+	// Rule 5: a slot reading a register written by another slot in the same
+	// bundle sees the OLD value (parallel semantics). Warn, since this is a
+	// frequent source of surprises when porting sequential code.
+	for i, info := range infos {
+		for _, reg := range info.Reads {
+			if writer, ok := writtenBy[reg]; ok && !slotWritesReg(infos[i], reg) {
+				codegenWarn("warning: VLIW hazard at line %d: %s reads %s while %s writes it in the same bundle (reads see the pre-bundle value)",
+					vliw.Line, info.Mnemonic, reg, writer)
+			}
+		}
+	}
+
+	cg.Output = append(cg.Output, bundle...)
+	cg.CurrentAddr += isa.VLIWSlots
 	return nil
 }
 
-func (cg *CodeGenerator) encodeVLIWSubInstr(instr *InstructionNode) ([4]byte, byte, error) {
-	var out [4]byte
-	opc, ok := opcodeMap[strings.ToUpper(instr.Mnemonic)]
-	if !ok {
-		return out, 0xFF, fmt.Errorf("unsupported instruction: %s at line %d", instr.Mnemonic, instr.Line)
+// slotWritesReg reports whether the given op itself writes the register
+// (e.g. INC reads and writes the same register, which is not a cross-slot hazard).
+func slotWritesReg(info opInfo, reg string) bool {
+	for _, w := range info.Writes {
+		if w == reg {
+			return true
+		}
 	}
-	out[0] = opc
-	var destReg byte = 0xFF
-	switch opc {
-	case 0x00: // NOP
-		// nothing more
-	case 0x01, 0x02, 0x03, 0x04, 0x05, 0x07: // ADD, SUB, MUL, AND, OR, XOR
-		if len(instr.Operands) != 3 {
-			return out, 0xFF, fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			rn, err := regNum(reg.Name)
-			if err != nil {
-				return out, 0xFF, err
-			}
-			out[i+1] = rn
-		}
-		destReg = out[1]
-	case 0x10: // LD
-		if len(instr.Operands) != 2 {
-			return out, 0xFF, fmt.Errorf("LD requires 2 operands at line %d", instr.Line)
-		}
-		dst, ok := instr.Operands[0].(*RegisterNode)
-		if !ok {
-			return out, 0xFF, fmt.Errorf("LD dst must be register")
-		}
-		out[1], _ = regNum(dst.Name)
-		destReg = out[1]
-		// src can be ImmediateNode, IdentifierNode, or MemoryOperandNode
-		switch src := instr.Operands[1].(type) {
-		case *ImmediateNode:
-			imm, _ := parseImmediateOperand(src)
-			binary.BigEndian.PutUint16(out[2:], uint16(imm))
-		case *IdentifierNode:
-			addr := cg.resolveSymbol(src.Name)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		case *MemoryOperandNode:
-			addr := cg.resolveMemOperand(src)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		default:
-			return out, 0xFF, fmt.Errorf("LD src must be immediate, label, or memory")
-		}
-	case 0x11: // ST
-		if len(instr.Operands) != 2 {
-			return out, 0xFF, fmt.Errorf("ST requires 2 operands at line %d", instr.Line)
-		}
-		src, ok := instr.Operands[0].(*RegisterNode)
-		if !ok {
-			return out, 0xFF, fmt.Errorf("ST src must be register")
-		}
-		out[1], _ = regNum(src.Name)
-		// dst can be ImmediateNode, IdentifierNode, or MemoryOperandNode
-		switch dst := instr.Operands[1].(type) {
-		case *ImmediateNode:
-			imm, _ := parseImmediateOperand(dst)
-			binary.BigEndian.PutUint16(out[2:], uint16(imm))
-		case *IdentifierNode:
-			addr := cg.resolveSymbol(dst.Name)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		case *MemoryOperandNode:
-			addr := cg.resolveMemOperand(dst)
-			binary.BigEndian.PutUint16(out[2:], uint16(addr))
-		default:
-			return out, 0xFF, fmt.Errorf("ST dst must be immediate, label, or memory")
-		}
-	case 0x20: // JMP
-		if len(instr.Operands) != 1 {
-			return out, 0xFF, fmt.Errorf("JMP requires 1 operand at line %d", instr.Line)
-		}
-		addr := cg.resolveOperandAddr(instr.Operands[0])
-		binary.BigEndian.PutUint16(out[2:], uint16(addr))
-	case 0x21, 0x22, 0x23, 0x24: // BEQ, BNE, BLT, BGT
-		if len(instr.Operands) != 3 {
-			return out, 0xFF, fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		for i := 0; i < 2; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			rn, err := regNum(reg.Name)
-			if err != nil {
-				return out, 0xFF, err
-			}
-			out[i+1] = rn
-		}
-		addr := cg.resolveOperandAddr(instr.Operands[2])
-		binary.BigEndian.PutUint16(out[2:], uint16(addr))
-	case 0x30: // WFI
-		// nothing more
-	case 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47: // VEC
-		if len(instr.Operands) != 3 {
-			return out, 0xFF, fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		vecRegs := map[string]byte{"VA": 0, "VT": 1, "VB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			vn, ok := vecRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a vector register (VA/VT/VB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = vn
-		}
-	case 0x50, 0x51, 0x52, 0x53, 0x54, 0x55: // FP
-		if len(instr.Operands) != 3 {
-			return out, 0xFF, fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		fpRegs := map[string]byte{"FA": 0, "FT": 1, "FB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			fn, ok := fpRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a floating point register (FA/FT/FB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = fn
-		}
-	case 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7A, 0x7B, 0x7C, 0x7D: // COMPLEX
-		// Most are binary, some unary (e.g., SQRT, ABS, SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG)
-		unaryOps := map[string]bool{"SQRT": true, "ABS": true, "SIN": true, "COS": true, "TAN": true, "ASIN": true, "ACOS": true, "ATAN": true, "EXP": true, "LOG": true}
-		if unaryOps[strings.ToUpper(instr.Mnemonic)] {
-			if len(instr.Operands) != 2 {
-				return out, 0xFF, fmt.Errorf("%s requires 2 operands (dst, src) at line %d", instr.Mnemonic, instr.Line)
-			}
-			for i := 0; i < 2; i++ {
-				reg, ok := instr.Operands[i].(*RegisterNode)
-				if !ok {
-					return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-				}
-				rn, err := regNum(reg.Name)
-				if err != nil {
-					return out, 0xFF, err
-				}
-				out[i+1] = rn
-			}
-			out[3] = 0 // unused
-		} else {
-			if len(instr.Operands) != 3 {
-				return out, 0xFF, fmt.Errorf("%s requires 3 operands (dst, src1, src2) at line %d", instr.Mnemonic, instr.Line)
-			}
-			for i := 0; i < 3; i++ {
-				reg, ok := instr.Operands[i].(*RegisterNode)
-				if !ok {
-					return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-				}
-				rn, err := regNum(reg.Name)
-				if err != nil {
-					return out, 0xFF, err
-				}
-				out[i+1] = rn
-			}
-		}
-	case 0x80, 0x81, 0x82, 0x83, 0x84, 0x85: // COMPLEX_VEC
-		if len(instr.Operands) != 3 {
-			return out, 0xFF, fmt.Errorf("%s requires 3 operands at line %d", instr.Mnemonic, instr.Line)
-		}
-		vecRegs := map[string]byte{"VA": 0, "VT": 1, "VB": 2}
-		for i := 0; i < 3; i++ {
-			reg, ok := instr.Operands[i].(*RegisterNode)
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a register at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			vn, ok := vecRegs[strings.ToUpper(reg.Name)]
-			if !ok {
-				return out, 0xFF, fmt.Errorf("%s operand %d is not a vector register (VA/VT/VB) at line %d", instr.Mnemonic, i+1, instr.Line)
-			}
-			out[i+1] = vn
-		}
-	case 0x90, 0x91, 0x92: // COMPLEX_MEM
-		// All bytes except opcode are zero
-		// No further action needed
-	case 0xA0, 0xA1, 0xA2: // COMPLEX_SYS
-		// All bytes except opcode are zero
-		// No further action needed
-	default:
-		return out, 0xFF, fmt.Errorf("unsupported opcode: %02X", opc)
-	}
-	return out, destReg, nil
+	return false
 }
 
 // --- Directive/Data Emission ---
 func (cg *CodeGenerator) emitDirective(dir *DirectiveNode) error {
-	fmt.Printf("[DEBUG] In emitDirective: %+v\n", dir)
-	if deprecatedDirectives[strings.ToUpper(dir.Name)] && codegenWarnings != nil {
-		*codegenWarnings = append(*codegenWarnings, fmt.Errorf("warning: directive '%s' at line %d is deprecated", dir.Name, dir.Line))
+	if deprecatedDirectives[strings.ToUpper(dir.Name)] {
+		codegenWarn("warning: directive '%s' at line %d is deprecated", dir.Name, dir.Line)
 	}
 	name := strings.ToUpper(dir.Name)
 	switch name {
@@ -634,66 +269,53 @@ func (cg *CodeGenerator) emitDirective(dir *DirectiveNode) error {
 	case ".SPACE":
 		if len(dir.Params) > 0 {
 			imm, _ := parseImmediateOperand(dir.Params[0])
-			for i := 0; i < int(imm); i++ {
-				cg.Output = append(cg.Output, 0)
-				cg.CurrentAddr++
+			for i := int64(0); i < imm; i++ {
+				if err := cg.emitDataWord(0, dir.Line); err != nil {
+					return err
+				}
 			}
 		}
-	case ".DW":
+	case ".DB", ".DW", ".DT":
+		// All data directives emit one 18-trit word per item; strings emit
+		// one word per character.
 		for _, op := range dir.Params {
-			switch v := op.(type) {
-			case *ImmediateNode:
-				if isQuotedString(v.Value) {
-					for _, c := range unquoteString(v.Value) {
-						var buf [2]byte
-						binary.BigEndian.PutUint16(buf[:], uint16(c))
-						cg.Output = append(cg.Output, buf[:]...)
-						cg.CurrentAddr += 2
+			if v, ok := op.(*ImmediateNode); ok && isQuotedString(v.Value) {
+				for _, c := range unquoteString(v.Value) {
+					if err := cg.emitDataWord(int64(c), dir.Line); err != nil {
+						return err
 					}
-				} else {
-					imm, _ := parseImmediateOperand(v)
-					var buf [2]byte
-					binary.BigEndian.PutUint16(buf[:], uint16(imm))
-					cg.Output = append(cg.Output, buf[:]...)
-					cg.CurrentAddr += 2
 				}
-			default:
-				imm, _ := parseImmediateOperand(op)
-				var buf [2]byte
-				binary.BigEndian.PutUint16(buf[:], uint16(imm))
-				cg.Output = append(cg.Output, buf[:]...)
-				cg.CurrentAddr += 2
+				continue
 			}
-		}
-	case ".DB":
-		for _, op := range dir.Params {
-			switch v := op.(type) {
-			case *ImmediateNode:
-				if isQuotedString(v.Value) {
-					for _, c := range unquoteString(v.Value) {
-						cg.Output = append(cg.Output, byte(c))
-						cg.CurrentAddr++
-					}
-				} else {
-					imm, _ := parseImmediateOperand(v)
-					cg.Output = append(cg.Output, byte(imm))
-					cg.CurrentAddr++
-				}
-			default:
-				imm, _ := parseImmediateOperand(op)
-				cg.Output = append(cg.Output, byte(imm))
-				cg.CurrentAddr++
+			imm, err := parseImmediateOperand(op)
+			if err != nil {
+				return fmt.Errorf("%s at line %d: %v", name, dir.Line, err)
+			}
+			if err := cg.emitDataWord(imm, dir.Line); err != nil {
+				return err
 			}
 		}
 	case ".EQU":
 		// Already handled in pass 1
 		return nil
-	case ".INCLUDE":
-		return fmt.Errorf(".INCLUDE directive not implemented yet")
+	case ".INCLUDE", ".MACRO", ".ENDM":
+		// Handled by the preprocessor; nothing reaches code generation.
+		return nil
 	// TODO: Add support for other assembler directives as needed
 	default:
 		// Ignore other directives for now
 	}
+	return nil
+}
+
+// emitDataWord emits one 18-trit data word.
+func (cg *CodeGenerator) emitDataWord(v int64, line int) error {
+	trits, err := isa.BalancedTrits(v, isa.SlotTrits)
+	if err != nil {
+		return fmt.Errorf("data value at line %d: %v", line, err)
+	}
+	cg.Output = append(cg.Output, isa.EncodeTrits(trits)...)
+	cg.CurrentAddr++
 	return nil
 }
 
@@ -711,22 +333,50 @@ func unquoteString(s string) string {
 }
 
 // --- Helpers ---
+
+// parseImmediateString parses a literal in any supported base:
+// decimal, 0x hex, 0b binary, or 0t balanced ternary (digits +, -, 0).
+func parseImmediateString(val string) (int64, error) {
+	switch {
+	case strings.HasPrefix(val, "0x"):
+		return strconv.ParseInt(val[2:], 16, 64)
+	case strings.HasPrefix(val, "0b"):
+		return strconv.ParseInt(val[2:], 2, 64)
+	case strings.HasPrefix(val, "0t"):
+		return parseBalancedTernary(val[2:])
+	default:
+		return strconv.ParseInt(val, 10, 64)
+	}
+}
+
+// parseBalancedTernary converts balanced ternary digits (+, -, 0) to an
+// integer; the leftmost digit is the most significant trit:
+// "+0-" = (+1)*9 + 0*3 + (-1)*1 = 8.
+func parseBalancedTernary(digits string) (int64, error) {
+	if digits == "" {
+		return 0, fmt.Errorf("empty balanced ternary literal")
+	}
+	var v int64
+	for _, c := range digits {
+		v *= 3
+		switch c {
+		case '+':
+			v++
+		case '-':
+			v--
+		case '0':
+			// nothing
+		default:
+			return 0, fmt.Errorf("invalid balanced ternary digit %q", c)
+		}
+	}
+	return v, nil
+}
+
 func parseImmediateOperand(op OperandNode) (int64, error) {
 	switch v := op.(type) {
 	case *ImmediateNode:
-		// Support decimal, hex, binary, ternary
-		val := v.Value
-		if strings.HasPrefix(val, "0x") {
-			return strconv.ParseInt(val[2:], 16, 32)
-		} else if strings.HasPrefix(val, "0b") {
-			return strconv.ParseInt(val[2:], 2, 32)
-		} else if strings.HasPrefix(val, "0t") {
-			// Ternary: +, -, 0
-			// For now, treat as 0
-			return 0, nil
-		} else {
-			return strconv.ParseInt(val, 10, 32)
-		}
+		return parseImmediateString(v.Value)
 	case *IdentifierNode:
 		// Symbol/label reference
 		return 0, nil // Will be resolved in pass 2
@@ -751,15 +401,10 @@ func (cg *CodeGenerator) resolveOperandAddr(op OperandNode) uint32 {
 		return uint32(imm)
 	case *IdentifierNode:
 		return cg.resolveSymbol(v.Name)
-	}
-	return 0
-}
-
-func (cg *CodeGenerator) resolveMemOperand(mem *MemoryOperandNode) uint32 {
-	// For now, just use base register as address (stub)
-	if mem.Base != "" {
-		if addr, ok := cg.Labels[mem.Base]; ok {
-			return addr
+	case *BinaryOpNode:
+		// label+offset expressions, e.g. "vec_a+1"
+		if v.Op == "+" {
+			return cg.resolveOperandAddr(v.Left) + cg.resolveOperandAddr(v.Right)
 		}
 	}
 	return 0

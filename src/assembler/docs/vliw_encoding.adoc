@@ -1,121 +1,112 @@
-= VTX1 VLIW Instruction Encoding
+= VTX1 Trit-Native Instruction Encoding
 :toc: left
 :icons: font
 
 == Overview
 
-The VTX1 processor implements a VLIW (Very Long Instruction Word) architecture that allows multiple operations to be executed in parallel. This document describes the encoding format for VLIW instructions in the VTX1 assembler.
+VTX1 is a balanced-ternary VLIW machine. Every operation is encoded in one
+18-trit machine word; a VLIW instruction is a bundle of 3 operation words
+(54 trits = 108 bits in the 2-bit-per-trit hardware encoding, matching
+`VLIW_WIDTH`).
 
-== VLIW Instruction Format
+The single source of truth for this encoding is `src/assembler/isa/isa.go`.
+The Verilog constants in `src/common/vtx1_isa_generated.vh` are generated
+from it (`cd src/assembler && go run ./isa/gen`) so the toolchain and the RTL
+cannot drift apart.
 
-Each VTX1 VLIW instruction is 96 bits wide and can contain up to 3 operations (32 bits each):
+== Physical representation
 
-[literal]
-....
-+-----------------------------------+-----------------------------------+-----------------------------------+
-|          Operation 1 (32 bits)    |          Operation 2 (32 bits)    |          Operation 3 (32 bits)    |
-+-----------------------------------+-----------------------------------+-----------------------------------+
-....
+Each trit is stored as 2 bits (hardware encoding, see
+`src/common/ternary_constants.v`):
 
-== Operation Field Encoding
+[cols="1,1,1"]
+|===
+| Trit | Encoding | Meaning
 
-Each operation field is encoded as follows:
+| -1 | `00` | negative
+|  0 | `01` | zero
+| +1 | `10` | positive
+|  - | `11` | undefined/invalid
+|===
 
-[literal]
-....
-+--------+------+------+------+--------------------+------+------+
-| Opcode | Reg1 | Reg2 | Reg3 | Immediate/Offset   | Type | Par  |
-+--------+------+------+------+--------------------+------+------+
-| 6 bits | 3b   | 3b   | 3b   | 11 bits            | 3b   | 3b   |
-+--------+------+------+------+--------------------+------+------+
-....
+An 18-trit word therefore occupies 36 bits, stored in files as 5 bytes with
+4 zero padding bits. Trit `t` (0 = most significant) occupies bits
+`[35-2t : 34-2t]` of the word.
 
-Where:
+== Operation word layout
 
-* *Opcode* (6 bits): Instruction operation code
-* *Reg1, Reg2, Reg3* (3 bits each): Register specifiers
-* *Immediate/Offset* (11 bits): Immediate value or address offset
-* *Type* (3 bits): Operation type (ALU, Memory, Control, Vector, FPU, System)
-* *Par* (3 bits): Parallel execution flags
+All formats start with a 4-trit opcode (trits 0..3). The opcode space holds
+81 values -- exactly 3^4 -- and the VTX1 instruction set fills it completely.
+The all-zero-trit word is NOP.
 
-== Operation Type Encoding
+[cols="1,3"]
+|===
+| Format | Layout (trit positions, MSB first)
 
-The "Type" field uses the following encoding:
+| R3     | rd 4..6 \| rs1 7..9 \| mode 10 \| payload 11..17 +
+           mode 0: rs2 = trits 15..17; mode +1: 7-trit immediate (±1093)
+| R2     | rd 4..6 \| rs 7..9
+| R1     | r 4..6
+| None   | (all operand trits zero)
+| Mem    | reg 4..6 \| mode 7 \| payload 8..17 +
+           mode 0: 10-trit direct address/immediate (±29524) +
+           mode +1: base 8..10, index 11..13 (`[base]` uses index TZ) +
+           mode -1: base 8..10, 7-trit offset 11..17
+| Branch | rs1 4..6 \| rs2 7..9 \| 8-trit PC-relative word offset 10..17
+           (±3280); rs2 = TZ encodes "compare against zero"
+| Jump   | 14-trit absolute word address, trits 4..17 (±2391484)
+|===
 
-* `000`: ALU Operation
-* `001`: Memory Operation
-* `002`: Control Operation
-* `003`: Vector Operation
-* `004`: FPU Operation
-* `005`: System Operation
-* `006`: Microcode Operation
-* `007`: Reserved
+Because every numeric field is balanced ternary, immediates, offsets and
+branch displacements are naturally signed and symmetric around zero -- there
+is no sign bit and no two's-complement asymmetry. Negative absolute addresses
+are architecturally legal and reserved for memory-mapped I/O.
 
-== Parallel Flags Encoding
+== Addressing
 
-The "Par" field uses the following encoding:
+Memory is word-addressed: one address names one 18-trit word. A scalar
+instruction advances the PC by 1, a VLIW bundle by 3. Data directives
+(.DB/.DW/.DT) emit one word per item; strings emit one word per character.
 
-* `000`: Serial Execution
-* `001`: Parallel with ALU
-* `002`: Parallel with Memory
-* `003`: Parallel with Control
-* `004`: Full Parallel
-* `005`-`007`: Reserved
+== Registers
 
-== Binary Representation
+Registers live in a unified 3-trit index space (pattern = balanced(index-13)):
 
-In memory, the VLIW instruction is stored in little-endian format (lower address bits first).
+[cols="1,1,3"]
+|===
+| Registers | Indices | Role
 
-Example encoding for the VLIW instruction `[ADD T0, T1, T2] [LD T3, [TB+1]] [NOP]`:
+| T0-T6 | 0-6   | general purpose
+| TB    | 7     | base pointer
+| TA    | 8     | accumulator
+| TC    | 9     | program counter
+| TS    | 10    | status
+| TI    | 11    | instruction
+| VA, VT, VB | 12-14 | vector
+| FA, FT, FB | 15-17 | floating point
+| TZ    | 18    | zero register: reads 0, writes discarded
+|===
 
-[literal]
-....
-+--------+------+------+------+--------------------+------+------+
-| 000001 | 000  | 001  | 010  | 00000000000        | 000  | 004  | Operation 1: ADD T0, T1, T2
-+--------+------+------+------+--------------------+------+------+
-| 010000 | 011  | 100  | 000  | 00000000001        | 001  | 001  | Operation 2: LD T3, [TB+1]
-+--------+------+------+------+--------------------+------+------+
-| 000000 | 000  | 000  | 000  | 00000000000        | 005  | 000  | Operation 3: NOP
-+--------+------+------+------+--------------------+------+------+
-....
+== VLIW packing rules
 
-== Assembler Representation
+The assembler enforces, per bundle:
 
-In assembly language, VLIW instructions are represented by enclosing operations in square brackets:
+1. Maximum of 3 operations (shorter bundles are NOP-padded)
+2. Maximum of 1 memory operation
+3. Maximum of 1 control operation
+4. No two operations may write the same register (error)
+5. An operation reading a register that another slot writes sees the
+   pre-bundle value; the assembler emits a hazard warning
+
+== Assembler representation
 
 [source,assembly]
 ----
-[ADD T0, T1, T2] [LD T3, [TB+1]] [NOP]
+[ADD T0, T0, 1] [ADD T1, T1, 1] [ADD T2, T2, 1]
 ----
 
-== Instruction Packing Rules
+== Example
 
-Not all operations can be combined in a VLIW instruction. The assembler enforces the following rules:
-
-1. Maximum of 3 operations per VLIW instruction
-2. Maximum of 1 memory operation per VLIW instruction
-3. Maximum of 1 control operation per VLIW instruction
-4. No register conflicts between operations
-5. No pipeline hazards between operations
-
-== Register Encoding
-
-Registers are encoded as follows:
-
-* `T0`-`T6`: `000`-`110` (General Purpose Registers)
-* `TA`: `111` (Accumulator)
-* `TB`: `000` (Base Pointer, accessed via type field)
-* `TC`: `001` (Program Counter, accessed via type field)
-* `TS`: `010` (Status Register, accessed via type field)
-* `TI`: `011` (Instruction Register, accessed via type field)
-* `VA`, `VT`, `VB`: Accessed via vector operations
-* `FA`, `FT`, `FB`: Accessed via FPU operations
-
-== Error Handling
-
-The assembler will report errors if:
-
-1. A VLIW instruction contains more than 3 operations
-2. Operations within a VLIW instruction have conflicts
-3. Register usage violates architectural constraints
-4. Parallel execution flags are incompatible
+`BEQ T3, 0, done` four words before `done` encodes as: opcode BEQ
+(value 30, pattern `0-0-`), rs1 = T3 (`-0-`), rs2 = TZ (`+--`, compare
+against zero), offset +4 (`000000++`) -- in trits: `0-0--0-+--000000++`.

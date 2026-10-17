@@ -119,3 +119,5 @@ type BinaryOpNode struct {
 	Line   int
 	Column int
 }
+
+func (BinaryOpNode) isOperand() {}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"reflect"
 
 	parser "github.com/kvany/vtx1/assembler/grammar"
 
@@ -29,8 +28,42 @@ func BuildAST(tree antlr.ParseTree) *AST {
 	return nil
 }
 
+// Visit dispatches on the concrete parse tree node type. The generated parser
+// was produced without ANTLR's -visitor option, so the contexts have no Accept
+// methods of their own: tree.Accept(b) would fall through to the runtime's
+// default VisitChildren and silently return nil. Dispatching here keeps the
+// builder independent of how the parser was generated.
 func (b *ASTBuilder) Visit(tree antlr.ParseTree) interface{} {
-	return tree.Accept(b)
+	switch t := tree.(type) {
+	case *parser.ProgramContext:
+		return b.VisitProgram(t)
+	case *parser.LineContext:
+		return b.VisitLine(t)
+	case *parser.LabelContext:
+		return b.VisitLabel(t)
+	case *parser.InstructionContext:
+		return b.VisitInstruction(t)
+	case *parser.DirectiveContext:
+		return b.VisitDirective(t)
+	case *parser.LabelledDirectiveContext:
+		return b.VisitLabelledDirective(t)
+	case *parser.VliwInstructionContext:
+		return b.VisitVliwInstruction(t)
+	case *parser.OperandContext:
+		return b.VisitOperand(t)
+	case *parser.RegisterContext:
+		return b.VisitRegister(t)
+	case *parser.ImmediateContext:
+		return b.VisitImmediate(t)
+	case *parser.MemoryOperandContext:
+		return b.VisitMemoryOperand(t)
+	case *parser.DataListContext:
+		return b.VisitDataList(t)
+	case *parser.DataItemContext:
+		return b.VisitDataItem(t)
+	default:
+		return tree.Accept(b)
+	}
 }
 
 func (b *ASTBuilder) VisitProgram(ctx *parser.ProgramContext) interface{} {
@@ -51,8 +84,6 @@ func (b *ASTBuilder) VisitLine(ctx *parser.LineContext) interface{} {
 	var statement StatementNode
 	var comment string
 
-	fmt.Printf("[ASTBuilder] VisitLine: ctx.Instruction()=%v, ctx.Directive()=%v, ctx.VliwInstruction()=%v, ctx.LabelledDirective()=%v\n", ctx.Instruction(), ctx.Directive(), ctx.VliwInstruction(), ctx.LabelledDirective())
-
 	if ctx.Label() != nil {
 		if l := b.Visit(ctx.Label()); l != nil {
 			label = l.(*LabelNode)
@@ -72,14 +103,15 @@ func (b *ASTBuilder) VisitLine(ctx *parser.LineContext) interface{} {
 		}
 	} else if ctx.LabelledDirective() != nil {
 		if s := b.Visit(ctx.LabelledDirective()); s != nil {
-			statement = s.(*DirectiveNode)
+			ln := s.(*LineNode)
+			label = ln.Label
+			statement = ln.Statement
 		}
 	}
 	// Handle optional end-of-line comment
 	if n := len(ctx.AllComment()); n > 0 {
 		comment = ctx.Comment(n - 1).GetText()
 	}
-	fmt.Printf("[ASTBuilder] VisitLine: statement type = %v, line text = %q\n", reflect.TypeOf(statement), ctx.GetText())
 	return &LineNode{
 		Label:     label,
 		Statement: statement,
@@ -113,20 +145,24 @@ func (b *ASTBuilder) VisitInstruction(ctx *parser.InstructionContext) interface{
 }
 
 func (b *ASTBuilder) VisitDirective(ctx *parser.DirectiveContext) interface{} {
-	name := ctx.GetText()
+	// The directive name is the first token only; GetText() on the whole
+	// context would concatenate the parameters into the name (".ORG0x1000").
+	name := ctx.GetStart().GetText()
 	params := []OperandNode{}
-	if ctx.Immediate() != nil {
-		params = append(params, b.Visit(ctx.Immediate()).(OperandNode))
-	}
-	if ctx.DataList() != nil {
-		params = append(params, b.Visit(ctx.DataList()).([]OperandNode)...)
-	}
+	// The identifier comes before the immediate so .EQU params keep their
+	// source order: .EQU NAME, value -> [NAME, value].
 	if ctx.IDENTIFIER() != nil {
 		params = append(params, &IdentifierNode{
 			Name:   ctx.IDENTIFIER().GetText(),
 			Line:   ctx.IDENTIFIER().GetSymbol().GetLine(),
 			Column: ctx.IDENTIFIER().GetSymbol().GetColumn(),
 		})
+	}
+	if ctx.Immediate() != nil {
+		params = append(params, b.Visit(ctx.Immediate()).(OperandNode))
+	}
+	if ctx.DataList() != nil {
+		params = append(params, b.Visit(ctx.DataList()).([]OperandNode)...)
 	}
 	if ctx.STRING() != nil {
 		params = append(params, &ImmediateNode{
@@ -140,6 +176,32 @@ func (b *ASTBuilder) VisitDirective(ctx *parser.DirectiveContext) interface{} {
 		Params: params,
 		Line:   ctx.GetStart().GetLine(),
 		Column: ctx.GetStart().GetColumn(),
+	}
+}
+
+// VisitLabelledDirective handles lines of the form `name: .DW 10`, which the
+// grammar parses as a single labelledDirective rule. It returns a *LineNode
+// carrying both the label and the directive so neither is lost.
+func (b *ASTBuilder) VisitLabelledDirective(ctx *parser.LabelledDirectiveContext) interface{} {
+	var label *LabelNode
+	if ctx.IDENTIFIER() != nil {
+		label = &LabelNode{
+			Name:   ctx.IDENTIFIER().GetText(),
+			Line:   ctx.IDENTIFIER().GetSymbol().GetLine(),
+			Column: ctx.IDENTIFIER().GetSymbol().GetColumn(),
+		}
+	}
+	var statement StatementNode
+	if ctx.Directive() != nil {
+		if s := b.Visit(ctx.Directive()); s != nil {
+			statement = s.(*DirectiveNode)
+		}
+	}
+	return &LineNode{
+		Label:     label,
+		Statement: statement,
+		Line:      ctx.GetStart().GetLine(),
+		Column:    ctx.GetStart().GetColumn(),
 	}
 }
 
@@ -173,43 +235,32 @@ func (b *ASTBuilder) VisitOperand(ctx *parser.OperandContext) interface{} {
 			Column: ctx.IDENTIFIER(0).GetSymbol().GetColumn(),
 		}
 	}
-	// Handle binary operations
+	// Handle binary operations (ident+imm, ident+ident, imm+ident, imm+imm).
+	// Walk the children in source order so left and right end up on the
+	// correct sides regardless of which grammar alternative matched.
 	if ctx.PLUS() != nil {
-		var left OperandNode
-		var right OperandNode
-		if len(ctx.AllIDENTIFIER()) > 0 {
-			left = &IdentifierNode{
-				Name:   ctx.IDENTIFIER(0).GetText(),
-				Line:   ctx.IDENTIFIER(0).GetSymbol().GetLine(),
-				Column: ctx.IDENTIFIER(0).GetSymbol().GetColumn(),
-			}
-		} else if len(ctx.AllImmediate()) > 0 {
-			left = b.Visit(ctx.Immediate(0)).(OperandNode)
-		}
-		if len(ctx.AllIDENTIFIER()) > 1 {
-			right = &IdentifierNode{
-				Name:   ctx.IDENTIFIER(1).GetText(),
-				Line:   ctx.IDENTIFIER(1).GetSymbol().GetLine(),
-				Column: ctx.IDENTIFIER(1).GetSymbol().GetColumn(),
-			}
-		} else if len(ctx.AllImmediate()) > 1 {
-			right = b.Visit(ctx.Immediate(1)).(OperandNode)
-		} else if len(ctx.AllImmediate()) > 0 && len(ctx.AllIDENTIFIER()) > 0 {
-			if left == nil {
-				left = b.Visit(ctx.Immediate(0)).(OperandNode)
-			}
-			if right == nil {
-				right = &IdentifierNode{
-					Name:   ctx.IDENTIFIER(0).GetText(),
-					Line:   ctx.IDENTIFIER(0).GetSymbol().GetLine(),
-					Column: ctx.IDENTIFIER(0).GetSymbol().GetColumn(),
+		var parts []OperandNode
+		for _, child := range ctx.GetChildren() {
+			switch c := child.(type) {
+			case *parser.ImmediateContext:
+				parts = append(parts, b.VisitImmediate(c).(OperandNode))
+			case antlr.TerminalNode:
+				if c.GetText() != "+" {
+					parts = append(parts, &IdentifierNode{
+						Name:   c.GetText(),
+						Line:   c.GetSymbol().GetLine(),
+						Column: c.GetSymbol().GetColumn(),
+					})
 				}
 			}
 		}
+		if len(parts) != 2 {
+			return nil
+		}
 		return &BinaryOpNode{
-			Left:   left,
+			Left:   parts[0],
 			Op:     "+",
-			Right:  right,
+			Right:  parts[1],
 			Line:   ctx.GetStart().GetLine(),
 			Column: ctx.GetStart().GetColumn(),
 		}

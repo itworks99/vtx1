@@ -9,9 +9,6 @@ import (
 )
 
 func main() {
-	// Debug: print raw os.Args and flag.Args()
-	fmt.Printf("[DEBUG] os.Args: %v\n", os.Args)
-
 	// Set up command line flags
 	outputFile := flag.String("o", "", "Output binary file (default: input.bin)")
 	flag.StringVar(outputFile, "output", "", "Output binary file (default: input.bin)")
@@ -32,11 +29,10 @@ func main() {
 	showHelp := flag.Bool("h", false, "Show help information")
 	flag.BoolVar(showHelp, "help", false, "Show help information")
 
-	wordSize := flag.String("wordsize", "8", "Output word size/format: 8, 36, 108, ternary")
-	flag.StringVar(wordSize, "w", "8", "Output word size/format: 8, 36, 108, ternary")
+	wordSize := flag.String("wordsize", "36", "Output unit: 36 (18-trit words, default) or 108 (VLIW bundles)")
+	flag.StringVar(wordSize, "w", "36", "Output unit: 36 (18-trit words, default) or 108 (VLIW bundles)")
 
 	flag.Parse()
-	fmt.Printf("[DEBUG] flag.Args(): %v\n", flag.Args())
 
 	if *showVersion {
 		fmt.Printf("VTX1 Assembler v%s\n", cmd.Version)

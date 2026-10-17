@@ -45,15 +45,15 @@ main:
 
         ; Vector arithmetic demonstration (in reality would use vector registers)
         LD T0, vec_a         ; First vector element
-        LD T1, vec_a+4       ; Second vector element
+        LD T1, vec_a+1       ; Second vector element (word addressing)
         LD T2, vec_b         ; First vector element of second vector
-        LD T3, vec_b+4       ; Second vector element of second vector
+        LD T3, vec_b+1       ; Second vector element of second vector
 
         ; Element-wise vector addition
         ADD T4, T0, T2       ; T4 = vec_a[0] + vec_b[0]
         ADD T5, T1, T3       ; T5 = vec_a[1] + vec_b[1]
         ST T4, result_vec_add
-        ST T5, result_vec_add+4
+        ST T5, result_vec_add+1
 
         ; Completion signal
         LD T0, 1

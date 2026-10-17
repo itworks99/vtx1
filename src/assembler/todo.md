@@ -29,10 +29,10 @@
     4. [x] Implement encoding logic for VEC instructions (VA, VT, VB supported)
     5. [x] Implement encoding logic for FP instructions (FA, FT, FB supported)
     6. [x] Implement encoding logic for COMPLEX instructions (unary and binary forms supported)
-    7. [ ] Implement VLIW instruction packing and validation (3 ops per word, resource conflict detection)
-    8. [ ] Implement encoding for balanced ternary and 36/96-bit word formats (stub, all output is currently 8-bit binary)
-    9. [ ] Implement support for all assembler directives (.ORG, .DB, .DW, .INCLUDE, etc.) (stub for .INCLUDE, others supported)
-    10. [ ] Add/expand support for output formats: binary, hex, objdump (hex/objdump are placeholders)
+    7. [x] Implement VLIW instruction packing and validation (3 ops per bundle, max 1 memory / 1 control op, write-write conflicts are errors, read-after-write hazards are warnings)
+    8. [x] Implement trit-native encoding: every instruction is one 18-trit word (--wordsize=36 for the word stream, 108 for VLIW bundles; see ISA Note below)
+    9. [ ] Implement support for all assembler directives (.ORG, .DB, .DW, .DT, .SPACE, .EQU, .INCLUDE implemented; .ALIGN and .SECTION are parsed but not yet applied in codegen)
+    10. [x] Add/expand support for output formats: binary, hex (Intel HEX with checksums), objdump (real trit-level disassembler)
     11. [ ] Add/expand support for symbol table and debug info output (stub only)
     12. [x] Implement encoding logic for COMPLEX_VEC instructions (VA, VT, VB supported)
     13. [x] Implement encoding logic for COMPLEX_MEM, COMPLEX_SYS instructions (system instructions, no operands)
@@ -145,7 +145,8 @@ The VTX1 assembler processes input in the following stages:
 ## Macro & Include Grammar Note
 
 - The grammar now supports macro definition (`.MACRO ... .ENDM`) and macro invocation, as well as include files via `.INCLUDE`.
-- Next step: Implement macro expansion and include file handling in the assembler logic.
+- Both are implemented in a preprocessing stage (`cmd/preprocess.go`) that runs before lexing: `.INCLUDE` paths resolve relative to the including file with cycle detection; macros support positional parameters, nested invocation (depth-limited), and labelled invocation lines. See `examples/macro_demo.asm`.
+- Known limitation: diagnostics after preprocessing refer to line numbers in the expanded source, not the original file.
 
 ---
 
@@ -197,8 +198,19 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
-## Code Generation Note
+## ISA Note (trit-native encoding)
 
-- A new `CodeGenerator` has been implemented and integrated into the assembler pipeline.
-- The assembler can now emit machine code for `NOP` and `ADD` instructions as a proof of concept.
-- Next steps: Expand the code generator to support all instruction types, VLIW packing, and directive handling. 
+- The ISA is now trit-native and single-sourced in `src/assembler/isa/isa.go`; the Verilog constants `src/common/vtx1_isa_generated.vh` are generated from it (`cd src/assembler && go run ./isa/gen`). Full layout documentation: `docs/vliw_encoding.adoc`.
+- Every instruction is one 18-trit machine word (36 bits at 2 bits/trit, stored as 5 bytes). A VLIW bundle is 3 words = 54 trits = 108 bits (`VLIW_WIDTH / `VLIW_BYTES match exactly).
+- The 4-trit opcode space (81 = 3^4) is filled exactly by the 81-mnemonic instruction set. The all-zero-trit word is NOP.
+- Memory is word-addressed; immediates, addresses and branch offsets are balanced ternary and therefore naturally signed (branches are PC-relative ±3280 words, direct addresses ±29524, jumps ±2391484; negative addresses reserved for MMIO).
+- TZ (index 18) is the architectural zero register; it encodes compare-against-zero branches and plain `[base]` addressing.
+- All example programs assemble end to end as valid trit streams (`cmd/integration_test.go` covers every example x word size x format).
+- NEXT STEP (hardware): rewrite `src/cpu/instruction_decoder.v` field extraction and opcode compares against the generated header, and update the microcode dispatch values to match. Until then, assembled binaries do not execute on the RTL.
+
+---
+
+## Visitor Dispatch Note (bug fix)
+
+- The ANTLR parser was generated without the `-visitor` option, so parse tree contexts have no `Accept` methods; `tree.Accept(builder)` silently returned nil for every node and the assembler emitted 0 bytes for any input. `ASTBuilder.Visit` now dispatches on the concrete context type directly.
+- Further AST builder fixes: directive names no longer swallow their parameters (`.ORG 0x1000` used to produce the name `.ORG0x1000`, breaking .ORG/.DB/.DW/.EQU handling); `.EQU` parameters keep source order (identifier, value); labelled directives (`name: .DW 10`) no longer lose their label; binary operands (`vec_a+4`) keep their left/right order.

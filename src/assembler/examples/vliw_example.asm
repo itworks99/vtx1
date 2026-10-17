@@ -33,7 +33,8 @@ loop:
         ADD T1, T1, T5      ; sum += array[i]
 
         ; VLIW operation: Update max if needed while checking for end of array
-        [CMP T6, T5, T3] [ADD T2, T2, 1] [CMP T7, T2, T0]
+        ; (TA is the accumulator; T7 does not exist on VTX1)
+        [CMP T6, T5, T3] [ADD T2, T2, 1] [CMP TA, T2, T0]
 
         ; Branch if element > max
         BGT T6, 0, update_max
@@ -66,8 +67,11 @@ check_loop:
 ;===============================================================================
 ; Store results with parallel operations
 ;===============================================================================
-        ; Store all results in one VLIW instruction (parallel stores)
-        [ST T1, result_sum] [ST T3, result_max] [ST T4, result_min]
+        ; Store the results. Stores cannot be packed into one VLIW word:
+        ; the architecture allows at most one memory operation per word.
+        ST T1, result_sum
+        ST T3, result_max
+        ST T4, result_min
 
         ; Calculate and store average
         DIV T5, T1, T0      ; average = sum / length
