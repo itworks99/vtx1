@@ -72,6 +72,8 @@ tasks:
   test-all:
     desc: Run all VTX1 tests
     cmds:
+      - task: test-decoder
+      - task: test-core
       - task: test-microcode-simple
       - task: test-pipeline
       - task: test-optimized
@@ -136,6 +138,15 @@ tasks:
       - cd src/assembler && go build -o ../../build/vtxasm . && go build -o ../../build/vtxsim ./vtxsim
       - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
       - ./build/vtxsim -dump 0x2000:16 build/hello_world.memh
+
+  test-core:
+    desc: Run hello_world on the trit-native RTL core (code-to-silicon loop)
+    cmds:
+      - task: os-mkdir-build
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
+      - iverilog -g2012 -I src/common -o build/vtx1_core_test src/cpu/vtx1_decoder.v src/cpu/vtx1_core.v src/testbench/tb_vtx1_core.v
+      - vvp build/vtx1_core_test
 
   # Debug and Issue Resolution Tasks
   test-i2c-fix:
