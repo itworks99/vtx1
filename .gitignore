@@ -8,3 +8,4 @@ build
 .idea
 /src/assembler/vtxasm.exe
 *.vcd
+.idea/
