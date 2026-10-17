@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 // VTX1 Enhanced SPI Controller
 // Part of the VTX1 Ternary System-on-Chip
 // Enhanced with master/slave modes, multi-slave support, DMA integration
@@ -131,6 +132,18 @@ module spi_controller (
     end
   end
 
+  // FIFO Implementation (64-entry deep)
+  reg [35:0] tx_fifo [0:63];
+  reg [35:0] rx_fifo [0:63];
+  reg [5:0] tx_fifo_wr_ptr, tx_fifo_rd_ptr;
+  reg [5:0] rx_fifo_wr_ptr, rx_fifo_rd_ptr;
+  reg [6:0] tx_fifo_count, rx_fifo_count;
+
+  wire tx_fifo_empty = (tx_fifo_count == 0);
+  wire tx_fifo_full  = (tx_fifo_count == 64);
+  wire rx_fifo_empty = (rx_fifo_count == 0);
+  wire rx_fifo_full  = (rx_fifo_count == 64);
+
   // Unified register read logic - DRY improvement with status updates
   always @(*)
   begin
@@ -185,17 +198,6 @@ module spi_controller (
   wire [7:0] cs_hold_time    = timing_reg[15:8];
   wire [7:0] inter_byte_delay = timing_reg[23:16];
 
-  // FIFO Implementation (64-entry deep)
-  reg [35:0] tx_fifo [0:63];
-  reg [35:0] rx_fifo [0:63];
-  reg [5:0] tx_fifo_wr_ptr, tx_fifo_rd_ptr;
-  reg [5:0] rx_fifo_wr_ptr, rx_fifo_rd_ptr;
-  reg [6:0] tx_fifo_count, rx_fifo_count;
-
-  wire tx_fifo_empty = (tx_fifo_count == 0);
-  wire tx_fifo_full  = (tx_fifo_count == 64);
-  wire rx_fifo_empty = (rx_fifo_count == 0);
-  wire rx_fifo_full  = (rx_fifo_count == 64);
 
   // Internal registers
   reg [3:0] state, next_state;

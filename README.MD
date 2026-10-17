@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="VTX1.png" alt="VTX1 logo" width="320">
+  <img src="VTX1.png" alt="VTX1 logo" width="160">
 </p>
 
 # VTX1 Ternary SoC

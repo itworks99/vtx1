@@ -675,7 +675,7 @@ always @(*) begin
                 UART_MODEM_STATUS:uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, modem_status_reg};
                 UART_BREAK_CTRL:  uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, break_ctrl_reg};
                 UART_TX_FIFO_LVL: uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, 24'h000000, tx_count[7:0]};
-                UART_RX_FIFO_LVL: uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, 24'h000000, rx_count_reg[7:0]};
+                UART_RX_FIFO_LVL: uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, 24'h000000, {1'b0, rx_count_reg}};
                 UART_ERROR_COUNT: uart_rdata = {{(`VTX1_WORD_WIDTH-32){1'b0}}, 24'h000000, error_count_reg};
                 
                 default: begin
@@ -753,7 +753,7 @@ always @(*) begin
     tx_count = tx_count_reg;
     rx_count = rx_count_total;
     error_count = error_count_reg;
-    fifo_status = {tx_count[7:0], rx_count_reg[7:0]};
+    fifo_status = {tx_count[7:0], {1'b0, rx_count_reg}};
 end
 
 endmodule

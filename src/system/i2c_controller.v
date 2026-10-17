@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 // VTX1 Enhanced I2C Controller
 // Part of the VTX1 Ternary System-on-Chip
 // Enhanced with multi-master capability, multiple speeds, clock stretching

@@ -1,4 +1,3 @@
-	`timescale 1ns / 1ps
 // File: vtx1_error_macros.v
 // Description: Standardized error handling macros for VTX1 processor
 //

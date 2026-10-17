@@ -760,6 +760,18 @@ debug_controller debug_inst (
     .debug_access_req(debug_access_req),
     .debug_access_ready(debug_access_ready),
     
+    // CPU observation (debug_pc comes from cpu_core; state/reg data are
+    // tied off until the debug fabric is built out)
+    .cpu_debug_pc(cpu_debug_pc),
+    .cpu_debug_state(4'h0),
+    .cpu_debug_reg_data({VTX1_WORD_WIDTH{1'b0}}),
+    .debug_access_wdata({VTX1_WORD_WIDTH{1'b0}}),
+
+    // Breakpoints/watchpoints: none configured at the top level
+    .breakpoint_addr_packed({(VTX1_ADDR_WIDTH*16){1'b0}}),
+    .watchpoint_enable(16'h0000),
+    .watchpoint_addr_packed({(VTX1_ADDR_WIDTH*16){1'b0}}),
+
     // Debug Status
     .debug_state(debug_state),
     .debug_operations_count(debug_operations_count)
@@ -918,6 +930,8 @@ gpio_controller gpio_inst (
 
 // Enhanced UART Controller
 uart_controller uart_inst (
+    .uart_enable(1'b1),
+    .uart_clk_div(16'd434),  // 50 MHz / 115200 baud
     .clk(clk_periph),
     .rst_n(rst_periph_n),
     
@@ -1091,8 +1105,11 @@ assign debug_access_data = {VTX1_WORD_WIDTH{1'b0}}; // Debug access data (zero)
 assign debug_access_wr = 1'b0;                    // No debug writes
 assign debug_access_req = 1'b0;                   // No debug requests
 
-// Instruction memory - connect to memory controller through bus matrix
-assign cpu_imem_data = bus_mem_rdata[VTX1_VLIW_WIDTH-1:0];
+// Instruction memory - connect to memory controller through bus matrix.
+// The bus returns one 36-bit word per access; a full 108-bit VLIW bundle
+// fetch (3 words) belongs to the cpu_core port to the trit-native decoder.
+// Zero-extend explicitly instead of selecting out of bounds.
+assign cpu_imem_data = {{(VTX1_VLIW_WIDTH-VTX1_WORD_WIDTH){1'b0}}, bus_mem_rdata};
 
 // Cache controller connections - now handled by cache_controller module
 // Note: All cache signals are now connected through the cache_controller instantiation above

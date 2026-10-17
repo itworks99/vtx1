@@ -1,4 +1,3 @@
-	`timescale 1ns / 1ps
 // VTX1 Ternary Constants and Encoding Definitions
 // Part of the VTX1 Ternary System-on-Chip
 

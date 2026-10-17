@@ -564,6 +564,9 @@ module cpu_core (
     assign dcache_hit = 1'b1;      // Always hit for simplified implementation
     assign dcache_ready = dmem_ready;
     
+    wire       irq;
+    wire [7:0] irq_vector;
+    wire [1:0] irq_level;
     assign irq = |interrupt_req;   // Any interrupt request
     assign irq_vector = 8'h0;      // Simplified interrupt vector
     assign irq_level = 2'h0;       // Simplified interrupt level

@@ -151,13 +151,14 @@ module vtx1_decoder (
                  (format == `VTX1_FMT_MEM)    ? ((mem_mode == MEM_DIRECT) ? addr10 : imm7_11) :
                  r3_imm_mode                  ? imm7_11 : 32'sd0;
 
-    // Full-word balanced value (for data words).
+    // Full-word balanced value (for data words). Indexes `word` directly
+    // (not the trit array) so the @* sensitivity is just the input vector.
     integer wi;
     reg signed [35:0] wv;
     always @* begin
         wv = 36'sd0;
         for (wi = 0; wi < 18; wi = wi + 1)
-            wv = wv * 3 + t[wi];
+            wv = wv * 3 + tv(word[35-2*wi -: 2]);
     end
     assign word_value = wv;
 
