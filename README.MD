@@ -50,7 +50,7 @@ VTX1 leverages the computational advantages of balanced ternary logic (trits: -1
 
 **✅ Completed:**
 - Core ternary arithmetic and logic modules
-- CPU pipeline with microcode sequencer
+- CPU pipeline (hardwired control; the microcode sequencer is retired in favor of dedicated multi-cycle units)
 - Memory controller and cache system
 - I/O controllers (UART, SPI, I2C, GPIO, DMA)
 - Complete build and test automation with Taskfile

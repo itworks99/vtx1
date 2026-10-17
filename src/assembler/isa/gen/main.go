@@ -101,8 +101,8 @@ func main() {
 	for _, ins := range instrs {
 		p := isa.OpcodePattern(ins.Value)
 		micro := ""
-		if ins.Microcoded {
-			micro = ", microcoded"
+		if ins.MultiCycle {
+			micro = ", multi-cycle"
 		}
 		fmt.Fprintf(&sb, "`define VTX1_OPC_%-8s %s  // %s (value %d, %s%s)\n",
 			ins.Name, bits(p), tritsString(p), ins.Value, ins.Category, micro)
@@ -148,7 +148,7 @@ func main() {
 // Include INSIDE a module body (no include guard: each module needs its own
 // copy of the function). Requires vtx1_isa_generated.vh for the defines.
 //
-// vtx1_opcode_info(value) = {microcoded, category[2:0], format[2:0]}
+// vtx1_opcode_info(value) = {multicycle, category[2:0], format[2:0]}
 // where value = 40 + 27*t0 + 9*t1 + 3*t2 + t3 over the signed opcode trits.
 `)
 	fb.WriteString("function [6:0] vtx1_opcode_info(input [6:0] value);\n")
@@ -166,7 +166,7 @@ func main() {
 	}
 	for _, ins := range instrs {
 		micro := "1'b0"
-		if ins.Microcoded {
+		if ins.MultiCycle {
 			micro = "1'b1"
 		}
 		fmt.Fprintf(&fb, "        7'd%-2d: vtx1_opcode_info = {%s, %s, %s}; // %s\n",

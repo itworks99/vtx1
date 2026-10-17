@@ -17,8 +17,8 @@
 //
 // Instruction word layout (trit 0 = most significant):
 //
-//	all formats:  trits[0:4]   opcode (4 trits, 81 values - the full
-//	                           instruction set fits exactly: 81 = 3^4)
+//	all formats:  trits[0:4]   opcode (4 trits: 81 = 3^4 values, of which
+//	                           69 are assigned and 12 reserved)
 //
 //	R3:      trits[4:7] rd | [7:10] rs1 | [10] mode | [11:18] payload
 //	         mode  0: payload[4:7] = rs2 (last 3 trits)
@@ -125,13 +125,25 @@ type Instruction struct {
 	Format     Format
 	Class      RegClass // register class of the register operands
 	Category   Category
-	Microcoded bool // executed by the microcode sequencer
+	MultiCycle bool // executed by a dedicated multi-cycle unit (stalls the pipeline)
 }
 
-// Instructions lists all 81 operations: the 4-trit opcode space is fully
-// occupied (81 = 3^4). NOP holds value 40 so its pattern - and with zeroed
-// operands the entire word - is all-zero trits. VADD takes NOP's former
-// block slot (value 0) in exchange.
+// Instructions lists the 69 operations of the 4-trit opcode space (81 = 3^4
+// values). NOP holds value 40 so its pattern - and with zeroed operands the
+// entire word - is all-zero trits. VADD takes NOP's former block slot
+// (value 0) in exchange.
+//
+// There is no microcode: every operation is either single-cycle hardwired
+// control or a dedicated multi-cycle unit (divider, vector reduction).
+// Deliberately absent, with their opcode values reserved (see
+// ReservedValues):
+//   - SIN/COS/TAN/ASIN/ACOS/ATAN/EXP/LOG (61-68): transcendentals are
+//     software library routines over the (excellent, Booth-free) ternary
+//     primitives; hardware acceleration, if ever needed, is a CORDIC FSM
+//     unit, not an interpreter.
+//   - UDIV/UMOD (57-58) and BLTU/BGEU (34-35): "unsigned" is meaningless
+//     in balanced ternary; the number system is inherently signed and
+//     symmetric.
 var Instructions = []Instruction{
 	// ALU
 	{"NOP", 40, FormatNone, ClassGPR, CatALU, false},
@@ -170,8 +182,6 @@ var Instructions = []Instruction{
 	{"BNE", 31, FormatBranch, ClassGPR, CatCTRL, false},
 	{"BLT", 32, FormatBranch, ClassGPR, CatCTRL, false},
 	{"BGE", 33, FormatBranch, ClassGPR, CatCTRL, false},
-	{"BLTU", 34, FormatBranch, ClassGPR, CatCTRL, false},
-	{"BGEU", 35, FormatBranch, ClassGPR, CatCTRL, false},
 	{"BGT", 36, FormatBranch, ClassGPR, CatCTRL, false},
 	{"BLE", 37, FormatBranch, ClassGPR, CatCTRL, false},
 	{"CALL", 38, FormatJump, ClassGPR, CatCTRL, false},
@@ -194,37 +204,31 @@ var Instructions = []Instruction{
 	{"FNEG", 53, FormatR2, ClassFP, CatFP, false},
 	// SYS
 	{"WFI", 54, FormatNone, ClassGPR, CatSYS, false},
-	// COMPLEX (microcoded ALU)
+	// Multi-cycle ALU units (iterative divider / root FSMs)
 	{"DIV", 55, FormatR3, ClassGPR, CatALU, true},
 	{"MOD", 56, FormatR3, ClassGPR, CatALU, true},
-	{"UDIV", 57, FormatR3, ClassGPR, CatALU, true},
-	{"UMOD", 58, FormatR3, ClassGPR, CatALU, true},
 	{"SQRT", 59, FormatR2, ClassGPR, CatALU, true},
-	{"ABS", 60, FormatR2, ClassGPR, CatALU, true},
-	{"SIN", 61, FormatR2, ClassGPR, CatALU, true},
-	{"COS", 62, FormatR2, ClassGPR, CatALU, true},
-	{"TAN", 63, FormatR2, ClassGPR, CatALU, true},
-	{"ASIN", 64, FormatR2, ClassGPR, CatALU, true},
-	{"ACOS", 65, FormatR2, ClassGPR, CatALU, true},
-	{"ATAN", 66, FormatR2, ClassGPR, CatALU, true},
-	{"EXP", 67, FormatR2, ClassGPR, CatALU, true},
-	{"LOG", 68, FormatR2, ClassGPR, CatALU, true},
-	// COMPLEX_VEC (microcoded)
+	{"ABS", 60, FormatR2, ClassGPR, CatALU, false},
+	// Multi-cycle vector reductions
 	{"VDOT", 69, FormatR3, ClassVec, CatVEC, true},
 	{"VREDUCE", 70, FormatR3, ClassVec, CatVEC, true},
 	{"VMAX", 71, FormatR3, ClassVec, CatVEC, true},
 	{"VMIN", 72, FormatR3, ClassVec, CatVEC, true},
 	{"VSUM", 73, FormatR3, ClassVec, CatVEC, true},
 	{"VPERM", 74, FormatR3, ClassVec, CatVEC, true},
-	// COMPLEX_MEM (microcoded)
-	{"CACHE", 75, FormatNone, ClassGPR, CatMEM, true},
-	{"FLUSH", 76, FormatNone, ClassGPR, CatMEM, true},
-	{"MEMBAR", 77, FormatNone, ClassGPR, CatMEM, true},
-	// COMPLEX_SYS (microcoded)
-	{"SYSCALL", 78, FormatNone, ClassGPR, CatSYS, true},
-	{"BREAK", 79, FormatNone, ClassGPR, CatSYS, true},
-	{"HALT", 80, FormatNone, ClassGPR, CatSYS, true},
+	// Memory system control (single-cycle)
+	{"CACHE", 75, FormatNone, ClassGPR, CatMEM, false},
+	{"FLUSH", 76, FormatNone, ClassGPR, CatMEM, false},
+	{"MEMBAR", 77, FormatNone, ClassGPR, CatMEM, false},
+	// System control (single-cycle)
+	{"SYSCALL", 78, FormatNone, ClassGPR, CatSYS, false},
+	{"BREAK", 79, FormatNone, ClassGPR, CatSYS, false},
+	{"HALT", 80, FormatNone, ClassGPR, CatSYS, false},
 }
+
+// ReservedValues are opcode values intentionally left unassigned (see the
+// note above Instructions). They decode as invalid.
+var ReservedValues = []int{34, 35, 57, 58, 61, 62, 63, 64, 65, 66, 67, 68}
 
 // Register is one architectural register in the unified 3-trit index space.
 type Register struct {

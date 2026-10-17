@@ -19,7 +19,7 @@ module tb_vtx1_decoder;
     wire [6:0]  opcode;
     wire [2:0]  format;
     wire [2:0]  category;
-    wire        microcoded;
+    wire        multicycle;
     wire [4:0]  reg1, reg2, reg3;
     wire        uses_imm;
     wire signed [31:0] imm;
@@ -28,7 +28,7 @@ module tb_vtx1_decoder;
 
     vtx1_decoder dut (
         .word(word), .valid(valid), .opcode(opcode), .format(format),
-        .category(category), .microcoded(microcoded),
+        .category(category), .multicycle(multicycle),
         .reg1(reg1), .reg2(reg2), .reg3(reg3),
         .uses_imm(uses_imm), .imm(imm), .mem_mode(mem_mode),
         .word_value(word_value)

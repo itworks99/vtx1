@@ -3,7 +3,7 @@
 // Include INSIDE a module body (no include guard: each module needs its own
 // copy of the function). Requires vtx1_isa_generated.vh for the defines.
 //
-// vtx1_opcode_info(value) = {microcoded, category[2:0], format[2:0]}
+// vtx1_opcode_info(value) = {multicycle, category[2:0], format[2:0]}
 // where value = 40 + 27*t0 + 9*t1 + 3*t2 + t3 over the signed opcode trits.
 function [6:0] vtx1_opcode_info(input [6:0] value);
     case (value)
@@ -41,8 +41,6 @@ function [6:0] vtx1_opcode_info(input [6:0] value);
         7'd31: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BNE
         7'd32: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BLT
         7'd33: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BGE
-        7'd34: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BLTU
-        7'd35: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BGEU
         7'd36: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BGT
         7'd37: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_BRANCH}; // BLE
         7'd38: vtx1_opcode_info = {1'b0, `VTX1_CAT_CTRL, `VTX1_FMT_JUMP}; // CALL
@@ -64,30 +62,20 @@ function [6:0] vtx1_opcode_info(input [6:0] value);
         7'd54: vtx1_opcode_info = {1'b0, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // WFI
         7'd55: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R3}; // DIV
         7'd56: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R3}; // MOD
-        7'd57: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R3}; // UDIV
-        7'd58: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R3}; // UMOD
         7'd59: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // SQRT
-        7'd60: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // ABS
-        7'd61: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // SIN
-        7'd62: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // COS
-        7'd63: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // TAN
-        7'd64: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // ASIN
-        7'd65: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // ACOS
-        7'd66: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // ATAN
-        7'd67: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // EXP
-        7'd68: vtx1_opcode_info = {1'b1, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // LOG
+        7'd60: vtx1_opcode_info = {1'b0, `VTX1_CAT_ALU, `VTX1_FMT_R2}; // ABS
         7'd69: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VDOT
         7'd70: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VREDUCE
         7'd71: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VMAX
         7'd72: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VMIN
         7'd73: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VSUM
         7'd74: vtx1_opcode_info = {1'b1, `VTX1_CAT_VEC, `VTX1_FMT_R3}; // VPERM
-        7'd75: vtx1_opcode_info = {1'b1, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // CACHE
-        7'd76: vtx1_opcode_info = {1'b1, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // FLUSH
-        7'd77: vtx1_opcode_info = {1'b1, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // MEMBAR
-        7'd78: vtx1_opcode_info = {1'b1, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // SYSCALL
-        7'd79: vtx1_opcode_info = {1'b1, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // BREAK
-        7'd80: vtx1_opcode_info = {1'b1, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // HALT
+        7'd75: vtx1_opcode_info = {1'b0, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // CACHE
+        7'd76: vtx1_opcode_info = {1'b0, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // FLUSH
+        7'd77: vtx1_opcode_info = {1'b0, `VTX1_CAT_MEM, `VTX1_FMT_NONE}; // MEMBAR
+        7'd78: vtx1_opcode_info = {1'b0, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // SYSCALL
+        7'd79: vtx1_opcode_info = {1'b0, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // BREAK
+        7'd80: vtx1_opcode_info = {1'b0, `VTX1_CAT_SYS, `VTX1_FMT_NONE}; // HALT
         default: vtx1_opcode_info = {1'b0, 3'd7, `VTX1_FMT_BAD};
     endcase
 endfunction

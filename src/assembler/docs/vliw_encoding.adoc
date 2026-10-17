@@ -36,8 +36,11 @@ An 18-trit word therefore occupies 36 bits, stored in files as 5 bytes with
 == Operation word layout
 
 All formats start with a 4-trit opcode (trits 0..3). The opcode space holds
-81 values -- exactly 3^4 -- and the VTX1 instruction set fills it completely.
-The all-zero-trit word is NOP.
+81 values (3^4): 69 are assigned and 12 are reserved for future operations
+(the retired transcendental and unsigned opcodes; see `isa.ReservedValues`).
+The all-zero-trit word is NOP. There is no microcode: operations are either
+single-cycle hardwired control or dedicated multi-cycle units (DIV/MOD/SQRT,
+vector reductions), which stall the pipeline until done.
 
 [cols="1,3"]
 |===

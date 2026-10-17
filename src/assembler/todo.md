@@ -202,7 +202,8 @@ The VTX1 assembler processes input in the following stages:
 
 - The ISA is now trit-native and single-sourced in `src/assembler/isa/isa.go`; the Verilog constants `src/common/vtx1_isa_generated.vh` are generated from it (`cd src/assembler && go run ./isa/gen`). Full layout documentation: `docs/vliw_encoding.adoc`.
 - Every instruction is one 18-trit machine word (36 bits at 2 bits/trit, stored as 5 bytes). A VLIW bundle is 3 words = 54 trits = 108 bits (`VLIW_WIDTH / `VLIW_BYTES match exactly).
-- The 4-trit opcode space (81 = 3^4) is filled exactly by the 81-mnemonic instruction set. The all-zero-trit word is NOP.
+- The 4-trit opcode space holds 81 = 3^4 values: 69 assigned, 12 reserved (`isa.ReservedValues`). The all-zero-trit word is NOP.
+- MICROCODE IS RETIRED: SIN/COS/TAN/ASIN/ACOS/ATAN/EXP/LOG are software library routines (transcendentals reduce to shift/add/multiply loops and gain nothing from an interpreter); UDIV/UMOD/BLTU/BGEU are deleted (unsigned is meaningless in balanced ternary); ABS is a plain single-cycle ALU op; DIV/MOD/SQRT and the vector reductions are dedicated multi-cycle FSM units that stall the pipeline.
 - Memory is word-addressed; immediates, addresses and branch offsets are balanced ternary and therefore naturally signed (branches are PC-relative ±3280 words, direct addresses ±29524, jumps ±2391484; negative addresses reserved for MMIO).
 - TZ (index 18) is the architectural zero register; it encodes compare-against-zero branches and plain `[base]` addressing.
 - All example programs assemble end to end as valid trit streams (`cmd/integration_test.go` covers every example x word size x format).
@@ -215,8 +216,26 @@ The VTX1 assembler processes input in the following stages:
 
 - `src/cpu/vtx1_decoder.v` is the trit-native hardware decoder (combinational slot decoder + 3-slot bundle wrapper), built on the generated headers (`vtx1_isa_generated.vh` defines, `vtx1_isa_decode.vh` per-opcode format/category table). `task test-decoder` assembles hello_world and verifies the RTL decode of every word against the ISA - the toolchain <-> RTL contract test.
 - `vtxsim` (src/assembler/vtxsim, engine in src/assembler/sim) is the ISA-level simulator: executes memh images with balanced-ternary semantics and reports dynamic instruction counts, memory traffic and branch behavior. `task sim-hello` runs hello_world ("Hello, VTX1!" lands at 0x2000); `task bench` runs the Tier A kernels in src/assembler/benchmarks (results asserted by `go test -run TestBenchmarkKernels`).
-- Provisional ABI decisions to ratify: TA is the link register (JAL/JALR/CALL write it, RET jumps to it); PUSH/POP trap until a stack ABI is defined; BLTU/BGEU execute as signed (unsigned comparison is meaningless in balanced ternary - consider removing them from the ISA).
-- NEXT STEP (hardware): port cpu_core/microcode_sequencer to vtx1_decoder (the old instruction_decoder.v still implements the dead binary format), then run hello_world on the RTL and cross-check cycle counts against vtxsim instruction counts.
+- Provisional ABI decisions to ratify: TA is the link register (JAL/JALR/CALL write it, RET jumps to it); PUSH/POP trap until a stack ABI is defined. (BLTU/BGEU were removed from the ISA.)
+- NEXT STEP (hardware): port cpu_core to vtx1_decoder with hardwired control plus an iterative divider FSM; delete instruction_decoder.v, microcode_rom.v and microcode_sequencer.v in that port (all three implement the dead binary format and the retired microcode layer). Then run hello_world on the RTL and cross-check cycle counts against vtxsim instruction counts.
+
+---
+
+## Ideas Worth Keeping (ternary leverage)
+
+- Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip
+  zero-rotations ("redundant CORDIC"), converging in fewer effective
+  iterations. If transcendental throughput ever matters, this is the
+  hardware answer: a dedicated CORDIC FSM unit, not microcode.
+- Ternary-weight MAC / matrix engine: neural networks quantized to weights
+  in {-1, 0, +1} (BitNet-style) map perfectly onto balanced ternary - a
+  weight multiply is add/skip/subtract, so a matrix-vector unit needs NO
+  multipliers. This is the specialized accelerator that would make VTX1's
+  case, and it is what VDOT should grow into.
+- The architecture-level ternary wins to measure in Tier A: Booth-free
+  multiplication, free negation, truncation-rounds-to-nearest (lower error
+  accumulation in MAC chains), symmetric range (no abs(INT_MIN) overflow),
+  and native three-way compare (see sign_count).
 
 ---
 

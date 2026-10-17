@@ -2,9 +2,11 @@ package isa
 
 import "testing"
 
-func TestOpcodeSpaceIsExactlyFull(t *testing.T) {
-	if len(Instructions) != 81 {
-		t.Fatalf("instruction count = %d, want 81 (= 3^4, the full 4-trit opcode space)", len(Instructions))
+func TestOpcodeSpaceAccounting(t *testing.T) {
+	// 69 operations + 12 reserved values = the full 4-trit opcode space.
+	if len(Instructions)+len(ReservedValues) != 81 {
+		t.Fatalf("instructions (%d) + reserved (%d) != 81 (= 3^4, the 4-trit opcode space)",
+			len(Instructions), len(ReservedValues))
 	}
 	seen := make(map[int]string)
 	for _, ins := range Instructions {
@@ -15,6 +17,33 @@ func TestOpcodeSpaceIsExactlyFull(t *testing.T) {
 			t.Errorf("opcode value %d assigned to both %s and %s", ins.Value, other, ins.Name)
 		}
 		seen[ins.Value] = ins.Name
+	}
+	for _, v := range ReservedValues {
+		if name, used := seen[v]; used {
+			t.Errorf("reserved opcode value %d is assigned to %s", v, name)
+		}
+		seen[v] = "(reserved)"
+	}
+	if len(seen) != 81 {
+		t.Errorf("opcode space has %d accounted values, want 81", len(seen))
+	}
+}
+
+func TestNoMicrocodeRemnants(t *testing.T) {
+	// The microcode layer is retired: these operations must not exist.
+	for _, name := range []string{"SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN",
+		"EXP", "LOG", "UDIV", "UMOD", "BLTU", "BGEU"} {
+		if _, ok := ByName[name]; ok {
+			t.Errorf("%s should have been removed from the ISA", name)
+		}
+	}
+	// Multi-cycle units are exactly the divider/root FSMs and vector reductions.
+	for _, ins := range Instructions {
+		wantMulti := ins.Name == "DIV" || ins.Name == "MOD" || ins.Name == "SQRT" ||
+			(ins.Category == CatVEC && ins.Value >= 69 && ins.Value <= 74)
+		if ins.MultiCycle != wantMulti {
+			t.Errorf("%s: MultiCycle = %v, want %v", ins.Name, ins.MultiCycle, wantMulti)
+		}
 	}
 }
 

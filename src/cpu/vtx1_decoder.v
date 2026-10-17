@@ -35,7 +35,7 @@ module vtx1_decoder (
     output wire [6:0]  opcode,        // opcode value 0..80
     output wire [2:0]  format,        // `VTX1_FMT_*
     output wire [2:0]  category,      // `VTX1_CAT_*
-    output wire        microcoded,
+    output wire        multicycle,
 
     // Register indices (0..26 in the unified space; TZ = 18).
     // reg1: rd (R3/R2), r (R1), data reg (Mem), rs1 (Branch)
@@ -99,7 +99,7 @@ module vtx1_decoder (
     assign opcode = opc_signed[6:0] + 7'd40; // value = balanced + 40
 
     wire [6:0] info = vtx1_opcode_info(opcode);
-    assign microcoded = info[6];
+    assign multicycle = info[6];
     assign category   = info[5:3];
     assign format     = info[2:0];
 
@@ -174,7 +174,7 @@ module vtx1_bundle_decoder (
     output wire [6:0]   opcode_a, opcode_b, opcode_c,
     output wire [2:0]   format_a, format_b, format_c,
     output wire [2:0]   category_a, category_b, category_c,
-    output wire [2:0]   microcoded,
+    output wire [2:0]   multicycle,
     output wire [4:0]   reg1_a, reg2_a, reg3_a,
     output wire [4:0]   reg1_b, reg2_b, reg3_b,
     output wire [4:0]   reg1_c, reg2_c, reg3_c,
@@ -185,21 +185,21 @@ module vtx1_bundle_decoder (
 
     vtx1_decoder slot_a (
         .word(bundle[107:72]), .valid(valid[0]), .opcode(opcode_a),
-        .format(format_a), .category(category_a), .microcoded(microcoded[0]),
+        .format(format_a), .category(category_a), .multicycle(multicycle[0]),
         .reg1(reg1_a), .reg2(reg2_a), .reg3(reg3_a),
         .uses_imm(uses_imm[0]), .imm(imm_a), .mem_mode(mem_mode_a),
         .word_value()
     );
     vtx1_decoder slot_b (
         .word(bundle[71:36]), .valid(valid[1]), .opcode(opcode_b),
-        .format(format_b), .category(category_b), .microcoded(microcoded[1]),
+        .format(format_b), .category(category_b), .multicycle(multicycle[1]),
         .reg1(reg1_b), .reg2(reg2_b), .reg3(reg3_b),
         .uses_imm(uses_imm[1]), .imm(imm_b), .mem_mode(mem_mode_b),
         .word_value()
     );
     vtx1_decoder slot_c (
         .word(bundle[35:0]), .valid(valid[2]), .opcode(opcode_c),
-        .format(format_c), .category(category_c), .microcoded(microcoded[2]),
+        .format(format_c), .category(category_c), .multicycle(multicycle[2]),
         .reg1(reg1_c), .reg2(reg2_c), .reg3(reg3_c),
         .uses_imm(uses_imm[2]), .imm(imm_c), .mem_mode(mem_mode_c),
         .word_value()

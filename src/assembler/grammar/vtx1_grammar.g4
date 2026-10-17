@@ -139,7 +139,7 @@ MEM_OP          : 'LD' | 'ST' | 'VLD' | 'VST' | 'FLD' | 'FST' | 'LEA'
 
 // Mnemonics - Control operations
 CTRL_OP         : 'JMP' | 'JAL' | 'JR' | 'JALR' | 'BEQ' | 'BNE' | 'BLT'
-                | 'BGE' | 'BLTU' | 'BGEU' | 'BGT' | 'BLE' | 'CALL' | 'RET';
+                | 'BGE' | 'BGT' | 'BLE' | 'CALL' | 'RET';
 
 // Mnemonics - Vector operations
 VEC_OP          : 'VADD' | 'VSUB' | 'VMUL' | 'VAND' | 'VOR' | 'VNOT'
@@ -152,9 +152,7 @@ FP_OP           : 'FADD' | 'FSUB' | 'FMUL' | 'FCMP' | 'FMOV' | 'FNEG';
 SYS_OP          : 'NOP' | 'WFI';
 
 // Mnemonics - Complex operations (microcode)
-COMPLEX_OP      : 'DIV' | 'MOD' | 'UDIV' | 'UMOD' | 'SQRT' | 'ABS'
-                | 'SIN' | 'COS' | 'TAN' | 'ASIN' | 'ACOS' | 'ATAN'
-                | 'EXP' | 'LOG';
+COMPLEX_OP      : 'DIV' | 'MOD' | 'SQRT' | 'ABS';
 
 // Mnemonics - Complex vector operations
 COMPLEX_VEC     : 'VDOT' | 'VREDUCE' | 'VMAX' | 'VMIN' | 'VSUM' | 'VPERM';

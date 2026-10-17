@@ -307,10 +307,8 @@ func (m *Machine) Step() error {
 				return fmt.Errorf("PC 0x%X: SQRT of negative value %d", m.PC, src)
 			}
 			v = isqrt(src)
-		case "FMOV", "FNEG", "VNOT":
+		default: // FMOV, FNEG, VNOT
 			return fmt.Errorf("PC 0x%X: %s: vector/FP units not modeled", m.PC, ins.Name)
-		default: // SIN, COS, TAN, ASIN, ACOS, ATAN, EXP, LOG
-			return fmt.Errorf("PC 0x%X: %s: transcendental microcode not modeled", m.PC, ins.Name)
 		}
 		m.setReg(reg1, v)
 
@@ -357,12 +355,12 @@ func (m *Machine) Step() error {
 			v = sign(a - b)
 		case "TEST":
 			v = sign(tritwise(a, b, tritMin))
-		case "DIV", "UDIV":
+		case "DIV":
 			if b == 0 {
 				return fmt.Errorf("PC 0x%X: division by zero", m.PC)
 			}
 			v = a / b
-		case "MOD", "UMOD":
+		case "MOD":
 			if b == 0 {
 				return fmt.Errorf("PC 0x%X: division by zero", m.PC)
 			}
@@ -414,9 +412,9 @@ func (m *Machine) Step() error {
 			take = a == b
 		case "BNE":
 			take = a != b
-		case "BLT", "BLTU":
+		case "BLT":
 			take = a < b
-		case "BGE", "BGEU":
+		case "BGE":
 			take = a >= b
 		case "BGT":
 			take = a > b
