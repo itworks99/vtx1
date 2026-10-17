@@ -7,7 +7,7 @@
 // Compatible with Icarus Verilog simulation
 // =============================================================================
 
-module vtx1_top_consolidated (
+module vtx1_soc (
     // External Clock and Reset
     input wire clk_ext,                // 27 MHz external oscillator
     input wire clk_32k,                // 32.768 kHz RTC clock
@@ -107,22 +107,13 @@ wire clk_cpu, clk_mem, clk_periph, clk_debug, clk_flash;
 wire rst_cpu_n, rst_mem_n, rst_periph_n, rst_debug_n, rst_flash_n, rst_system_n;
 
 // CPU Core Interface (direct CPU interface)
-wire cpu_enable;
-wire [VTX1_WORD_WIDTH-1:0] cpu_imem_addr, cpu_dmem_addr;
-wire [VTX1_VLIW_WIDTH-1:0] cpu_imem_data;
-wire [VTX1_WORD_WIDTH-1:0] cpu_dmem_data;
-wire cpu_imem_req, cpu_imem_ready, cpu_dmem_req, cpu_dmem_ready;
-wire cpu_dmem_we, cpu_dmem_oe;
-wire [15:0] cpu_interrupt_req, cpu_interrupt_ack;
-wire cpu_nmi_req, cpu_debug_enable, cpu_debug_step;
-wire [3:0] cpu_debug_cmd, cpu_debug_status;
+// Trit-native CPU core (vtx1_core): one word-addressed bus master port
+wire [31:0] cpu_mem_addr32;
+wire [31:0] cpu_pc;
+wire cpu_halted, cpu_trap;
+wire [31:0] cpu_trap_pc;
 wire [VTX1_WORD_WIDTH-1:0] cpu_debug_pc;
-wire [31:0] cpu_cycle_count, cpu_instruction_count, cpu_stall_count;
-wire cpu_pipeline_stall, cpu_pipeline_flush;
-wire [1:0] cpu_pipeline_state;
-wire cpu_error, cpu_timeout;
-wire [3:0] cpu_error_code;
-wire [31:0] cpu_error_count;
+wire [31:0] cpu_cycle_count, cpu_instruction_count;
 
 // CPU Adapter Interface (CPU to Bus Matrix)
 wire cpu_bus_req, cpu_bus_wr, cpu_bus_ready, cpu_bus_error, cpu_bus_timeout, cpu_bus_error_clear;
@@ -599,87 +590,37 @@ assign irq_vector = 8'h00;                        // Default interrupt vector
 assign irq_level = 2'b00;                         // Interrupt priority level
 
 // =============================================================================
-// CPU CORE INSTANTIATION
+// CPU CORE INSTANTIATION (trit-native vtx1_core)
 // =============================================================================
-cpu_core cpu_inst (
+// The core's single word-addressed memory port is bus master 0 on the bus
+// matrix. No adapter is needed: the port carries the bus handshake natively.
+vtx1_core cpu_inst (
     .clk(clk_cpu),
     .rst_n(rst_cpu_n),
-    .enable(cpu_enable),
-    
-    // Instruction Memory Interface
-    .imem_addr(cpu_imem_addr),
-    .imem_data(cpu_imem_data),
-    .imem_req(cpu_imem_req),
-    .imem_ready(cpu_imem_ready),
-    
-    // Data Memory Interface  
-    .dmem_addr(cpu_dmem_addr),
-    .dmem_data(cpu_dmem_data),
-    .dmem_we(cpu_dmem_we),
-    .dmem_oe(cpu_dmem_oe),
-    .dmem_req(cpu_dmem_req),
-    .dmem_ready(cpu_dmem_ready),
-    
-    // Interrupt Interface
-    .interrupt_req(cpu_interrupt_req),
-    .interrupt_ack(cpu_interrupt_ack),
-    .nmi_req(cpu_nmi_req),
-    
-    // Debug Interface
-    .debug_enable(cpu_debug_enable),
-    .debug_step(cpu_debug_step),
-    .debug_cmd(cpu_debug_cmd),
-    .debug_pc(cpu_debug_pc),
-    .debug_status(cpu_debug_status),
-    
-    // Performance Counters
-    .cycle_count(cpu_cycle_count),
-    .instruction_count(cpu_instruction_count),
-    .stall_count(cpu_stall_count),
-    
-    // Pipeline Status
-    .pipeline_stall(cpu_pipeline_stall),
-    .pipeline_flush(cpu_pipeline_flush),
-    .pipeline_state(cpu_pipeline_state),
-    
-    // Error handling interface
-    .error(cpu_error),
-    .error_code(cpu_error_code),
-    .timeout(cpu_timeout),
-    .error_count(cpu_error_count)
+
+    // Memory port -> bus matrix CPU master port
+    .mem_req(cpu_bus_req),
+    .mem_wr(cpu_bus_wr),
+    .mem_addr(cpu_mem_addr32),
+    .mem_wdata(cpu_bus_wdata),
+    .mem_rdata(cpu_bus_rdata),
+    .mem_ready(cpu_bus_ready),
+
+    // Execution state
+    .halted(cpu_halted),
+    .trap(cpu_trap),
+    .trap_pc(cpu_trap_pc),
+
+    // Metrics
+    .retired(cpu_instruction_count),
+    .cycles(cpu_cycle_count),
+    .debug_pc(cpu_pc)
 );
 
-// =============================================================================
-// CPU ADAPTER INSTANTIATION
-// =============================================================================
-cpu_adapter cpu_adapter_inst (
-    .clk(clk_cpu),
-    .rst_n(rst_cpu_n),
-    
-    // CPU Core Interface
-    .cpu_dmem_addr(cpu_dmem_addr),
-    .cpu_dmem_data(cpu_dmem_data),
-    .cpu_dmem_we(cpu_dmem_we),
-    .cpu_dmem_oe(cpu_dmem_oe),
-    .cpu_dmem_req(cpu_dmem_req),
-    .cpu_dmem_ready(cpu_dmem_ready),
-    .cpu_imem_addr(cpu_imem_addr),
-    .cpu_imem_req(cpu_imem_req),
-    .cpu_imem_ready(cpu_imem_ready),
-    
-    // Bus Matrix Interface
-    .bus_req(cpu_bus_req),
-    .bus_wr(cpu_bus_wr),
-    .bus_size(cpu_bus_size),
-    .bus_addr(cpu_bus_addr),
-    .bus_wdata(cpu_bus_wdata),
-    .bus_rdata(cpu_bus_rdata),
-    .bus_ready(cpu_bus_ready),
-    .bus_error(cpu_bus_error),
-    .bus_error_code(cpu_bus_error_code),
-    .bus_timeout(cpu_bus_timeout),
-    .bus_error_clear(cpu_bus_error_clear)
-);
+assign cpu_bus_addr = {{(VTX1_ADDR_WIDTH-32){1'b0}}, cpu_mem_addr32};
+assign cpu_bus_size = 2'b10;          // always one 36-bit word
+assign cpu_bus_error_clear = 1'b0;
+assign cpu_debug_pc = {{(VTX1_WORD_WIDTH-32){1'b0}}, cpu_pc};
 
 // =============================================================================
 // DMA CONTROLLER INSTANTIATION
@@ -1075,12 +1016,7 @@ assign bus_deadlock_enable = 1'b1;      // Enable deadlock detection
 assign bus_performance_enable = 1'b1;   // Enable performance monitoring
 
 // CPU Configuration
-assign cpu_enable = rst_cpu_n;
-assign cpu_interrupt_req = 16'h0000;
-assign cpu_nmi_req = 1'b0;
-assign cpu_debug_enable = 1'b0;
-assign cpu_debug_step = 1'b0;
-assign cpu_debug_cmd = 4'h0;
+
 
 // =============================================================================
 // DMA CONTROLLER CONFIGURATION
@@ -1105,11 +1041,7 @@ assign debug_access_data = {VTX1_WORD_WIDTH{1'b0}}; // Debug access data (zero)
 assign debug_access_wr = 1'b0;                    // No debug writes
 assign debug_access_req = 1'b0;                   // No debug requests
 
-// Instruction memory - connect to memory controller through bus matrix.
-// The bus returns one 36-bit word per access; a full 108-bit VLIW bundle
-// fetch (3 words) belongs to the cpu_core port to the trit-native decoder.
-// Zero-extend explicitly instead of selecting out of bounds.
-assign cpu_imem_data = {{(VTX1_VLIW_WIDTH-VTX1_WORD_WIDTH){1'b0}}, bus_mem_rdata};
+// Instruction fetch goes through the CPU's bus master port (word-serial).
 
 // Cache controller connections - now handled by cache_controller module
 // Note: All cache signals are now connected through the cache_controller instantiation above
@@ -1138,20 +1070,8 @@ initial begin
     $display("=================================================");
 end
 
-// System monitoring
+// System monitoring (simulation only)
 always @(posedge clk_cpu) begin
-    if (rst_cpu_n && cpu_bus_req) begin
-        $display("CPU Bus Access: Addr=0x%09X, Data=0x%09X, WR=%b", 
-                cpu_bus_addr, cpu_bus_wdata, cpu_bus_wr);
-    end
-    if (rst_cpu_n && dma_req) begin
-        $display("DMA Bus Access: Addr=0x%09X, Data=0x%09X, WR=%b", 
-                dma_addr, dma_wdata, dma_wr);
-    end
-    if (rst_cpu_n && debug_req) begin
-        $display("Debug Bus Access: Addr=0x%09X, Data=0x%09X, WR=%b", 
-                debug_addr, debug_wdata, debug_wr);
-    end
     if (rst_cpu_n && bus_deadlock_detected) begin
         $display("Bus Matrix Deadlock Detected - Recovery Active");
     end

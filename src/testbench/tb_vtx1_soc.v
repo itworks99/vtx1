@@ -1,9 +1,15 @@
-// VTX1 Consolidated System Testbench
-// Tests the consolidated interface implementation
+// VTX1 SoC Testbench
+//
+// Phase 1 checks the consolidated interfaces (clocks, reset, MMIO routing,
+// LEDs, peripheral status).
+// Phase 2 is the system milestone: hello_world (real assembler output,
+// loaded into the external SRAM model) executes on the trit-native CPU
+// through the bus matrix and memory controller, and the testbench verifies
+// the program's effects in SRAM.
 
 `timescale 1ns/1ps
 
-module tb_vtx1_consolidated;    // Test signals
+module tb_vtx1_soc;    // Test signals
     reg clk_ext;
     reg clk_32k;
     reg rst_ext_n;
@@ -44,7 +50,7 @@ module tb_vtx1_consolidated;    // Test signals
     assign i2c_scl = i2c_scl_drive ? i2c_scl_val : 1'bz;
     pullup(i2c_sda);
     pullup(i2c_scl);    // Instantiate the consolidated VTX1 system
-    vtx1_top_consolidated uut (
+    vtx1_soc uut (
         .clk_ext(clk_ext),
         .clk_32k(clk_32k),
         .rst_ext_n(rst_ext_n),
@@ -92,7 +98,47 @@ module tb_vtx1_consolidated;    // Test signals
         .tp_clk_mem(tp_clk_mem),
         .tp_rst_n(tp_rst_n),
         .tp_state(tp_state)
-    );    // Initialization
+    );
+
+    // ------------------------------------------------------------------
+    // External SRAM model (16K x 36), word-addressed, async read through
+    // the tri-state data bus. Loaded with the assembled hello_world image.
+    // ------------------------------------------------------------------
+    reg [35:0] sram [0:16383];
+    initial $readmemh("build/hello_world.memh", sram);
+
+    assign mem_data = (!mem_cs_n && !mem_oe_n && mem_we_n)
+                      ? sram[mem_addr[13:0]] : 36'hzzzzzzzzz;
+
+    always @(posedge clk_ext)
+        if (!mem_cs_n && !mem_we_n)
+            sram[mem_addr[13:0]] <= mem_data;
+
+    // Decode a canonical trit word to its balanced value
+    function signed [35:0] wordval(input [35:0] w);
+        integer i;
+        reg signed [2:0] t;
+        begin
+            wordval = 36'sd0;
+            for (i = 0; i < 18; i = i + 1) begin
+                case (w[35-2*i -: 2])
+                    2'b00:   t = -3'sd1;
+                    2'b01:   t = 3'sd0;
+                    2'b10:   t = 3'sd1;
+                    default: t = 3'sd0;
+                endcase
+                wordval = wordval * 3 + t;
+            end
+        end
+    endfunction
+
+    integer errors = 0;
+    integer wi;
+    reg [8*16-1:0] hello = "Hello, VTX1!";
+    reg [8*16-1:0] got;
+    reg signed [35:0] wv;
+
+    // Initialization
     initial begin
         // System initialization
         clk_ext = 0;
@@ -147,9 +193,11 @@ module tb_vtx1_consolidated;    // Test signals
         // Add simulation timeout to prevent hanging
         fork
             begin: timeout_block
-                #50000; // 50 microseconds timeout (reduced from 100)
-                $display("❌ TIMEOUT: Simulation exceeded maximum time limit");
-                $display("This may indicate peripheral interrupt issues or infinite loops");
+                #2000000; // 2 ms: covers program execution through the bus
+                $display("FAIL: TIMEOUT - simulation exceeded maximum time limit");
+                $display("CPU state: halted=%b trap=%b pc=0x%0h retired=%0d",
+                         uut.cpu_inst.halted, uut.cpu_inst.trap,
+                         uut.cpu_inst.debug_pc, uut.cpu_inst.retired);
                 $finish;
             end
             begin: main_test_block
@@ -215,42 +263,68 @@ module tb_vtx1_consolidated;    // Test signals
                 
                 // Interface consolidation verification
                 if (led_power == 1'b1 && led_error == 1'b0) begin
-                    $display("✅ PASS: Consolidated interfaces working correctly");
-                    $display("✅ PASS: Clock and reset distribution functional");
-                    $display("✅ PASS: MMIO routing consolidated successfully");
-                    $display("✅ PASS: Standardized signal widths verified");
+                    $display("PASS: Consolidated interfaces working correctly");
                 end else begin
-                    $display("❌ FAIL: Interface consolidation issues detected");
-                    if (led_error == 1'b1) begin
-                        $display("  - Error LED indicates system fault");
-                    end
-                    if (led_power != 1'b1) begin
-                        $display("  - Power LED not indicating proper startup");
+                    $display("FAIL: Interface consolidation issues detected");
+                    errors = errors + 1;
+                end
+
+                // ----------------------------------------------------------
+                // Phase 2: program execution through the whole SoC
+                // ----------------------------------------------------------
+                $display("=================================================");
+                $display("Phase 2: hello_world on the SoC (CPU -> bus matrix");
+                $display("         -> memory controller -> external SRAM)");
+                $display("=================================================");
+
+                wait (uut.cpu_inst.halted);
+                #200;
+
+                if (uut.cpu_inst.trap) begin
+                    $display("FAIL: CPU trapped at PC 0x%0h", uut.cpu_inst.trap_pc);
+                    errors = errors + 1;
+                end
+
+                got = "";
+                for (wi = 0; wi < 12; wi = wi + 1) begin
+                    wv = wordval(sram['h2000 + wi]);
+                    got = {got[8*15-1:0], wv[7:0]};
+                end
+                $display("SoC says: \"%0s\"", got);
+                for (wi = 0; wi < 12; wi = wi + 1) begin
+                    wv = wordval(sram['h2000 + wi]);
+                    if (wv !== hello[8*(12-wi)-1 -: 8]) begin
+                        $display("FAIL: output[%0d] = %0d, want '%c'",
+                                 wi, wv, hello[8*(12-wi)-1 -: 8]);
+                        errors = errors + 1;
                     end
                 end
-                
+                if (wordval(sram['h2100]) !== 12) begin
+                    $display("FAIL: character count = %0d, want 12", wordval(sram['h2100]));
+                    errors = errors + 1;
+                end
+                if (wordval(sram['h2104]) !== 1) begin
+                    $display("FAIL: completion flag = %0d, want 1", wordval(sram['h2104]));
+                    errors = errors + 1;
+                end
+                if (uut.cpu_inst.retired !== 32'd93) begin
+                    $display("FAIL: retired = %0d, want 93 (vtxsim cross-check)",
+                             uut.cpu_inst.retired);
+                    errors = errors + 1;
+                end
+                $display("Cycles: %0d  Retired: %0d",
+                         uut.cpu_inst.cycles, uut.cpu_inst.retired);
+
                 $display("=================================================");
-                $display("VTX1 Interface Consolidation Test Complete");
+                if (errors == 0)
+                    $display("PASS: VTX1 SoC executed hello_world end to end");
+                else
+                    $display("FAIL: %0d error(s)", errors);
                 $display("=================================================");
-                
+
                 disable timeout_block;
                 $finish;
             end
         join
-    end    // Monitor key signals during simulation
-    initial begin
-        $monitor("Time: %t | Reset: %b | Power: %b | Activity: %b | State: %h", 
-                 $time, tp_rst_n, led_power, led_activity, tp_state);
-    end
-
-    // Monitor interrupt status periodically
-    reg [31:0] monitor_counter = 0;
-    
-    always @(posedge clk_ext) begin
-        monitor_counter <= monitor_counter + 1;
-        if (monitor_counter % 1000 == 0) begin
-            $display("Time: %0t, SPI IRQ: %b, I2C IRQ: %b", $time, 
-                     uut.spi_irq, uut.i2c_irq);
-        end
     end
 endmodule

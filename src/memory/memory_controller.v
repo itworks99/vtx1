@@ -73,7 +73,10 @@ module memory_controller (
     wire timeout_detected;
     wire phy_error_detected;
     
-    assign mem_addr_valid = (mem_addr < MAX_MEMORY_ADDR) && (mem_addr[1:0] == 2'b00);
+    // VTX1 memory is word-addressed (one address = one 18-trit word), so
+    // every in-range address is valid; the old byte-alignment check belonged
+    // to the retired binary-slot encoding.
+    assign mem_addr_valid = (mem_addr < MAX_MEMORY_ADDR);
     assign cache_addr_valid = (cache_addr < MAX_MEMORY_ADDR) && (cache_addr[3:0] == 4'b0000);
     assign mmio_addr_valid = (mmio_addr >= MMIO_BASE_ADDR) && (mmio_addr < (MMIO_BASE_ADDR + 16'h100));
     assign timeout_detected = (mc_timeout_counter >= TIMEOUT_CYCLES);

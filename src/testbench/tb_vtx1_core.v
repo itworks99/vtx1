@@ -25,8 +25,11 @@ module tb_vtx1_core;
     wire [31:0] mem_addr;
     wire [35:0] mem_wdata;
     reg  [35:0] mem_rdata;
+    reg         mem_ready = 0;
 
+    // Simple synchronous RAM with a one-cycle ready handshake
     always @(posedge clk) begin
+        mem_ready <= mem_req && !mem_ready;
         if (mem_req && !mem_wr)
             mem_rdata <= mem[mem_addr[13:0]];
         if (mem_req && mem_wr)
@@ -40,8 +43,9 @@ module tb_vtx1_core;
         .clk(clk), .rst_n(rst_n),
         .mem_req(mem_req), .mem_wr(mem_wr),
         .mem_addr(mem_addr), .mem_wdata(mem_wdata), .mem_rdata(mem_rdata),
+        .mem_ready(mem_ready),
         .halted(halted), .trap(trap), .trap_pc(trap_pc),
-        .retired(retired), .cycles(cycles)
+        .retired(retired), .cycles(cycles), .debug_pc()
     );
 
     // Decode a canonical trit word to its balanced value

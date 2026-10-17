@@ -24,14 +24,14 @@ tasks:
       - echo "Task Name              Description"
       - echo "---------------------- -------------------------------------------------"
       - echo "PRIMARY TESTS:"
-      - echo "  test-consolidated    Main comprehensive system test"
+      - echo "  test-soc             Full SoC test - hello_world through the bus"
       - echo "  test-optimized       I2C-fixed optimized system test"
       - echo "  test-all             Run all test suites"
       - echo ""
       - echo "SPECIALIZED TESTS:"
-      - echo "  test-microcode       Comprehensive microcode validation"
-      - echo "  test-microcode-simple Quick microcode checks"
-      - echo "  test-pipeline        CPU pipeline integration tests"
+      - echo "  test-decoder         Trit-native decoder vs assembler output"
+      - echo "  test-core            hello_world on the RTL core"
+      - echo "  bench                Tier A benchmarks in the ISA simulator"
       - echo ""
       - echo "DEBUG & VALIDATION:"
       - echo "  test-status          Quick system status check"
@@ -51,20 +51,22 @@ tasks:
     silent: true
 
   # Primary Test Tasks
-  test-consolidated:
-    desc: Test complete VTX1 consolidated system
+  test-soc:
+    desc: Full SoC test - executes hello_world through the bus matrix
     cmds:
       - task: os-mkdir-build
       - echo "Testing VTX1 Consolidated System..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -I src/testbench -o build/vtx1_consolidated_test src/vtx1_top_consolidated.v src/testbench/tb_vtx1_consolidated.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
-      - vvp build/vtx1_consolidated_test
-      - echo "VTX1 Consolidated system test completed. View waveforms with gtkwave vtx1_consolidated_test.vcd"
+      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -I src/testbench -o build/vtx1_soc_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+      - vvp build/vtx1_soc_test
+      - echo "VTX1 Consolidated system test completed. View waveforms with gtkwave vtx1_soc_test.vcd"
 
   test-optimized:
-    desc: "Run optimized consolidated system test with I2C state fix"
+    desc: "Run the SoC test with I2C state fix validation"
     cmds:
       - task: os-clean-build
       - task: os-mkdir-build
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
       - echo "Compiling VTX1 system with I2C state machine fixes..."
       - task: os-iverilog-optimized
       - task: os-run-optimized
@@ -74,39 +76,10 @@ tasks:
     cmds:
       - task: test-decoder
       - task: test-core
-      - task: test-microcode-simple
-      - task: test-pipeline
       - task: test-optimized
       - echo "All VTX1 tests completed successfully"
 
   # Specialized Test Tasks
-  test-microcode:
-    desc: Test microcode system with comprehensive validation
-    cmds:
-      - task: os-mkdir-build
-      - echo "Testing microcode system..."
-      - iverilog -I src/common -I src/cpu -I src/system -I src/testbench -o build/microcode_test src/testbench/tb_microcode_system.v src/cpu/*.v src/common/*.v src/system/*.v
-      - vvp build/microcode_test
-      - echo "Microcode system tests completed. View waveforms with gtkwave microcode_test.vcd"
-
-  test-microcode-simple:
-    desc: Quick microcode validation tests
-    cmds:
-      - task: os-mkdir-build
-      - echo "Running simple microcode tests..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/testbench -o build/microcode_simple_test src/testbench/tb_microcode_simple.v src/cpu/*.v src/common/*.v
-      - vvp build/microcode_simple_test
-      - echo "Simple microcode tests completed. View waveforms with gtkwave microcode_simple_test.vcd"
-
-  test-pipeline:
-    desc: Test CPU pipeline integration and performance
-    cmds:
-      - task: os-mkdir-build
-      - echo "Testing CPU pipeline integration..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/testbench -o build/pipeline_test src/testbench/test_integrated_pipeline.v src/cpu/*.v src/common/*.v
-      - vvp build/pipeline_test
-      - echo "CPU pipeline tests completed. View waveforms with gtkwave pipeline_test.vcd"
-
   test-decoder:
     desc: Verify trit-native decoder against real assembler output
     cmds:
@@ -163,31 +136,31 @@ tasks:
       - echo "=== VTX1 System Status Check ==="
       - echo "Available testbenches:"
       - task: os-list-testbenches
-      - echo "Running quick consolidated test..."
+      - echo "Running quick SoC test..."
       - task: test-optimized
 
   # Simulation
   simulate:
     desc: Interactive simulation with GTKWave
     cmds:
-      - task: test-consolidated
-      - gtkwave vtx1_consolidated_test.vcd
+      - task: test-soc
+      - gtkwave vtx1_soc_test.vcd
 
   # Synthesis & Validation
   check:
-    desc: Check VTX1 consolidated system syntax
+    desc: Check VTX1 SoC syntax
     cmds:
       - echo "Checking VTX1 Consolidated System syntax..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -t null src/vtx1_top_consolidated.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -t null src/vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
       - echo "VTX1 Consolidated syntax check completed"
 
   synth:
-    desc: Synthesize VTX1 consolidated design with Yosys
+    desc: Synthesize VTX1 SoC with Yosys
     cmds:
       - task: os-mkdir-build
       - echo "Synthesizing VTX1 Consolidated System..."
-      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_top_consolidated.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/instruction_decoder.v src/cpu/hazard_detection.v src/cpu/microcode_rom.v src/cpu/forwarding_unit.v src/cpu/microcode_sequencer.v src/cpu/cpu_core.v src/cpu/tcu_enhanced_interface.v src/cpu/register_file.v src/memory/memory_controller.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; synth -top vtx1_top_consolidated; write_verilog build/vtx1_consolidated_synth.v; write_json build/vtx1_consolidated_synth.json"
-      - echo "VTX1 Consolidated synthesis completed. Output in build/vtx1_consolidated_synth.v"
+      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
+      - echo "VTX1 Consolidated synthesis completed. Output in build/vtx1_soc_synth.v"
 
   # Utilities
   clean:
@@ -246,9 +219,9 @@ tasks:
     cmds:
       - |
         if [ "${OS}" = "windows" ]; then
-          powershell -Command "iverilog -I src\common -I src\cache -o build\vtx1_optimized_test src\vtx1_top_consolidated.v src\testbench\tb_vtx1_consolidated.v src\common\*.v src\cpu\*.v src\memory\*.v src\system\*.v src\cache\*.v"
+          powershell -Command "iverilog -I src\common -I src\cache -o build\vtx1_optimized_test src\vtx1_soc.v src\testbench\tb_vtx1_soc.v src\common\*.v src\cpu\*.v src\memory\*.v src\system\*.v src\cache\*.v"
         else
-          iverilog -I src/common -I src/cache -o build/vtx1_optimized_test src/vtx1_top_consolidated.v src/testbench/tb_vtx1_consolidated.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+          iverilog -I src/common -I src/cache -o build/vtx1_optimized_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
         fi
     silent: true
 

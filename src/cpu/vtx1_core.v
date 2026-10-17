@@ -20,8 +20,8 @@
 // FSM noted in todo.md). SQRT, PUSH/POP (no stack ABI yet) and all
 // vector/FP operations trap.
 //
-// Memory interface: one word-addressed port, synchronous 1-cycle RAM
-// (read data valid the cycle after mem_req).
+// Memory interface: one word-addressed port with a ready handshake, so the
+// core connects equally to a simple synchronous RAM or to the SoC bus matrix.
 
 `ifndef VTX1_CORE_V
 `define VTX1_CORE_V
@@ -32,12 +32,15 @@ module vtx1_core (
     input  wire        clk,
     input  wire        rst_n,
 
-    // Unified word-addressed memory port (synchronous, always ready)
+    // Unified word-addressed memory port with ready handshake:
+    // the core holds mem_req until mem_ready is sampled high together
+    // with valid mem_rdata (reads) or write acceptance (writes).
     output reg         mem_req,
     output reg         mem_wr,
     output reg  [31:0] mem_addr,
     output reg  [35:0] mem_wdata,
     input  wire [35:0] mem_rdata,
+    input  wire        mem_ready,
 
     // Execution state
     output reg         halted,
@@ -46,7 +49,10 @@ module vtx1_core (
 
     // Metrics (cross-checked against the ISA simulator)
     output reg  [31:0] retired,     // instruction words executed
-    output reg  [31:0] cycles
+    output reg  [31:0] cycles,
+
+    // Debug observation
+    output wire [31:0] debug_pc
 );
 
     // Canonical all-zero-trit word (18 x encoding 01)
@@ -178,8 +184,10 @@ module vtx1_core (
     wire [1:0]  mem_mode;
     wire signed [35:0] word_value;
 
+    reg [35:0] ir; // fetched instruction word (stable through EXEC/LOAD/STORE)
+
     vtx1_decoder dec (
-        .word(mem_rdata), .valid(dec_valid), .opcode(opcode),
+        .word(ir), .valid(dec_valid), .opcode(opcode),
         .format(format), .category(category), .multicycle(multicycle),
         .reg1(reg1), .reg2(reg2), .reg3(reg3),
         .uses_imm(uses_imm), .imm(imm), .mem_mode(mem_mode),
@@ -201,16 +209,22 @@ module vtx1_core (
     // ------------------------------------------------------------------
     // Control state machine
     // ------------------------------------------------------------------
-    localparam S_FETCH = 2'd0;
-    localparam S_EXEC  = 2'd1;
-    localparam S_LOAD  = 2'd2;
-    localparam S_HALT  = 2'd3;
+    localparam S_FETCH = 3'd0;
+    localparam S_EXEC  = 3'd1;
+    localparam S_LOAD  = 3'd2;
+    localparam S_STORE = 3'd3;
+    localparam S_HALT  = 3'd4;
 
-    reg [1:0]  state;
+    reg [2:0]  state;
     reg [31:0] pc;
+    reg [31:0] ir_pc; // address of the instruction in IR (branches are relative to it)
     reg [4:0]  ld_rd; // destination latched for the load writeback cycle
+    reg [31:0] mem_ea; // effective address latched for LOAD/STORE
 
-    // Memory port control (combinational)
+    assign debug_pc = pc;
+
+    // Memory port control (combinational). The request is held until the
+    // ready handshake completes.
     always @* begin
         mem_req   = 1'b0;
         mem_wr    = 1'b0;
@@ -221,17 +235,14 @@ module vtx1_core (
                 mem_req  = 1'b1;
                 mem_addr = pc;
             end
-            S_EXEC: begin
-                if (dec_valid && format == `VTX1_FMT_MEM) begin
-                    if (opcode == 7'd17) begin // LD
-                        mem_req  = 1'b1;
-                        mem_addr = ea[31:0];
-                    end else if (opcode == 7'd18) begin // ST
-                        mem_req  = 1'b1;
-                        mem_wr   = 1'b1;
-                        mem_addr = ea[31:0];
-                    end
-                end
+            S_LOAD: begin
+                mem_req  = 1'b1;
+                mem_addr = mem_ea;
+            end
+            S_STORE: begin
+                mem_req  = 1'b1;
+                mem_wr   = 1'b1;
+                mem_addr = mem_ea;
             end
             default: ;
         endcase
@@ -252,7 +263,11 @@ module vtx1_core (
         end else begin
             cycles <= cycles + 1;
             case (state)
-                S_FETCH: state <= S_EXEC;
+                S_FETCH: if (mem_ready) begin
+                    ir    <= mem_rdata;
+                    ir_pc <= pc;
+                    state <= S_EXEC;
+                end
 
                 S_EXEC: begin
                     retired <= retired + 1;
@@ -325,10 +340,14 @@ module vtx1_core (
 
                         `VTX1_FMT_MEM: case (opcode)
                             7'd17: begin                               // LD
-                                ld_rd <= reg1;
-                                state <= S_LOAD;
+                                ld_rd  <= reg1;
+                                mem_ea <= ea[31:0];
+                                state  <= S_LOAD;
                             end
-                            7'd18: ;                                   // ST (port handles it)
+                            7'd18: begin                               // ST
+                                mem_ea <= ea[31:0];
+                                state  <= S_STORE;
+                            end
                             7'd23: writereg(reg1, b2t(ea));            // LEA
                             default: // VLD/VST/FLD/FST
                                 begin trap <= 1'b1; trap_pc <= pc; state <= S_HALT; end
@@ -358,10 +377,13 @@ module vtx1_core (
                     endcase
                 end
 
-                S_LOAD: begin
+                S_LOAD: if (mem_ready) begin
                     writereg(ld_rd, mem_rdata);
                     state <= S_FETCH;
                 end
+
+                S_STORE: if (mem_ready)
+                    state <= S_FETCH;
 
                 S_HALT: ; // stay halted
 
