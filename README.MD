@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="VTX1.png" alt="VTX1 logo" width="320">
+</p>
+
 # VTX1 Ternary SoC
 
 A personal project for a hardware-optimized, balanced ternary logic-based System-on-Chip (SoC) designed for both FPGA prototyping and silicon fabrication. VTX1 explores the possibilities of ternary logic and implements a complete code-to-silicon development chain.
