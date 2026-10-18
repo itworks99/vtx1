@@ -253,6 +253,11 @@ The VTX1 assembler processes input in the following stages:
   Remaining from this pass: cache_controller clears its data arrays in
   reset, which forces flip-flop mapping (~4.6k FFs) instead of RAM
   inference - worth fixing eventually.
+  RESOLVED (same day): the data/tag arrays moved to a synchronous
+  write-only block with no reset (the reset-cleared valid bits gate every
+  read, so clearing the arrays was pure waste); the write-enable terms
+  are shared wires between the FSM and the array block so the two cannot
+  diverge. Yosys now sees plain synchronous RAMs.
 
 ---
 
@@ -285,8 +290,9 @@ The VTX1 assembler processes input in the following stages:
   - Shift/rotate amount semantics RATIFIED: the value of the low 4 trits
     of rs2 (+-40), reduced mod 18. vtxsim and the ALU implement the same
     rule.
-- Still trapping in hardware (as designed): DIV/MOD await the iterative
-  divider FSM; SQRT, PUSH/POP, vector/FP ops.
+- Still trapping in hardware (as designed): SQRT, PUSH/POP, vector/FP
+  ops. (DIV/MOD RESOLVED same day: the iterative divider landed - see
+  the Iterative Divider section.)
 
 ---
 
@@ -402,6 +408,50 @@ The VTX1 assembler processes input in the following stages:
 - Verilog signedness trap found here: in a mixed signed/unsigned
   conditional expression, >>> evaluates UNSIGNED (the unsigned branch
   poisons the whole expression). SRA now computes in its own signed wire.
+
+---
+
+## Iterative Divider (2026-10-18)
+
+- `src/cpu/vtx1_div.v`: DIV/MOD in hardware, ~22 cycles, built from the
+  ALU's vtx1_trit_fa cells on a 20-trit internal datapath (2|R1| reaches
+  3B+2, two trits past the operand range; zero-trit padding is free).
+- Semantics RATIFIED to match vtxsim (Go rules): truncation toward zero,
+  MOD sign follows the dividend, division by zero traps (checked in the
+  core before start, so trap_pc points at the DIV).
+- Algorithm: magnitudes only (negation is tritwise, so signs are applied
+  for free at the end); MSB-first digit recurrence with quotient digits
+  in {-2..2} - pure {-1,0,+1} selection leaves a +-1 overshoot at the
+  2|R|=B boundary that compounds (3c+1 per iteration), while allowing
+  +-2 (the digit 2 = (+1,-1) trit pair, exactly representable) keeps the
+  invariant 2|R| <= B exact. The loop naturally yields the ROUND-TO-
+  NEAREST quotient (balanced ternary's native rounding) with |R| <= B/2;
+  one correction step (Q-1, R+B when R<0) converts to truncation.
+- Core integration: DIV/MOD issue alone (group-ending, blocked from
+  slots 1/2), run in a new S_DIV state, write back like a load. Verified
+  by 6048 random+directed vectors against Verilog's native signed '/'
+  and '%' (tb_vtx1_div) and by div_test.asm executing identically in
+  vtxsim and on the RTL core (task test-div, in test-all).
+- A free byproduct worth remembering: stopping before the correction
+  step gives round-to-nearest division - a candidate RDIV opcode for DSP
+  work (no binary ISA has a one-instruction nearest division).
+
+---
+
+## Stack ABI (2026-10-18, RATIFIED)
+
+- TB (index 7, "base pointer") is the stack pointer: full-descending,
+  word-addressed. PUSH r: TB <- TB-1, mem[TB] <- r (the OLD r, relevant
+  for PUSH TB). POP r: r <- mem[TB], TB <- TB+1. POP TB: the loaded
+  value supersedes the increment. Programs initialize TB themselves
+  (LEA TB, <top>).
+- Implemented in vtxsim and the slot/core: PUSH/POP present themselves
+  as a store/load plus a same-cycle TB write (the existing commit paths
+  handle both); POP has two destinations, so stack ops issue alone
+  (group-ending, not issuable from slots 1/2) - same treatment as DIV.
+- stack_test.asm (task test-stack, in test-all) runs LIFO order, nested
+  CALL/RET with PUSH TA / POP TA, stack balance, and the POP TB edge
+  case - identical results in vtxsim and on the RTL core.
 
 ---
 

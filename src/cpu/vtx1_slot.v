@@ -30,6 +30,9 @@ module vtx1_slot (
     output wire         traps,      // would trap if executed
     output wire         is_ld,
     output wire         is_st,
+    output wire         is_div,     // DIV/MOD: multi-cycle, issues alone
+    output wire         is_mod,     // distinguishes MOD within is_div
+    output wire         is_stack,   // PUSH/POP: issues alone (two dests)
     output wire         is_ctrl,    // branch/jump/ret/jr/jalr: ends the group
     output wire         is_halt,    // WFI/HALT/SYSCALL/BREAK: ends the group
     output wire         redirect,   // control flow leaves pc_self + 1
@@ -44,6 +47,10 @@ module vtx1_slot (
     output wire [4:0]   ld_rd,
     output wire [31:0]  ea_bin,
     output wire [35:0]  st_data,
+
+    // Operands for the core's shared multi-cycle units (DIV/MOD)
+    output wire [35:0]  op_a,
+    output wire [35:0]  op_b,
 
     // Hazard metadata: architected destination (incl. the LD result) and
     // up to three source registers
@@ -135,6 +142,9 @@ module vtx1_slot (
     vtx1_alu u_alu (.a(alu_a), .b(alu_b), .opcode(opcode),
                     .result(alu_result), .unsupported(alu_unsup));
 
+    assign op_a = alu_a;
+    assign op_b = alu_b;
+
     // Branch compare: sign of (rs1 - rs2); a nonzero carry trit is the
     // true sign (overflow-correct compare).
     wire [35:0] br_diff;
@@ -162,6 +172,24 @@ module vtx1_slot (
     vtx1_trit_adder u_btgt (.a(pc_self), .b(imm_trits), .negate_b(1'b0),
                             .sum(branch_target), .cout());
 
+    // Stack ops (format R1, category MEM); declared here because the EA
+    // and stack-pointer datapaths below use them.
+    wire op_push = (format == `VTX1_FMT_R1) && (opcode == `VTX1_OPV_PUSH);
+    wire op_pop  = (format == `VTX1_FMT_R1) && (opcode == `VTX1_OPV_POP);
+
+    // Stack ABI (ratified): TB (index 7) is the stack pointer, full-
+    // descending, word-addressed. PUSH: TB <- TB-1, mem[TB] <- r (old r).
+    // POP: r <- mem[TB], TB <- TB+1 (for POP TB the loaded value wins).
+    // PUSH/POP present themselves as a store/load plus a same-cycle TB
+    // write; POP has two destinations, so stack ops issue alone.
+    localparam [4:0] REG_TB = 5'd7;
+    wire [35:0] tbval = regs_flat[36*REG_TB +: 36];
+    wire [35:0] sp_adj;
+    vtx1_trit_adder u_sp (.a(tbval), .b(36'h555555556 /* +1 */),
+                          .negate_b(op_push), .sum(sp_adj), .cout());
+
+    assign is_stack = op_push || op_pop;
+
     // Effective address (trit add; binary only at the port)
     wire [35:0] ea_sum;
     vtx1_trit_adder u_ea (
@@ -169,7 +197,8 @@ module vtx1_slot (
         .b((mem_mode == 2'd1) ? r3val : imm_trits),
         .negate_b(1'b0), .sum(ea_sum), .cout());
     wire [35:0] ea_trits = (mem_mode == 2'd0) ? imm_trits : ea_sum;
-    assign ea_bin = t2b(ea_trits);
+    wire [35:0] ea_src = op_push ? sp_adj : op_pop ? tbval : ea_trits;
+    assign ea_bin = t2b(ea_src);
 
     assign ld_rd   = reg1;
     assign st_data = r1val;
@@ -191,8 +220,11 @@ module vtx1_slot (
     wire op_link = f_jump && (opcode == `VTX1_OPV_JAL ||
                               opcode == `VTX1_OPV_CALL);
 
-    assign is_ld   = f_mem && (opcode == `VTX1_OPV_LD);
-    assign is_st   = f_mem && (opcode == `VTX1_OPV_ST);
+    assign is_ld   = (f_mem && (opcode == `VTX1_OPV_LD)) || op_pop;
+    assign is_st   = (f_mem && (opcode == `VTX1_OPV_ST)) || op_push;
+    assign is_div  = f_r23 && (opcode == `VTX1_OPV_DIV ||
+                               opcode == `VTX1_OPV_MOD);
+    assign is_mod  = f_r23 && (opcode == `VTX1_OPV_MOD);
     assign is_halt = f_none && (opcode == `VTX1_OPV_WFI  ||
                                 opcode == `VTX1_OPV_HALT ||
                                 opcode == `VTX1_OPV_SYSCALL ||
@@ -206,8 +238,9 @@ module vtx1_slot (
                         opcode == `VTX1_OPV_FLUSH ||
                         opcode == `VTX1_OPV_MEMBAR))
         || (f_r1 && !(opcode == `VTX1_OPV_INC || opcode == `VTX1_OPV_DEC ||
-                      op_jr || op_jalr))            // PUSH/POP: no stack ABI
-        || (f_r23 && alu_unsup)                     // DIV/MOD/SQRT, vec/FP
+                      op_jr || op_jalr || op_push || op_pop))
+        || (f_r23 && alu_unsup && !is_div)          // SQRT, vec/FP (DIV/MOD
+                                                    // go to the divider FSM)
         || (f_mem && !(is_ld || is_st || op_lea))   // VLD/VST/FLD/FST
         || !(f_none || f_r1 || f_r23 || f_mem || f_branch || f_jump);
 
@@ -227,7 +260,11 @@ module vtx1_slot (
         wr_idx  = reg1;
         wr_data = alu_result;
         if (!traps) begin
-            if (f_r23) begin
+            if (op_push || op_pop) begin // stack pointer update
+                wr_en   = 1'b1;
+                wr_idx  = REG_TB;
+                wr_data = sp_adj;
+            end else if (f_r23 && !is_div) begin // DIV/MOD write back from the FSM
                 wr_en = 1'b1;
             end else if (f_r1 && (opcode == `VTX1_OPV_INC ||
                                   opcode == `VTX1_OPV_DEC)) begin
@@ -262,7 +299,12 @@ module vtx1_slot (
                 src1_v = 1'b1; src1 = reg2;
             end
             `VTX1_FMT_R1: begin
-                src1_v = 1'b1; src1 = reg1; // INC/DEC read-modify, JR/JALR read
+                if (op_pop) begin
+                    src1_v = 1'b1; src1 = REG_TB;
+                end else begin
+                    src1_v = 1'b1; src1 = reg1; // INC/DEC, JR/JALR, PUSH data
+                    if (op_push) begin src2_v = 1'b1; src2 = REG_TB; end
+                end
             end
             `VTX1_FMT_NONE: begin
                 if (op_ret) begin src1_v = 1'b1; src1 = REG_TA; end

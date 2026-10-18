@@ -78,12 +78,13 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 **✅ Working today (continued):**
 - Cycle-level RTL comparison on three cores (`task bench-rtl`), results asserted everywhere: VTX1 vs an issue-width-matched RV32IM control (ISA-only: parity to −14%) and vs PicoRV32 (−64%..−67%)
 
-**🚧 In progress:**
-- Stack ABI (PUSH/POP), iterative divider FSM for synthesis
+**✅ Working today (continued):**
+- Hardware DIV/MOD: a ~22-cycle iterative balanced-ternary divider (quotient digit per trit, signs applied for free by tritwise negation), semantics locked to the simulator, verified by 6048 vectors and a cross-checked test program (`task test-div`)
+- Stack ABI: TB is the stack pointer (full-descending, word-addressed); PUSH/POP and nested CALL/RET verified in vtxsim and on the RTL core (`task test-stack`)
 
-**🔮 Planned:**
-- SPICE-characterized ternary cells on SkyWater 130nm device models (circuit-level evaluation)
+**🔮 Planned (next: the MAC accelerator):**
 - Ternary-weight MAC/matrix accelerator (weights in {−1, 0, +1} need no multipliers)
+- SPICE-characterized ternary cells on SkyWater 130nm device models (circuit-level evaluation)
 - OpenROAD/OpenLane place & route; FPGA demonstrator
 
 ## Prerequisites

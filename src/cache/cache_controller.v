@@ -105,12 +105,37 @@ module cache_controller (
     assign icache_tag = icache_addr[36-1:ICACHE_INDEX_BITS+2];
     assign icache_tag_match = (icache_tag_array[icache_index] == icache_tag);
     assign icache_cache_hit = icache_req && icache_valid_array[icache_index] && icache_tag_match;
-    
+
     assign dcache_index = dcache_addr[DCACHE_INDEX_BITS+1:2];
     assign dcache_tag = dcache_addr[36-1:DCACHE_INDEX_BITS+2];
     assign dcache_tag_match = (dcache_tag_array[dcache_index] == dcache_tag);
     assign dcache_cache_hit = dcache_req && dcache_valid_array[dcache_index] && dcache_tag_match;
-    
+
+    // Shared write-enable terms (used by both the FSM and the array block,
+    // so the two cannot diverge)
+    wire icache_miss_start = icache_req && !icache_cache_hit && !filling_icache;
+    wire dcache_miss_start = dcache_req && !dcache_cache_hit && !filling_dcache;
+    wire serving = (cache_state_reg == 4'b0001) && cache_enable && !cache_flush;
+    wire dcache_hit_write = serving && !icache_miss_start && !dcache_miss_start
+                          && dcache_cache_hit && dcache_wr;
+    wire fill_commit = (cache_state_reg == 4'b0010) && cache_ready && !cache_error;
+
+    // Data and tag arrays: synchronous writes, NO reset. The valid bits
+    // (which ARE reset) gate every read, so clearing the arrays in reset
+    // only forced Yosys to map them to ~4.6k flip-flops instead of RAM.
+    always @(posedge clk) begin
+        if (dcache_hit_write)
+            dcache_data_array[dcache_index] <= dcache_wdata;
+        if (fill_commit && filling_icache) begin
+            icache_data_array[fill_icache_index] <= cache_rdata[36-1:0];
+            icache_tag_array[fill_icache_index] <= fill_addr[36-1:ICACHE_INDEX_BITS+2];
+        end
+        if (fill_commit && filling_dcache) begin
+            dcache_data_array[fill_dcache_index] <= cache_rdata[36-1:0];
+            dcache_tag_array[fill_dcache_index] <= fill_addr[36-1:DCACHE_INDEX_BITS+2];
+        end
+    end
+
     // State machine
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -125,17 +150,14 @@ module cache_controller (
             fill_icache_index <= {ICACHE_INDEX_BITS{1'b0}};
             fill_dcache_index <= {DCACHE_INDEX_BITS{1'b0}};
             
-            // Initialize cache arrays to invalid
-            for (i = 0; i < ICACHE_SIZE; i = i + 1) begin
+            // Invalidate the caches (the data/tag arrays are not touched:
+            // the valid bits gate them, and leaving them out of reset is
+            // what lets synthesis infer RAMs - see the array block above)
+            for (i = 0; i < ICACHE_SIZE; i = i + 1)
                 icache_valid_array[i] <= 1'b0;
-                icache_data_array[i] <= 36'b010101010101010101010101010101010101;
-                icache_tag_array[i] <= {(36-ICACHE_INDEX_BITS-2){1'b0}};
-            end
             for (i = 0; i < DCACHE_SIZE; i = i + 1) begin
                 dcache_valid_array[i] <= 1'b0;
                 dcache_dirty_array[i] <= 1'b0;
-                dcache_data_array[i] <= 36'b010101010101010101010101010101010101;
-                dcache_tag_array[i] <= {(36-DCACHE_INDEX_BITS-2){1'b0}};
             end
         end else begin
             case (cache_state_reg)
@@ -162,15 +184,16 @@ module cache_controller (
                         dcache_hits_reg <= 32'b0;
                         dcache_misses_reg <= 32'b0;
                     end else begin
-                        // Handle cache requests
-                        if (icache_req && !icache_cache_hit && !filling_icache) begin
+                        // Handle cache requests (the data/tag writes for
+                        // these same conditions live in the array block)
+                        if (icache_miss_start) begin
                             // Instruction cache miss - start fill
                             cache_state_reg <= 4'b0010;
                             filling_icache <= 1'b1;
                             fill_addr <= {icache_addr[36-1:2], 2'b00}; // Word aligned
                             fill_icache_index <= icache_index;
                             icache_misses_reg <= icache_misses_reg + 1;
-                        end else if (dcache_req && !dcache_cache_hit && !filling_dcache) begin
+                        end else if (dcache_miss_start) begin
                             // Data cache miss - start fill
                             cache_state_reg <= 4'b0010;
                             filling_dcache <= 1'b1;
@@ -184,28 +207,22 @@ module cache_controller (
                             end
                             if (dcache_cache_hit) begin
                                 dcache_hits_reg <= dcache_hits_reg + 1;
-                                // Handle data cache write
-                                if (dcache_wr) begin
-                                    dcache_data_array[dcache_index] <= dcache_wdata;
+                                if (dcache_wr)
                                     dcache_dirty_array[dcache_index] <= 1'b1;
-                                end
                             end
                         end
                     end
                 end
                 
                 4'b0010: begin
-                    if (cache_ready && !cache_error) begin
-                        // Fill completed successfully
+                    if (fill_commit) begin
+                        // Fill completed successfully (data/tag written in
+                        // the array block under the same condition)
                         if (filling_icache) begin
-                            icache_data_array[fill_icache_index] <= cache_rdata[36-1:0];
-                            icache_tag_array[fill_icache_index] <= fill_addr[36-1:ICACHE_INDEX_BITS+2];
                             icache_valid_array[fill_icache_index] <= 1'b1;
                             filling_icache <= 1'b0;
                         end
                         if (filling_dcache) begin
-                            dcache_data_array[fill_dcache_index] <= cache_rdata[36-1:0];
-                            dcache_tag_array[fill_dcache_index] <= fill_addr[36-1:DCACHE_INDEX_BITS+2];
                             dcache_valid_array[fill_dcache_index] <= 1'b1;
                             dcache_dirty_array[fill_dcache_index] <= 1'b0;
                             filling_dcache <= 1'b0;

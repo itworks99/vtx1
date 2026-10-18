@@ -76,6 +76,8 @@ tasks:
     cmds:
       - task: test-decoder
       - task: test-alu
+      - task: test-div
+      - task: test-stack
       - task: test-core
       - task: test-optimized
       - echo "All VTX1 tests completed successfully"
@@ -117,7 +119,7 @@ tasks:
       - ./build/vtxasm -f memh -o build/sign_count.memh src/assembler/benchmarks/sign_count.asm
       - ./build/vtxasm -f memh -o build/abs_sum.memh src/assembler/benchmarks/abs_sum.asm
       - ./build/vtxasm -f memh -o build/sign_sum.memh src/assembler/benchmarks/sign_sum.asm
-      - iverilog -g2012 -I src/common -o build/vtx1_bench src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_bench.v
+      - iverilog -g2012 -I src/common -o build/vtx1_bench src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_bench.v
       - iverilog -g2012 -o build/picorv32_bench src/third_party/picorv32/picorv32.v src/testbench/tb_picorv32_bench.v
       - iverilog -g2012 -o build/rv32_bench src/control/rv32_triple/rv32_slot.v src/control/rv32_triple/rv32_core.v src/control/rv32_triple/rv32_tcm.v src/testbench/tb_rv32_bench.v
       - vvp build/vtx1_bench +img=build/dot_product.memh +nres=1 +exp0=-107 | grep RTL
@@ -148,13 +150,33 @@ tasks:
       - iverilog -g2012 -I src/common -o build/vtx1_alu_test src/cpu/vtx1_alu.v src/testbench/tb_vtx1_alu.v
       - vvp build/vtx1_alu_test
 
+  test-div:
+    desc: Verify the iterative balanced-ternary divider (vectors + program)
+    cmds:
+      - task: os-mkdir-build
+      - iverilog -g2012 -I src/common -o build/vtx1_div_test src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/testbench/tb_vtx1_div.v
+      - vvp build/vtx1_div_test
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - ./build/vtxasm -f memh -o build/div_test.memh src/assembler/examples/div_test.asm
+      - iverilog -g2012 -I src/common -o build/vtx1_bench src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_bench.v
+      - vvp build/vtx1_bench +img=build/div_test.memh +nres=6 +exp0=-3 +exp1=-1 +exp2=-3 +exp3=1 +exp4=4217 +exp5=5 | grep RTL
+
+  test-stack:
+    desc: Verify the stack ABI (PUSH/POP, nested CALL/RET) on the RTL core
+    cmds:
+      - task: os-mkdir-build
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - ./build/vtxasm -f memh -o build/stack_test.memh src/assembler/examples/stack_test.asm
+      - iverilog -g2012 -I src/common -o build/vtx1_bench src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_bench.v
+      - vvp build/vtx1_bench +img=build/stack_test.memh +nres=6 +exp0=33 +exp1=22 +exp2=11 +exp3=5 +exp4=7936 +exp5=4242 | grep RTL
+
   test-core:
     desc: Run hello_world on the trit-native RTL core (code-to-silicon loop)
     cmds:
       - task: os-mkdir-build
       - cd src/assembler && go build -o ../../build/vtxasm .
       - ./build/vtxasm -f memh -o build/hello_world.memh src/assembler/examples/hello_world.asm
-      - iverilog -g2012 -I src/common -o build/vtx1_core_test src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_core.v
+      - iverilog -g2012 -I src/common -o build/vtx1_core_test src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_core.v
       - vvp build/vtx1_core_test
 
   # Debug and Issue Resolution Tasks
@@ -195,7 +217,7 @@ tasks:
     cmds:
       - task: os-mkdir-build
       - echo "Synthesizing the trit-native CPU..."
-      - yosys -p "read_verilog -I src/common src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v; synth -top vtx1_core; stat; write_json build/vtx1_core_synth.json" | tail -35
+      - yosys -p "read_verilog -I src/common src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v; synth -top vtx1_core; stat; write_json build/vtx1_core_synth.json" | tail -35
       - echo "CPU synthesis completed. Netlist in build/vtx1_core_synth.json"
 
   synth-soc:
@@ -206,7 +228,7 @@ tasks:
       # smoke test: Yosys' generic flow maps RAMs to flip-flops (no RAM
       # target library), and FF-mapping the full 4096x36 array validates
       # no additional logic. On a real flow the array is a RAM macro.
-      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/memory/vtx1_tcm.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; chparam -set ADDR_BITS 8 vtx1_tcm; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
+      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/memory/vtx1_tcm.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; chparam -set ADDR_BITS 8 vtx1_tcm; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
 
   # Utilities
   clean:

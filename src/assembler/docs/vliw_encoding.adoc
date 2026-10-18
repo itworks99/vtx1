@@ -84,7 +84,7 @@ Registers live in a unified 3-trit index space (pattern = balanced(index-13)):
 | Registers | Indices | Role
 
 | T0-T6 | 0-6   | general purpose
-| TB    | 7     | base pointer
+| TB    | 7     | stack/base pointer (the PUSH/POP stack ABI: full-descending, word-addressed; PUSH r: TB <- TB-1, mem[TB] <- r; POP r: r <- mem[TB], TB <- TB+1; for POP TB the loaded value wins)
 | TA    | 8     | accumulator
 | TC    | 9     | program counter
 | TS    | 10    | status

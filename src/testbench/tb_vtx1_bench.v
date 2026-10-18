@@ -81,8 +81,8 @@ module tb_vtx1_bench;
 
     reg [1023:0] img;
     integer nres, timeout, errors, i, dummy;
-    integer exp0, exp1, exp2;
-    integer exp [0:2];
+    integer exp0, exp1, exp2, exp3, exp4, exp5;
+    integer exp [0:5];
     reg signed [35:0] got;
 
     initial begin
@@ -92,11 +92,15 @@ module tb_vtx1_bench;
             $finish;
         end
         if (!$value$plusargs("nres=%d", nres)) nres = 1;
-        exp0 = 0; exp1 = 0; exp2 = 0;
+        exp0 = 0; exp1 = 0; exp2 = 0; exp3 = 0; exp4 = 0; exp5 = 0;
         dummy = $value$plusargs("exp0=%d", exp0);
         dummy = $value$plusargs("exp1=%d", exp1);
         dummy = $value$plusargs("exp2=%d", exp2);
+        dummy = $value$plusargs("exp3=%d", exp3);
+        dummy = $value$plusargs("exp4=%d", exp4);
+        dummy = $value$plusargs("exp5=%d", exp5);
         exp[0] = exp0; exp[1] = exp1; exp[2] = exp2;
+        exp[3] = exp3; exp[4] = exp4; exp[5] = exp5;
 
         $readmemh(img, mem);
         // Preload the TCM banks (word w -> bank w[1:0], index w[11:2])

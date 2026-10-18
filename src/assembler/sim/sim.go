@@ -288,8 +288,28 @@ func (m *Machine) Step() error {
 		case "JALR":
 			m.setReg(8, int64(m.PC+1))
 			nextPC = uint32(v)
-		case "PUSH", "POP":
-			return fmt.Errorf("PC 0x%X: %s needs a stack ABI (not defined yet)", m.PC, ins.Name)
+		case "PUSH":
+			// Stack ABI (ratified): TB (index 7) is the stack pointer,
+			// full-descending, word-addressed. PUSH stores the OLD value
+			// of its operand (relevant for PUSH TB), then TB -= 1 first:
+			// TB <- TB-1; mem[TB] <- r.
+			m.Stats.Stores++
+			sp, err := m.getReg(7)
+			if err != nil {
+				return err
+			}
+			sp--
+			m.setReg(7, sp)
+			m.writeWord(uint32(sp), v)
+		case "POP":
+			// r <- mem[TB]; TB <- TB+1. For POP TB the loaded value wins.
+			m.Stats.Loads++
+			sp, err := m.getReg(7)
+			if err != nil {
+				return err
+			}
+			m.setReg(7, sp+1)
+			m.setReg(reg1, m.ReadWord(uint32(sp)))
 		}
 
 	case isa.FormatR2:

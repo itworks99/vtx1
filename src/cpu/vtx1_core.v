@@ -165,7 +165,7 @@ module vtx1_core (
     wire [35:0] w2 = imem_rdata2;
     wire        avail12 = ir_from_imem;
 
-    wire        s0_traps, s0_is_ld, s0_is_st, s0_is_ctrl, s0_is_halt, s0_redirect;
+    wire        s0_traps, s0_is_ld, s0_is_st, s0_is_div, s0_is_mod, s0_is_stack, s0_is_ctrl, s0_is_halt, s0_redirect;
     wire [35:0] s0_ctrl_target;
     wire        s0_wr_en;
     wire [4:0]  s0_wr_idx;
@@ -173,22 +173,25 @@ module vtx1_core (
     wire [4:0]  s0_ld_rd;
     wire [31:0] s0_ea_bin;
     wire [35:0] s0_st_data;
+    wire [35:0] s0_op_a, s0_op_b;
     wire        s0_dst_v, s0_src1_v, s0_src2_v, s0_src3_v;
     wire [4:0]  s0_dst, s0_src1, s0_src2, s0_src3;
 
     vtx1_slot slot0 (
         .word(w0), .regs_flat(regs_flat), .pc_self(pc), .pc_next(p1),
         .traps(s0_traps), .is_ld(s0_is_ld), .is_st(s0_is_st),
+        .is_div(s0_is_div), .is_mod(s0_is_mod), .is_stack(s0_is_stack),
         .is_ctrl(s0_is_ctrl), .is_halt(s0_is_halt),
         .redirect(s0_redirect), .ctrl_target(s0_ctrl_target),
         .wr_en(s0_wr_en), .wr_idx(s0_wr_idx), .wr_data(s0_wr_data),
         .ld_rd(s0_ld_rd), .ea_bin(s0_ea_bin), .st_data(s0_st_data),
+        .op_a(s0_op_a), .op_b(s0_op_b),
         .dst_v(s0_dst_v), .dst(s0_dst),
         .src1_v(s0_src1_v), .src2_v(s0_src2_v), .src3_v(s0_src3_v),
         .src1(s0_src1), .src2(s0_src2), .src3(s0_src3)
     );
 
-    wire        s1_traps, s1_is_ld, s1_is_st, s1_is_ctrl, s1_is_halt, s1_redirect;
+    wire        s1_traps, s1_is_ld, s1_is_st, s1_is_div, s1_is_stack, s1_is_ctrl, s1_is_halt, s1_redirect;
     wire [35:0] s1_ctrl_target;
     wire        s1_wr_en;
     wire [4:0]  s1_wr_idx;
@@ -196,22 +199,25 @@ module vtx1_core (
     wire [4:0]  s1_ld_rd;
     wire [31:0] s1_ea_bin;
     wire [35:0] s1_st_data;
+    wire [35:0] s1_op_a, s1_op_b;
     wire        s1_dst_v, s1_src1_v, s1_src2_v, s1_src3_v;
     wire [4:0]  s1_dst, s1_src1, s1_src2, s1_src3;
 
     vtx1_slot slot1 (
         .word(w1), .regs_flat(regs_flat), .pc_self(p1), .pc_next(p2),
         .traps(s1_traps), .is_ld(s1_is_ld), .is_st(s1_is_st),
+        .is_div(s1_is_div), .is_mod(), .is_stack(s1_is_stack),
         .is_ctrl(s1_is_ctrl), .is_halt(s1_is_halt),
         .redirect(s1_redirect), .ctrl_target(s1_ctrl_target),
         .wr_en(s1_wr_en), .wr_idx(s1_wr_idx), .wr_data(s1_wr_data),
         .ld_rd(s1_ld_rd), .ea_bin(s1_ea_bin), .st_data(s1_st_data),
+        .op_a(s1_op_a), .op_b(s1_op_b),
         .dst_v(s1_dst_v), .dst(s1_dst),
         .src1_v(s1_src1_v), .src2_v(s1_src2_v), .src3_v(s1_src3_v),
         .src1(s1_src1), .src2(s1_src2), .src3(s1_src3)
     );
 
-    wire        s2_traps, s2_is_ld, s2_is_st, s2_is_ctrl, s2_is_halt, s2_redirect;
+    wire        s2_traps, s2_is_ld, s2_is_st, s2_is_div, s2_is_stack, s2_is_ctrl, s2_is_halt, s2_redirect;
     wire [35:0] s2_ctrl_target;
     wire        s2_wr_en;
     wire [4:0]  s2_wr_idx;
@@ -219,16 +225,19 @@ module vtx1_core (
     wire [4:0]  s2_ld_rd;
     wire [31:0] s2_ea_bin;
     wire [35:0] s2_st_data;
+    wire [35:0] s2_op_a, s2_op_b;
     wire        s2_dst_v, s2_src1_v, s2_src2_v, s2_src3_v;
     wire [4:0]  s2_dst, s2_src1, s2_src2, s2_src3;
 
     vtx1_slot slot2 (
         .word(w2), .regs_flat(regs_flat), .pc_self(p2), .pc_next(p3),
         .traps(s2_traps), .is_ld(s2_is_ld), .is_st(s2_is_st),
+        .is_div(s2_is_div), .is_mod(), .is_stack(s2_is_stack),
         .is_ctrl(s2_is_ctrl), .is_halt(s2_is_halt),
         .redirect(s2_redirect), .ctrl_target(s2_ctrl_target),
         .wr_en(s2_wr_en), .wr_idx(s2_wr_idx), .wr_data(s2_wr_data),
         .ld_rd(s2_ld_rd), .ea_bin(s2_ea_bin), .st_data(s2_st_data),
+        .op_a(s2_op_a), .op_b(s2_op_b),
         .dst_v(s2_dst_v), .dst(s2_dst),
         .src1_v(s2_src1_v), .src2_v(s2_src2_v), .src3_v(s2_src3_v),
         .src1(s2_src1), .src2(s2_src2), .src3(s2_src3)
@@ -252,14 +261,14 @@ module vtx1_core (
               (dv  && d  == a));
     endfunction
 
-    wire grp_end0 = s0_traps || s0_is_ctrl || s0_is_halt;
+    wire grp_end0 = s0_traps || s0_is_ctrl || s0_is_halt || s0_is_div || s0_is_stack;
     wire mem0     = s0_is_ld || s0_is_st;
     wire h01 = dep(s0_dst_v, s0_dst, s1_src1_v, s1_src1, s1_src2_v, s1_src2,
                    s1_src3_v, s1_src3, s1_dst_v, s1_dst);
 
     // A halt may not follow a memory op in the same group (the LD/ST
     // states must run to completion before the core stops).
-    wire issue1 = avail12 && !grp_end0 && !s1_traps && !h01
+    wire issue1 = avail12 && !grp_end0 && !s1_traps && !s1_is_div && !s1_is_stack && !h01
                && !(mem0 && (s1_is_ld || s1_is_st || s1_is_halt));
 
     wire grp_end1 = s1_is_ctrl || s1_is_halt;
@@ -269,7 +278,7 @@ module vtx1_core (
     wire h12 = dep(s1_dst_v, s1_dst, s2_src1_v, s2_src1, s2_src2_v, s2_src2,
                    s2_src3_v, s2_src3, s2_dst_v, s2_dst);
 
-    wire issue2 = issue1 && !grp_end1 && !s2_traps && !h02 && !h12
+    wire issue2 = issue1 && !grp_end1 && !s2_traps && !s2_is_div && !s2_is_stack && !h02 && !h12
                && !(mem01 && (s2_is_ld || s2_is_st || s2_is_halt));
 
     wire [2:0] n_issue = 3'd1 + {2'd0, issue1} + {2'd0, issue2};
@@ -295,9 +304,10 @@ module vtx1_core (
     localparam S_LOAD  = 3'd2;
     localparam S_STORE = 3'd3;
     localparam S_HALT  = 3'd4;
+    localparam S_DIV   = 3'd5;  // waiting on the iterative divider
 
     reg [2:0]  state;
-    reg [4:0]  ld_rd;     // destination latched for the load writeback cycle
+    reg [4:0]  ld_rd;      // writeback destination for LOAD and DIV     // destination latched for the load writeback cycle
     reg [31:0] mem_ea;    // effective address latched for LOAD/STORE
     reg [35:0] st_data_r; // store data latched at issue
 
@@ -340,6 +350,21 @@ module vtx1_core (
             default: ;
         endcase
     end
+
+    // Iterative divider (DIV/MOD): started from EXEC, result written
+    // back in S_DIV. Division by zero traps before start (vtxsim errors).
+    wire div_bz    = (s0_op_b == ZERO_WORD);
+    wire div_start = (state == S_EXEC) && !s0_traps && s0_is_div && !div_bz;
+    wire        div_busy, div_done;
+    wire [35:0] div_result;
+
+    vtx1_div u_div (
+        .clk(clk), .rst_n(rst_n),
+        .start(div_start),
+        .is_mod(s0_is_mod),
+        .a(s0_op_a), .b(s0_op_b),
+        .busy(div_busy), .done(div_done), .result(div_result)
+    );
 
     task do_trap;
         begin
@@ -431,6 +456,14 @@ module vtx1_core (
                     end
 
                     if (s0_traps) do_trap;
+                    else if (s0_is_div) begin
+                        if (div_bz) do_trap; // division by zero
+                        else begin
+                            ld_rd        <= s0_ld_rd; // rd (reg1)
+                            state        <= S_DIV;
+                            ir_from_imem <= 1'b0;
+                        end
+                    end
                     else begin
                         commit_slot(s0_wr_en, s0_wr_idx, s0_wr_data,
                                     s0_is_ld, s0_ld_rd,
@@ -456,6 +489,11 @@ module vtx1_core (
 
                 S_STORE: if (mem_ready)
                     state <= S_FETCH;
+
+                S_DIV: if (div_done) begin
+                    writereg(ld_rd, div_result);
+                    state <= S_FETCH;
+                end
 
                 S_HALT: ; // stay halted
 
