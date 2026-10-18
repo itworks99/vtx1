@@ -182,6 +182,19 @@ tasks:
       - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -o build/soc_bench src/vtx1_soc.v src/testbench/tb_vtx1_soc_bench.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v
       - vvp build/soc_bench +img=build/tmac_matvec.memh +nres=2 +exp0=0 +exp1=1 | grep -E "phase|SoC-bench"
 
+  tierb:
+    desc: Tier B - ternary CMOS cells on Sky130 via ngspice (fetches the PDK)
+    cmds:
+      - ./tierb/fetch_pdk.sh
+      - echo "=== device threshold palette (constant-current Vt) ==="
+      - cd tierb && ngspice -b vt_survey.spice 2>&1 | grep -E "vt_|von_"
+      - echo "=== inverter family VTC and static current ==="
+      - cd tierb && ngspice -b ternary_cells.spice 2>&1 | grep -E "_at_|i_lo|i_mid|i_hi|imid"
+      - echo "=== STI vs binary tneg - delay and energy ==="
+      - cd tierb && ngspice -b ternary_tran.spice 2>&1 | grep -E "tpd_|q_|i_mid"
+      - echo "=== detector NTI (2T) vs binary NOR2 (4T) ==="
+      - cd tierb && ngspice -b ternary_det.spice 2>&1 | grep -E "tpd_|q_"
+
   synth-mac:
     desc: Cell-count comparison - ternary MAC vs binary MAC vs INT8 multiplier MAC
     cmds:

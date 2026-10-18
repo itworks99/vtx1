@@ -86,9 +86,12 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - **Ternary-weight MAC accelerator** (`src/accel/`): 16 multiplier-free MAC lanes, verified against a matched binary control and an INT8 multiplier reference — ternary weights **halve** the MAC array vs the conventional multiplier unit (4,469 vs 9,473 cells) while processing wider activations; DMA-fed from the data scratchpad, a 16×16 matvec takes **86 cycles vs 2,489 in software (29×)**, descriptor setup and status poll included (`task test-tmac`, [details and caveats](src/accel/README.md))
 - Memory-mapped I/O at **negative addresses**, as the ISA always specified: peripheral *P* register *k* at word address −(P·0x10000+k)
 
+**✅ Working today (continued):**
+- **Tier B, measured** (`task tierb`, ngspice on SkyWater Sky130 production models): ternary CMOS cells work — stock multi-Vt devices give the three-threshold palette, the ternary inverter family produces an exact 0.9V middle level, and a single ternary wire matches the two-wire binary encoding's speed *and* energy (the interconnect win is real). The honest verdict is also in: full voltage-mode ternary *logic* costs 18T where the 2-bit encoding costs 4T, plus ~1µA static at the mid level — so VTX1's binary-encoded trit datapath is the right engineering, and a native ternary logic substrate is a device-research target, not a circuit fix — [full methodology and numbers](tierb/README.md)
+
 **🔮 Planned:**
-- SPICE-characterized ternary cells on SkyWater 130nm device models (circuit-level evaluation) — the concrete target: beat the measured 1.64× binary-substrate overhead of trit logic
 - MAC tiling for layers wider than 16 (the accumulate interface already supports it); OpenROAD/OpenLane place & route
+- Ternary signaling for interconnect (the Tier B survivor: 1.58 bits/wire at energy parity with 2T receivers)
 - OpenROAD/OpenLane place & route; FPGA demonstrator
 
 ## Prerequisites

@@ -531,6 +531,38 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Tier B: Ternary CMOS on Sky130 (2026-10-18, MEASURED)
+
+- `tierb/` + `task tierb`: ngspice on the SkyWater production models
+  (fetch_pdk.sh clones + patches the raw library: spectre-style
+  `include` -> `.include`, one missing ESD model filename).
+- Palette finding: stock Sky130 multi-Vt (1.8V lvt + 5V thick-ox run at
+  1.8V) gives the low/high threshold split ternary CMOS needs - nfet
+  0.63/0.91V, pfet 0.52/1.14V vs the 0.9V mid level.
+- The ternary inverter family works: NTI/PTI detectors 2T each with no
+  contention; STI (decoder + TG mux to a mid rail, 18T) outputs an EXACT
+  0.900V middle level. Delay 228-266ps and energy 211fJ vs 221ps/200fJ
+  for the fairly-driven binary 2-bit equivalent: PARITY through HALF the
+  wires. Detectors: 2T vs 4T at energy parity (4x slower at min size -
+  thick-ox pfet drive).
+- The costs, measured: mid-level crowbar 5.9uA -> 1.0uA after device
+  starving (still ~1000x binary leakage); STI 18T vs 4T binary; "free
+  negation" is an ENCODING property - in voltage mode it costs a full
+  STI. Pass-transistor shortcuts to the mid rail stall a threshold drop
+  away from 0.9V (tried, rejected).
+- VERDICT: the 2-bit trit encoding VTX1 builds on is CHEAPER than
+  voltage-mode ternary logic in this PDK - the architecture results
+  stand on binary substrates by choice, not compromise. What survives at
+  the circuit level is ternary SIGNALING (1.58 bits/wire at parity, 2T
+  receivers) - an interconnect play, consistent with where industry
+  ships multi-level (PAM-3, MLC). A native ternary logic substrate needs
+  hard-off-at-half-swing devices without thick-ox weakness: a device
+  target, not a circuit fix.
+- Limitations recorded: tt corner, schematic-level, min sizing, inverter
+  and detector cells only.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

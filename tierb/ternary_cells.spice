@@ -1,0 +1,86 @@
+* Tier B: ternary CMOS cells on Sky130 - VTC and static power
+* Levels: 0V = -1, 0.9V = 0, 1.8V = +1 (VDD=1.8, mid rail 0.9)
+.lib "sky130_fd_pr/models/sky130.lib.spice" tt
+
+.param vdd=1.8
+Vdd vdd 0 {vdd}
+Vmid mid 0 0.9
+Vin in 0 0
+
+* ---------------- NTI: out=VDD iff in==0 (2T detector) ----------------
+Xnti_p nti_out in vdd vdd sky130_fd_pr__pfet_g5v0d10v5 W=0.84 L=0.5
+Xnti_n nti_out in 0   0   sky130_fd_pr__nfet_01v8_lvt  W=0.42 L=0.15
+Cln nti_out 0 10f
+
+* ---------------- PTI: out=VDD iff in<=mid (2T detector) ---------------
+Xpti_p pti_out in vdd vdd sky130_fd_pr__pfet_01v8_lvt  W=0.84 L=0.35
+Xpti_n pti_out in 0   0   sky130_fd_pr__nfet_g5v0d10v5 W=0.42 L=0.5
+Clp pti_out 0 10f
+
+* ---------------- STI: full ternary inverter (18T, mux structure) ------
+* decoders
+Xa_p A in vdd vdd sky130_fd_pr__pfet_g5v0d10v5 W=0.84 L=0.5
+Xa_n A in 0   0   sky130_fd_pr__nfet_01v8_lvt  W=0.42 L=0.15
+Xp_p P in vdd vdd sky130_fd_pr__pfet_01v8_lvt  W=0.84 L=0.35
+Xp_n P in 0   0   sky130_fd_pr__nfet_g5v0d10v5 W=0.42 L=0.5
+* C = inv(P), Abar = inv(A)
+Xc_p C P vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xc_n C P 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xab_p Abar A vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xab_n Abar A 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+* M = NOR(A, C); Mbar = inv(M)
+Xm_p1 m1 A vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xm_p2 M  C m1  vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xm_n1 M  A 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xm_n2 M  C 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xmb_p Mbar M vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xmb_n Mbar M 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+* output stage: PU (gate Abar), PD (gate C), TG to mid (gates M/Mbar)
+Xo_pu sti_out Abar vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xo_pd sti_out C    0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xo_tn sti_out M    mid 0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xo_tp mid Mbar sti_out vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Cls sti_out 0 10f
+
+* ---------------- binary controls (2-bit encoding) ----------------
+* tneg: b1' = NOR(b1,b0), b0' = b0 : one NOR2 (4T)
+Vb1 b1 0 0
+Vb0 b0 0 0
+Xbn_p1 n1  b1 vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xbn_p2 bno b0 n1  vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xbn_n1 bno b1 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xbn_n2 bno b0 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Clb bno 0 10f
+
+.control
+* VTC sweep
+dc Vin 0 1.8 0.005
+wrdata vtc.dat v(nti_out) v(pti_out) v(sti_out)
+meas dc nti_at_lo  find v(nti_out) when v(in)=0.01
+meas dc nti_at_mid find v(nti_out) when v(in)=0.9
+meas dc nti_at_hi  find v(nti_out) when v(in)=1.79
+meas dc pti_at_lo  find v(pti_out) when v(in)=0.01
+meas dc pti_at_mid find v(pti_out) when v(in)=0.9
+meas dc pti_at_hi  find v(pti_out) when v(in)=1.79
+meas dc sti_at_lo  find v(sti_out) when v(in)=0.01
+meas dc sti_at_mid find v(sti_out) when v(in)=0.9
+meas dc sti_at_hi  find v(sti_out) when v(in)=1.79
+
+* static supply current at the three input levels
+op
+alter Vin 0
+op
+let i_lo = -i(Vdd)
+print i_lo
+alter Vin 0.9
+op
+let i_mid = -i(Vdd)
+let imid_rail = -i(Vmid)
+print i_mid imid_rail
+alter Vin 1.8
+op
+let i_hi = -i(Vdd)
+print i_hi
+quit
+.endc
+.end

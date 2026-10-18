@@ -1,0 +1,73 @@
+* Tier B refined: STI vs binary tneg - windowed delays, fair energy, and
+* a crowbar-starving variant (thick-ox NFET at L=1.0)
+.lib "sky130_fd_pr/models/sky130.lib.spice" tt
+.param vdd=1.8
+Vdd vdd 0 {vdd}
+Vmid mid 0 0.9
+Vdd2 vdd2 0 {vdd}
+
+Vin in 0 PWL(0n 0  10n 0  10.1n 0.9  20n 0.9  20.1n 1.8  30n 1.8  30.1n 0
++ 40n 0  40.1n 1.8  50n 1.8  50.1n 0.9  60n 0.9  60.1n 0  70n 0)
+Vb1 b1s 0 PWL(0n 0  20n 0  20.1n 1.8  30n 1.8  30.1n 0  40n 0  40.1n 1.8
++ 50n 1.8  50.1n 0  70n 0)
+Vb0 b0s 0 PWL(0n 0  10n 0  10.1n 1.8  20n 1.8  20.1n 0  50n 0  50.1n 1.8
++ 60n 1.8  60.1n 0  70n 0)
+
+* ---------------- STI (18T), PTI-path thick-ox at L=1.0 ----------------
+Xa_p A in vdd vdd sky130_fd_pr__pfet_g5v0d10v5 W=0.84 L=0.5
+Xa_n A in 0   0   sky130_fd_pr__nfet_01v8_lvt  W=0.42 L=0.15
+Xp_p P in vdd vdd sky130_fd_pr__pfet_01v8_lvt  W=0.84 L=0.35
+Xp_n P in 0   0   sky130_fd_pr__nfet_g5v0d10v5 W=0.42 L=1.0
+Xc_p C P vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xc_n C P 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xab_p Abar A vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xab_n Abar A 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xm_p1 m1 A vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xm_p2 M  C m1  vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xm_n1 M  A 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xm_n2 M  C 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xmb_p Mbar M vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xmb_n Mbar M 0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xo_pu sti_out Abar vdd vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xo_pd sti_out C    0   0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xo_tn sti_out M    mid 0   sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xo_tp mid Mbar sti_out vdd sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Cls sti_out 0 10f
+
+* ---- binary tneg: NOR2 + buffered b0 wire, all powered from vdd2 ----
+Xi1_p b1 b1s vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xi1_n b1 b1s 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xi1b_p b1b b1 vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xi1b_n b1b b1 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xi0_p b0 b0s vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xi0_n b0 b0s 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xi0b_p b0b b0 vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xi0b_n b0b b0 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xbn_p1 n1  b1b vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xbn_p2 bno b0b n1  vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xbn_n1 bno b1b 0   0    sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xbn_n2 bno b0b 0   0    sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Clb bno 0 10f
+Clb0 b0b 0 10f
+
+.control
+tran 10p 70n
+* STI: hi->lo input at 30n (out rises 0 -> 1.8)
+meas tran tpd_sti_rise trig v(in) val=0.9 cross=1 td=29n targ v(sti_out) val=0.9 cross=1 td=29n
+* lo->hi input at 40n (out falls 1.8 -> 0)
+meas tran tpd_sti_fall trig v(in) val=0.9 cross=1 td=39n targ v(sti_out) val=0.9 cross=1 td=39n
+* mid->hi input at 20n (out mid -> 0)
+meas tran tpd_sti_mid trig v(in) val=1.35 cross=1 td=19n targ v(sti_out) val=0.45 cross=1 td=19n
+* binary NOR via the buffers: input edge at 10.1n -> bno fall
+meas tran tpd_bin trig v(b0s) val=0.9 cross=1 td=9n targ v(bno) val=0.9 cross=1 td=9n
+meas tran q_sti integ i(Vdd) from=0 to=70n
+meas tran q_mid integ i(Vmid) from=0 to=70n
+meas tran q_bin integ i(Vdd2) from=0 to=70n
+* static currents at mid with the starved PTI
+alter Vin 0.9
+op
+let i_mid_sti = -i(Vdd)
+print i_mid_sti
+quit
+.endc
+.end

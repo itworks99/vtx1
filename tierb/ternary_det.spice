@@ -1,0 +1,35 @@
+* Tier B: ternary detector (NTI, 2T) vs binary "is -1" decode (NOR2, 4T)
+.lib "sky130_fd_pr/models/sky130.lib.spice" tt
+.param vdd=1.8
+Vdd vdd 0 {vdd}
+Vdd2 vdd2 0 {vdd}
+
+Vin in 0 PWL(0n 0  10n 0  10.1n 0.9  20n 0.9  20.1n 0  30n 0  30.1n 1.8
++ 40n 1.8  40.1n 0  50n 0)
+Vb1 b1 0 PWL(0n 0  30n 0  30.1n 1.8  40n 1.8  40.1n 0  50n 0)
+Vb0 b0 0 PWL(0n 0  10n 0  10.1n 1.8  20n 1.8  20.1n 0  50n 0)
+
+* NTI detector: out=VDD iff in==0V (2T)
+Xn_p d_out in vdd vdd sky130_fd_pr__pfet_g5v0d10v5 W=0.84 L=0.5
+Xn_n d_out in 0   0   sky130_fd_pr__nfet_01v8_lvt  W=0.42 L=0.15
+Cld d_out 0 10f
+
+* binary: is(-1) = NOR(b1,b0) (4T)
+Xb_p1 nn  b1 vdd2 vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xb_p2 b_out b0 nn vdd2 sky130_fd_pr__pfet_01v8 W=0.84 L=0.15
+Xb_n1 b_out b1 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Xb_n2 b_out b0 0 0 sky130_fd_pr__nfet_01v8 W=0.42 L=0.15
+Clbb b_out 0 10f
+
+.control
+tran 10p 50n
+* detector fall when input leaves -1 (0V -> mid at 10n)
+meas tran tpd_nti_fall trig v(in) val=0.45 cross=1 td=9n targ v(d_out) val=0.9 cross=1 td=9n
+* detector rise when input returns to -1 (mid -> 0 at 20n)
+meas tran tpd_nti_rise trig v(in) val=0.45 cross=1 td=19n targ v(d_out) val=0.9 cross=1 td=19n
+meas tran tpd_bin_fall trig v(b0) val=0.9 cross=1 td=9n targ v(b_out) val=0.9 cross=1 td=9n
+meas tran q_nti integ i(Vdd) from=0 to=50n
+meas tran q_bin integ i(Vdd2) from=0 to=50n
+quit
+.endc
+.end

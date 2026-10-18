@@ -1,0 +1,43 @@
+* Device threshold survey: Id-Vgs at VDS=50mV, W=1u L=0.15u (L=0.5u for 5V)
+.lib "sky130_fd_pr/models/sky130.lib.spice" tt
+
+Vg g 0 0
+Vd d 0 0.05
+Vdp dp 0 1.8
+
+XN1 d g 0 0 sky130_fd_pr__nfet_01v8      W=1 L=0.15
+XN2 d2 g 0 0 sky130_fd_pr__nfet_01v8_lvt W=1 L=0.15
+Vd2 d2 0 0.05
+XN3 d3 g 0 0 sky130_fd_pr__nfet_g5v0d10v5 W=1 L=0.5
+Vd3 d3 0 0.05
+
+* PFETs: source at VDD, sweep gate down; measure |Id| at |VDS|=50mV
+XP1 e1 g dp dp sky130_fd_pr__pfet_01v8      W=1 L=0.15
+Ve1 e1 0 1.75
+XP2 e2 g dp dp sky130_fd_pr__pfet_01v8_lvt  W=1 L=0.35
+Ve2 e2 0 1.75
+XP3 e3 g dp dp sky130_fd_pr__pfet_01v8_hvt  W=1 L=0.15
+Ve3 e3 0 1.75
+XP4 e4 g dp dp sky130_fd_pr__pfet_g5v0d10v5 W=1 L=0.5
+Ve4 e4 0 1.75
+
+.control
+dc Vg 0 1.8 0.01
+* threshold ~ Vgs where Id crosses 1uA for W=1u (coarse constant-current Vt)
+let idn1 = -i(Vd)
+let idn2 = -i(Vd2)
+let idn3 = -i(Vd3)
+meas dc vt_n_std  when idn1=1e-6 cross=1
+meas dc vt_n_lvt  when idn2=1e-6 cross=1
+meas dc vt_n_5v   when idn3=1e-6 cross=1
+let idp1 = i(Ve1)
+let idp2 = i(Ve2)
+let idp3 = i(Ve3)
+let idp4 = i(Ve4)
+meas dc von_p_std  when idp1=1e-6 cross=last
+meas dc von_p_lvt  when idp2=1e-6 cross=last
+meas dc von_p_hvt  when idp3=1e-6 cross=last
+meas dc von_p_5v   when idp4=1e-6 cross=last
+quit
+.endc
+.end
