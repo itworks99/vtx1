@@ -60,7 +60,7 @@ Written in Go, under `src/assembler/`:
 
 - **`vtxasm`** — assembler with a preprocessor (`.INCLUDE`, parameterized `.MACRO`), VLIW packing validation (resource conflicts are errors, read-after-write hazards are warnings), and output as raw words, VLIW bundles, Intel HEX, a trit-level `objdump` disassembly, or `$readmemh` memory images
 - **`vtxsim`** — ISA-level simulator with balanced-ternary semantics; reports dynamic instruction counts, memory traffic, and branch behavior for architecture evaluation
-- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel. At the cycle level (`task bench-rtl`, real RTL on both sides), the triple-issue VTX1 core runs the same kernels in **~⅓ the cycles** of PicoRV32 at its fastest memory configuration — [full tables and caveats](src/assembler/benchmarks/README.md)
+- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel. At the cycle level (`task bench-rtl`, real RTL on all sides), VTX1 is compared against an **issue-width-matched RV32IM core** (same microarchitecture, same memory model, same author — isolating the ISA): parity on the memory-bound kernels, **−8%..−14% cycles** on the three-valued showcases, because `ABS` and `CMP` shorten dependent chains that issue width cannot hide. PicoRV32 stays in the table as the size-optimized reference (~3× more cycles) — [full tables and caveats](src/assembler/benchmarks/README.md)
 
 The chain is kept honest by cross-checks at every seam: the Verilog decoder is tested against real assembler output word by word, and the RTL core's retired-instruction count must match the simulator exactly.
 
@@ -76,7 +76,7 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Build and test automation with Taskfile; Yosys synthesis flow
 
 **✅ Working today (continued):**
-- Cycle-level RTL comparison vs PicoRV32: same kernels, results asserted on both cores, −64%..−67% cycles (`task bench-rtl`)
+- Cycle-level RTL comparison on three cores (`task bench-rtl`), results asserted everywhere: VTX1 vs an issue-width-matched RV32IM control (ISA-only: parity to −14%) and vs PicoRV32 (−64%..−67%)
 
 **🚧 In progress:**
 - Stack ABI (PUSH/POP), iterative divider FSM for synthesis

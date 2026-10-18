@@ -38,33 +38,47 @@ On a true ternary storage medium a VTX1 word is 18 trits (≈28.5 bits of
 information), which would widen the code-size advantage further; the table
 uses the 2-bit-encoded storage cost, the honest number for binary substrates.
 
-## Cycle-level results (real RTL, both sides)
+## Cycle-level results (real RTL, all three cores)
 
-`task bench-rtl` runs the same kernels on both **RTL cores** in Icarus,
+`task bench-rtl` runs the same kernels on three **RTL cores** in Icarus,
 with every result asserted by the testbench:
 
 - **VTX1**: the triple-issue trit-native core (`vtx1_core` + banked TCM),
   fetching from the tightly-coupled instruction RAM (1 cycle, 3 words) with
   data loads/stores through a synchronous RAM with a 2-cycle ready handshake
-- **PicoRV32** (`src/third_party/picorv32`, YosysHQ, unmodified): the same
-  kernels as real RV32IM machine code (encoded by `rvsim/rvhex` from the
-  same instruction lists the interpreter executes), on PicoRV32's **fastest**
-  native configuration — single-cycle combinational memory, `ENABLE_FAST_MUL`
-  (1-cycle multiply), `BARREL_SHIFTER` (1-cycle shifts)
+- **RV32-matched** (`src/control/rv32_triple`): the issue-width-matched
+  control — `vtx1_core`'s microarchitecture with an RV32IM datapath: same
+  issue rules, same FSM, same banked TCM, same memory model, same author.
+  A cycle difference against this core isolates the **ISA**.
+- **PicoRV32** (`src/third_party/picorv32`, YosysHQ, unmodified): the
+  realistic size-optimized reference, on its **fastest** native
+  configuration — single-cycle combinational memory, `ENABLE_FAST_MUL`,
+  `BARREL_SHIFTER`
 
-| Kernel | VTX1 cycles (CPI) | PicoRV32 cycles | Δ cycles |
-|---|---|---|---|
-| `dot_product` | **187** (1.81) | 517 | **−64%** |
-| `sign_count`  | **151** (1.37) | 435 | **−65%** |
-| `abs_sum`     | **203** (1.70) | 613 | **−67%** |
-| `sign_sum`    | **187** (1.81) | 565 | **−67%** |
+Both RV32 cores execute real machine code encoded by `rvsim/rvhex` from
+the same instruction lists the interpreter executes.
 
-The ~3× cycle advantage has two multiplicative sources: the ternary ISA
-retires fewer instructions (the Tier A table above, −3%..−34%), and the
-microarchitecture issues up to 3 independent words per cycle while PicoRV32
-is a deliberately small serial core (its documented CPI is ~4, which these
-numbers reproduce). Both factors are real properties of the two designs,
-but only the first is an *ISA* claim — see caveat 5.
+| Kernel | VTX1 cycles (CPI) | RV32-matched (CPI) | Δ ISA | PicoRV32 | Δ |
+|---|---|---|---|---|---|
+| `dot_product` | 187 (1.81) | 187 (1.52) | 0% | 517 | −64% |
+| `sign_count`  | 151 (1.37) | 151 (1.33) | 0% | 435 | −65% |
+| `abs_sum`     | **203** (1.70) | 235 (1.37) | **−14%** | 613 | −67% |
+| `sign_sum`    | **187** (1.81) | 203 (1.30) | **−8%** | 565 | −67% |
+
+Reading the matched column — this is the honest ISA-only cycle result:
+
+- **Memory-bound kernels reach exact parity.** Both ISAs do the same ~33
+  loads, each costing ~4 cycles through the handshake RAM, and that
+  dominates. The RV32 core's extra ALU instructions (Tier A: +19%/+3%)
+  hide in issue slots VTX1 leaves empty — visible as its *lower* CPI at
+  equal cycles. Issue width buys back instruction count, as it should.
+- **The ternary showcases still win in cycles** (−14% `abs_sum`, −8%
+  `sign_sum`), because `ABS` and `CMP` replace *dependent chains*
+  (`srai→xor→sub`, `slt→slt→sub`) that no issue width can parallelize:
+  fewer instructions on the critical path, not just fewer instructions.
+- The PicoRV32 column (~3×) shows what the triple-issue
+  microarchitecture itself is worth against a small serial core; the
+  matched column is the ISA claim.
 
 ## Reading the results
 
@@ -96,15 +110,16 @@ but only the first is an *ISA* claim — see caveat 5.
    would favor binary.
 4. Minor asymmetry: VTX1 kernels load the element count from memory
    (1 extra load) while the RV versions use a build-time end pointer.
-5. The cycle comparison pits a triple-issue core with an instruction TCM
-   against a size-optimized serial core: PicoRV32 is the realistic *small*
-   binary control core (~2–3k cells), not a performance peer — VTX1's CPU
-   synthesizes to ~100k cells (three ALUs with multiplier trees). The
-   memory models are stated above and deliberately favor PicoRV32
-   (combinational 1-cycle memory vs VTX1's 2-cycle data handshake). No
-   timing closure was run on either core, so cycles are not seconds: a
-   per-ISA comparison at equal issue width would need a triple-issue RV32
-   core as the control.
+5. The PicoRV32 column pits a triple-issue core with an instruction TCM
+   against a size-optimized serial core (~2–3k cells vs ~100k): that
+   column measures the microarchitecture, not the ISA, and its memory
+   model deliberately favors PicoRV32 (combinational 1-cycle memory vs
+   the 2-cycle data handshake the other two cores use). The **ISA** cycle
+   claim is the RV32-matched column, where microarchitecture, memory
+   model and author are held equal.
+6. No timing closure was run on any core, so cycles are not seconds. The
+   matched cores are also structurally identical enough that their clock
+   paths should scale similarly, but that remains unmeasured until Tier B.
 
 ## Running
 

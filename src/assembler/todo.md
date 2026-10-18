@@ -384,6 +384,27 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Issue-Width-Matched RV32 Control (2026-10-18)
+
+- `src/control/rv32_triple/`: rv32_core/rv32_slot/rv32_tcm are vtx1_core
+  v3 with the trit datapath swapped for two's-complement RV32IM - same
+  three-slot issue logic, same FSM, same banked TCM, same 2-cycle data
+  RAM, same author. Cycle differences against it isolate the ISA.
+- Results (cycles): dot_product 187 vs 187 (parity), sign_count 151 vs
+  151 (parity), abs_sum 203 vs 235 (-14%), sign_sum 187 vs 203 (-8%).
+- The lesson, now written into benchmarks/README: issue width buys back
+  instruction COUNT (RV32's extra ALU ops hide in empty slots - its CPI
+  is lower at equal cycles, and the memory-bound kernels serialize on
+  identical load streams), but it cannot buy back DEPENDENT CHAINS. ABS
+  and CMP each replace a 3-op dependent sequence with one op on the
+  critical path - that is where balanced ternary's cycle win survives a
+  fair fight, exactly as the thesis predicts.
+- Verilog signedness trap found here: in a mixed signed/unsigned
+  conditional expression, >>> evaluates UNSIGNED (the unsigned branch
+  poisons the whole expression). SRA now computes in its own signed wire.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip
