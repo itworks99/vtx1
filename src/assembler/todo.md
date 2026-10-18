@@ -581,6 +581,37 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Function-Level Study: Where Trits Pay (2026-10-18)
+
+- `study/` + `task funcstudy`: the correction to Tier B's misaimed STI
+  comparison (single-trit signal negation is the degenerate case). Each
+  math function implemented over EQUAL VALUE RANGES - 18-trit 2-bit-
+  encoded vs 29-bit two's complement - synthesized flattened, measured
+  in cells and longest-path depth; fresh ternary units verified on 20k
+  vectors.
+- Results: NEG 18/1 vs 55/28 (ternary 3x cells, 28x depth - CARRY-FREE);
+  ABS 85/18 vs 84/28; SCALE-by-radix-with-nearest-rounding 0/0 vs 56/29
+  (free and exact: dropping the LST IS nearest rounding, no ties);
+  SIGN 68/34 vs 29/6 (binary's sign bit is free); CMP3 498/116 vs
+  157/14; ADD 443/118 vs 147/56; MUL 3743/173 vs 2460/59.
+- THE DIVIDING LINE IS CARRY PROPAGATION: tritwise/carry-free functions
+  (negate, abs, select, radix scaling/rounding) win outright; carry
+  chains pay the ~3x per-digit encoding tax that swamps the 0.62x
+  digit-count advantage (a 2-bit trit FA is ~6.5 logic levels vs ~2 for
+  a binary FA).
+- Layer distinction recorded: CMP/ABS win CYCLES at the ISA level by
+  replacing dependent instruction chains (matched-core result) while
+  costing more GATES - both true, and a good trade.
+- Design recipe, now measured: compose in the carry-free layer, amortize
+  the carry layer. Ranked candidates: quantize/normalize pipelines
+  (free rounding), ternary-weight dot products (built), sign-domain
+  algorithms (median/rank, sign-LMS, decision trees), zero-skip CORDIC.
+- Icarus/sh trap for the log: dash's echo interprets backslash escapes -
+  yosys logs contain \c... identifiers (\carry) which TRUNCATE echo
+  output. printf '%s\n' always.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

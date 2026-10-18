@@ -153,7 +153,7 @@ docs/                 architecture documentation (AsciiDoc)
 
 - [Architecture Specification](docs/Architecture.adoc) ([PDF](release/vtx1-architecture.pdf)) — rev 2.0, rewritten from the implemented machine: number system, ISA and ratified semantics, triple-issue core, memory system, SoC and MMIO map, accelerator, evaluation method and verdict
 - [Instruction encoding](src/assembler/docs/vliw_encoding.adoc) — the trit-native format reference
-- [Benchmark methodology and results](src/assembler/benchmarks/README.md); [MAC accelerator](src/accel/README.md); [Tier B circuit-level evaluation](tierb/README.md); [the matched RV32 control](src/control/rv32_triple/README.md)
+- [Benchmark methodology and results](src/assembler/benchmarks/README.md); [MAC accelerator](src/accel/README.md); [Tier B circuit-level evaluation](tierb/README.md); [function-level study — where trits pay](study/README.md); [the matched RV32 control](src/control/rv32_triple/README.md)
 - [`src/assembler/todo.md`](src/assembler/todo.md) — the running design-decision log
 - `docs/archive/` — the pre-2026 microcode-era spec chapters, kept for history
 
