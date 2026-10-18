@@ -290,6 +290,43 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Tightly-Coupled Instruction RAM (2026-10-18)
+
+- `src/memory/vtx1_tcm.v`: a single-cycle synchronous-read instruction RAM
+  on a dedicated core fetch port, covering the program region
+  (0x1000..0x1FFF, 4096 words). Its write port snoops the CPU's store
+  transactions (write-through), so CPU stores into the window stay
+  coherent and the boot flow loads code with ordinary stores; DMA/debug
+  writes are not snooped. Without the write port Yosys (correctly)
+  deleted the never-written array and the netlist TCM was vacuous -
+  caught by inspecting the synthesized module, worth remembering: a
+  preload-only memory does not survive synthesis.
+- Yosys' generic `synth` flow maps every inferred RAM to flip-flops
+  (there is no RAM target library), so the full 4096x36 TCM becomes
+  ~147k DFFs and swamps the SoC statistics while validating no extra
+  logic. `task synth-soc` therefore shrinks the array to 256 words with
+  `chparam` for the smoke test; on a real flow (OpenLane/Sky130) the
+  array is a RAM macro. The same mechanism is why the cache data arrays
+  show up as FFs.
+- The core resolves the next PC combinationally during EXEC (branches,
+  jumps, RET/JR/JALR included) and issues the TCM read for it in the same
+  cycle, consuming the word directly from the TCM's read register next
+  cycle - so straight-line TCM code runs EXEC->EXEC at CPI 1 with no fetch
+  state at all. A TCM miss (or `imem_hit` tied low) falls back to the
+  original bus fetch unchanged; loads/stores still go over the bus.
+- Measured on hello_world (93 retired, vtxsim cross-check still exact):
+  - core + 1-cycle RAM: 333 -> 175 cycles (CPI 3.58 -> 1.88)
+  - full SoC through the bus matrix: 911 -> 310 cycles (CPI 9.8 -> 3.33)
+  - remaining cycles are LD/ST bus transactions (~7 cycles each through
+    the bus matrix + memory controller) and the 1-cycle refetch after them.
+- `cycles` now stops counting in S_HALT (it used to keep incrementing
+  after WFI, slightly inflating every earlier CPI number).
+- Next performance steps: parallel VLIW bundle issue (fetch 3-slot
+  bundles from the TCM), a data fast path or write buffer for LD/ST, then
+  the cycle-level comparison against PicoRV32 under the same memory model.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

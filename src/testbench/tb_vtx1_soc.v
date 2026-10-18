@@ -107,6 +107,15 @@ module tb_vtx1_soc;    // Test signals
     reg [35:0] sram [0:16383];
     initial $readmemh("build/hello_world.memh", sram);
 
+    // Preload the SoC's tightly-coupled instruction RAM with the program
+    // region (word 0x1000 -> TCM index 0), standing in for the boot flow.
+    integer tci;
+    initial begin
+        #1; // after the SRAM image loads
+        for (tci = 0; tci < 4096; tci = tci + 1)
+            uut.tcm_inst.mem[tci] = sram['h1000 + tci];
+    end
+
     assign mem_data = (!mem_cs_n && !mem_oe_n && mem_we_n)
                       ? sram[mem_addr[13:0]] : 36'hzzzzzzzzz;
 

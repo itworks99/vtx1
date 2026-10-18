@@ -9,7 +9,7 @@ A personal project: a balanced-ternary System-on-Chip with a complete, verified 
 ```
 $ task test-soc
 SoC says: "Hello, VTX1!"
-Cycles: 911  Retired: 93
+Cycles: 310  Retired: 93
 PASS: VTX1 SoC executed hello_world end to end
 ```
 
@@ -70,12 +70,12 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Trit-native ISA, single-sourced, with generated Verilog headers
 - Assembler, ISA simulator, and benchmark suite (all Go-tested)
 - CPU RTL executing programs, cross-checked against the simulator — with a fully native balanced-ternary datapath (trit adders, multiplier tree, overflow-correct three-valued compare; no binary conversion anywhere) that synthesizes cleanly with Yosys
-- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins
+- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins — with single-cycle instruction fetch from a tightly-coupled instruction RAM (SoC CPI 9.8 → 3.3; straight-line code runs at CPI 1)
 - Ternary-vs-binary architecture comparison (VTX1 vs RV32IM, identical instrumentation)
 - Build and test automation with Taskfile; Yosys synthesis flow
 
 **🚧 In progress:**
-- Performance: tightly-coupled instruction RAM, parallel VLIW bundle issue (SoC CPI is ~9.8 today)
+- Performance: parallel VLIW bundle issue, then a cycle-level comparison against PicoRV32 under the same memory model
 - Stack ABI (PUSH/POP), iterative divider FSM for synthesis
 
 **🔮 Planned:**

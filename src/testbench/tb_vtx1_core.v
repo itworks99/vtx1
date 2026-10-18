@@ -9,15 +9,24 @@
 //   - completion flag 1 at 0x2104
 //   - retired instruction count matches the ISA simulator (vtxsim): 93
 //
+// The program runs on TWO cores: one bus-only (imem_hit tied low - the
+// original fetch path) and one with a tightly-coupled instruction RAM on
+// the fetch fast path. Both must retire the same count and produce the
+// same memory effects; the TCM core must do it in fewer cycles.
+//
 // This is the code-to-silicon milestone test: the same binary runs in the
 // ISA simulator and on the RTL, and both must agree.
 
-module tb_vtx1_core;
-
-    reg clk = 0;
-    reg rst_n = 0;
-    always #5 clk = ~clk;
-
+// One core + synchronous RAM (+ optional TCM) under test
+module core_harness #(parameter USE_TCM = 0) (
+    input wire clk,
+    input wire rst_n,
+    output wire halted,
+    output wire trap,
+    output wire [31:0] trap_pc,
+    output wire [31:0] retired,
+    output wire [31:0] cycles
+);
     // Unified word-addressed memory (synchronous, 1-cycle)
     reg [35:0] mem [0:16383];
 
@@ -36,16 +45,52 @@ module tb_vtx1_core;
             mem[mem_addr[13:0]] <= mem_wdata;
     end
 
-    wire        halted, trap;
-    wire [31:0] trap_pc, retired, cycles;
+    // Instruction fetch fast path (TCM covers 0x1000..0x1FFF when enabled)
+    wire        imem_en, tcm_hit;
+    wire [31:0] imem_addr;
+    wire [35:0] tcm_rdata;
+
+    vtx1_tcm #(.BASE(32'h1000)) tcm (
+        .clk(clk), .en(imem_en), .addr(imem_addr),
+        .hit(tcm_hit), .rdata(tcm_rdata),
+        // Write-through snoop on the core's store path
+        .wen(mem_req && mem_wr), .waddr(mem_addr), .wdata(mem_wdata)
+    );
+
+    wire imem_hit = USE_TCM ? tcm_hit : 1'b0;
 
     vtx1_core core (
         .clk(clk), .rst_n(rst_n),
         .mem_req(mem_req), .mem_wr(mem_wr),
         .mem_addr(mem_addr), .mem_wdata(mem_wdata), .mem_rdata(mem_rdata),
         .mem_ready(mem_ready),
+        .imem_en(imem_en), .imem_addr(imem_addr),
+        .imem_rdata(tcm_rdata), .imem_hit(imem_hit),
         .halted(halted), .trap(trap), .trap_pc(trap_pc),
         .retired(retired), .cycles(cycles), .debug_pc()
+    );
+endmodule
+
+module tb_vtx1_core;
+
+    reg clk = 0;
+    reg rst_n = 0;
+    always #5 clk = ~clk;
+
+    wire        halted_a, trap_a, halted_b, trap_b;
+    wire [31:0] trap_pc_a, retired_a, cycles_a;
+    wire [31:0] trap_pc_b, retired_b, cycles_b;
+
+    core_harness #(.USE_TCM(0)) h_bus (
+        .clk(clk), .rst_n(rst_n),
+        .halted(halted_a), .trap(trap_a), .trap_pc(trap_pc_a),
+        .retired(retired_a), .cycles(cycles_a)
+    );
+
+    core_harness #(.USE_TCM(1)) h_tcm (
+        .clk(clk), .rst_n(rst_n),
+        .halted(halted_b), .trap(trap_b), .trap_pc(trap_pc_b),
+        .retired(retired_b), .cycles(cycles_b)
     );
 
     // Decode a canonical trit word to its balanced value
@@ -80,54 +125,104 @@ module tb_vtx1_core;
         end
     endtask
 
+    // Verify one harness's memory effects (hierarchical mem access is why
+    // this is a macro-style task per instance below)
+    task check_mem_a;
+        begin
+            got = "";
+            for (i = 0; i < 12; i = i + 1) begin
+                v = wordval(h_bus.mem['h2000 + i]);
+                got = {got[8*15-1:0], v[7:0]};
+            end
+            $display("  bus core says: \"%0s\"", got);
+            for (i = 0; i < 12; i = i + 1) begin
+                v = wordval(h_bus.mem['h2000 + i]);
+                if (v !== expected[8*(12-i)-1 -: 8]) begin
+                    $display("  FAIL: bus output[%0d] = %0d, want '%c'",
+                             i, v, expected[8*(12-i)-1 -: 8]);
+                    errors = errors + 1;
+                end
+            end
+            check("bus NUL terminator",  wordval(h_bus.mem['h200C]), 0);
+            check("bus character count", wordval(h_bus.mem['h2100]), 12);
+            check("bus completion flag", wordval(h_bus.mem['h2104]), 1);
+        end
+    endtask
+
+    task check_mem_b;
+        begin
+            got = "";
+            for (i = 0; i < 12; i = i + 1) begin
+                v = wordval(h_tcm.mem['h2000 + i]);
+                got = {got[8*15-1:0], v[7:0]};
+            end
+            $display("  TCM core says: \"%0s\"", got);
+            for (i = 0; i < 12; i = i + 1) begin
+                v = wordval(h_tcm.mem['h2000 + i]);
+                if (v !== expected[8*(12-i)-1 -: 8]) begin
+                    $display("  FAIL: TCM output[%0d] = %0d, want '%c'",
+                             i, v, expected[8*(12-i)-1 -: 8]);
+                    errors = errors + 1;
+                end
+            end
+            check("TCM NUL terminator",  wordval(h_tcm.mem['h200C]), 0);
+            check("TCM character count", wordval(h_tcm.mem['h2100]), 12);
+            check("TCM completion flag", wordval(h_tcm.mem['h2104]), 1);
+        end
+    endtask
+
     initial begin
         errors = 0;
-        $readmemh("build/hello_world.memh", mem);
+        $readmemh("build/hello_world.memh", h_bus.mem);
+        $readmemh("build/hello_world.memh", h_tcm.mem);
+        // Preload the TCM with the program region (word 0x1000 -> index 0)
+        for (i = 0; i < 4096; i = i + 1)
+            h_tcm.tcm.mem[i] = h_tcm.mem['h1000 + i];
 
         rst_n = 0;
         repeat (4) @(posedge clk);
         rst_n = 1;
 
         timeout = 0;
-        while (!halted && timeout < 10000) begin
+        while (!(halted_a && halted_b) && timeout < 10000) begin
             @(posedge clk);
             timeout = timeout + 1;
         end
 
-        $display("=== hello_world on the VTX1 RTL core ===");
-        if (!halted) begin
-            $display("  FAIL: core did not halt within %0d cycles", timeout);
+        $display("=== hello_world on the VTX1 RTL core (bus-only vs TCM) ===");
+        if (!halted_a || !halted_b) begin
+            $display("  FAIL: halted(bus)=%b halted(TCM)=%b after %0d cycles",
+                     halted_a, halted_b, timeout);
             errors = errors + 1;
         end
-        if (trap) begin
-            $display("  FAIL: core trapped at PC 0x%0h", trap_pc);
+        if (trap_a) begin
+            $display("  FAIL: bus core trapped at PC 0x%0h", trap_pc_a);
+            errors = errors + 1;
+        end
+        if (trap_b) begin
+            $display("  FAIL: TCM core trapped at PC 0x%0h", trap_pc_b);
             errors = errors + 1;
         end
 
-        // The output string
-        got = "";
-        for (i = 0; i < 12; i = i + 1) begin
-            v = wordval(mem['h2000 + i]);
-            got = {got[8*15-1:0], v[7:0]};
-        end
-        $display("RTL says: \"%0s\"", got);
-        for (i = 0; i < 12; i = i + 1) begin
-            v = wordval(mem['h2000 + i]);
-            if (v !== expected[8*(12-i)-1 -: 8]) begin
-                $display("  FAIL: output[%0d] = %0d ('%c'), want '%c'",
-                         i, v, v[7:0], expected[8*(12-i)-1 -: 8]);
-                errors = errors + 1;
-            end
-        end
-        check("NUL terminator",  wordval(mem['h200C]), 0);
-        check("character count", wordval(mem['h2100]), 12);
-        check("completion flag", wordval(mem['h2104]), 1);
+        check_mem_a;
+        check_mem_b;
 
         // Cross-check against the ISA simulator: vtxsim retires 93
-        // instruction words for this program.
-        check("retired words (vs vtxsim)", retired, 93);
-        $display("Cycles: %0d  Retired: %0d  CPI: %0d.%02d",
-                 cycles, retired, cycles / retired, (cycles * 100 / retired) % 100);
+        // instruction words for this program - on both cores.
+        check("bus retired words (vs vtxsim)", retired_a, 93);
+        check("TCM retired words (vs vtxsim)", retired_b, 93);
+
+        $display("  bus-only: %0d cycles, %0d retired, CPI %0d.%02d",
+                 cycles_a, retired_a,
+                 cycles_a / retired_a, (cycles_a * 100 / retired_a) % 100);
+        $display("  with TCM: %0d cycles, %0d retired, CPI %0d.%02d",
+                 cycles_b, retired_b,
+                 cycles_b / retired_b, (cycles_b * 100 / retired_b) % 100);
+        if (cycles_b >= cycles_a) begin
+            $display("  FAIL: TCM core is not faster (%0d >= %0d)",
+                     cycles_b, cycles_a);
+            errors = errors + 1;
+        end
 
         if (errors == 0)
             $display("=== PASS: the toolchain-simulator-RTL loop is closed ===");

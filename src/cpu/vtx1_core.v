@@ -18,6 +18,14 @@
 // Fetch model (a): one 18-trit instruction word per fetch, PC steps by one
 // word; a VLIW bundle executes as its three slots in sequence.
 //
+// Instruction fetch has a fast path through a tightly-coupled instruction
+// memory (vtx1_tcm): during EXEC the next PC is known combinationally, so
+// the core issues the TCM read for it in the same cycle and executes the
+// next instruction directly from imem_rdata - straight-line TCM code runs
+// at CPI 1 with no fetch state at all. Fetches outside the TCM window
+// (imem_hit low) fall back to the bus port exactly as before; tying
+// imem_hit to 0 gives the original bus-only core.
+//
 // DIV/MOD belong to the pending iterative divider FSM and trap for now;
 // SQRT, PUSH/POP (no stack ABI yet) and vector/FP operations trap.
 //
@@ -40,6 +48,15 @@ module vtx1_core (
     output reg  [35:0] mem_wdata,
     input  wire [35:0] mem_rdata,
     input  wire        mem_ready,
+
+    // Tightly-coupled instruction memory port (synchronous read):
+    // imem_addr is valid while imem_en is high; the TCM answers hit
+    // combinationally and delivers the word in imem_rdata one clock
+    // later. Tie imem_hit low to fetch everything over the bus port.
+    output reg         imem_en,
+    output reg  [31:0] imem_addr,
+    input  wire [35:0] imem_rdata,
+    input  wire        imem_hit,
 
     // Execution state
     output reg         halted,
@@ -128,9 +145,15 @@ module vtx1_core (
     localparam REG_TA = 5'd8; // link register (provisional ABI)
 
     // ------------------------------------------------------------------
-    // Decoder (combinational on the instruction register)
+    // Decoder (combinational on the current instruction word)
     // ------------------------------------------------------------------
-    reg [35:0] ir; // fetched instruction word (stable through EXEC/LOAD/STORE)
+    // On the fast path the instruction is consumed directly from the TCM
+    // read register (ir_from_imem = 1); otherwise it is the latched ir.
+    // EXEC always latches the executed word into ir so it stays stable
+    // through the LOAD/STORE states (mem_wdata reads a decoder field).
+    reg [35:0] ir;
+    reg        ir_from_imem;
+    wire [35:0] iword = ir_from_imem ? imem_rdata : ir;
 
     wire        dec_valid;
     wire [6:0]  opcode;
@@ -143,7 +166,7 @@ module vtx1_core (
     wire [35:0] imm_trits;
 
     vtx1_decoder dec (
-        .word(ir), .valid(dec_valid), .opcode(opcode),
+        .word(iword), .valid(dec_valid), .opcode(opcode),
         .format(format), .category(category), .multicycle(multicycle),
         .reg1(reg1), .reg2(reg2), .reg3(reg3),
         .uses_imm(uses_imm), .imm(imm), .mem_mode(mem_mode),
@@ -199,6 +222,25 @@ module vtx1_core (
         endcase
     end
 
+    // Next PC, resolved combinationally during EXEC (control flow
+    // included) so the TCM fetch of the next instruction can be issued
+    // in the same cycle.
+    reg [35:0] nxt_pc;
+    always @* begin
+        nxt_pc = pc_plus1;
+        case (format)
+            `VTX1_FMT_NONE:   if (opcode == `VTX1_OPV_RET)
+                                  nxt_pc = regword(REG_TA);
+            `VTX1_FMT_R1:     if (opcode == `VTX1_OPV_JR ||
+                                  opcode == `VTX1_OPV_JALR)
+                                  nxt_pc = regword(reg1);
+            `VTX1_FMT_BRANCH: if (branch_take) nxt_pc = branch_target;
+            `VTX1_FMT_JUMP:   nxt_pc = imm_trits; // absolute target as trits
+            default: ;
+        endcase
+    end
+    wire [31:0] nxt_pc_bin = t2b(nxt_pc);
+
     // Effective address (trit add; binary only at the port)
     wire [35:0] ea_sum;
     vtx1_trit_adder u_ea (
@@ -221,7 +263,23 @@ module vtx1_core (
     reg [4:0]  ld_rd;  // destination latched for the load writeback cycle
     reg [31:0] mem_ea; // effective address latched for LOAD/STORE
 
+    // Instruction-TCM port control (combinational): fetch the next
+    // instruction during EXEC (fast path - next PC known this cycle) or
+    // the current PC during FETCH (after reset, loads, stores and bus
+    // fetches). Reads the TCM ignores are harmless, so EXEC may issue
+    // speculatively even when it ends up in LOAD/STORE/HALT instead.
+    always @* begin
+        imem_en   = 1'b0;
+        imem_addr = pc_bin;
+        case (state)
+            S_FETCH: begin imem_en = 1'b1; imem_addr = pc_bin; end
+            S_EXEC:  begin imem_en = 1'b1; imem_addr = nxt_pc_bin; end
+            default: ;
+        endcase
+    end
+
     // Memory port control (combinational); the request is held until ready.
+    // A fetch goes to the bus only when the PC misses the TCM window.
     always @* begin
         mem_req   = 1'b0;
         mem_wr    = 1'b0;
@@ -229,7 +287,7 @@ module vtx1_core (
         mem_wdata = regword(reg1);
         case (state)
             S_FETCH: begin
-                mem_req  = 1'b1;
+                mem_req  = !imem_hit;
                 mem_addr = pc_bin;
             end
             S_LOAD: begin
@@ -247,9 +305,10 @@ module vtx1_core (
 
     task do_trap;
         begin
-            trap    <= 1'b1;
-            trap_pc <= pc_bin;
-            state   <= S_HALT;
+            trap         <= 1'b1;
+            trap_pc      <= pc_bin;
+            state        <= S_HALT;
+            ir_from_imem <= 1'b0;
         end
     endtask
 
@@ -259,6 +318,7 @@ module vtx1_core (
             state   <= S_FETCH;
             pc      <= RESET_PC;
             ir      <= ZERO_WORD;
+            ir_from_imem <= 1'b0;
             halted  <= 1'b0;
             trap    <= 1'b0;
             trap_pc <= 32'h0;
@@ -267,17 +327,35 @@ module vtx1_core (
             for (ri = 0; ri < 18; ri = ri + 1)
                 regs[ri] <= ZERO_WORD;
         end else begin
-            cycles <= cycles + 1;
+            if (state != S_HALT)
+                cycles <= cycles + 1;
             case (state)
-                S_FETCH: if (mem_ready) begin
-                    ir    <= mem_rdata;
-                    state <= S_EXEC;
-                end
+                S_FETCH:
+                    if (imem_hit) begin
+                        // TCM fetch: the word read this cycle is in
+                        // imem_rdata next cycle; execute it from there.
+                        state        <= S_EXEC;
+                        ir_from_imem <= 1'b1;
+                    end else if (mem_ready) begin
+                        ir           <= mem_rdata;
+                        ir_from_imem <= 1'b0;
+                        state        <= S_EXEC;
+                    end
 
                 S_EXEC: begin
                     retired <= retired + 1;
-                    pc      <= pc_plus1; // default; control flow overrides
-                    state   <= S_FETCH;
+                    pc      <= nxt_pc;   // control flow resolved combinationally
+                    ir      <= iword;    // keep the word stable for LOAD/STORE
+                    // Default next state: when the next PC hits the TCM, the
+                    // fetch issued this cycle lands in imem_rdata and we stay
+                    // in EXEC (CPI 1); otherwise fetch over the bus.
+                    if (imem_hit) begin
+                        state        <= S_EXEC;
+                        ir_from_imem <= 1'b1;
+                    end else begin
+                        state        <= S_FETCH;
+                        ir_from_imem <= 1'b0;
+                    end
 
                     if (!dec_valid) do_trap;
                     else case (format)
@@ -286,8 +364,12 @@ module vtx1_core (
                             `VTX1_OPV_NOP: ;
                             `VTX1_OPV_WFI, `VTX1_OPV_HALT,
                             `VTX1_OPV_SYSCALL, `VTX1_OPV_BREAK:
-                                begin halted <= 1'b1; state <= S_HALT; end
-                            `VTX1_OPV_RET: pc <= regword(REG_TA);
+                                begin
+                                    halted       <= 1'b1;
+                                    state        <= S_HALT;
+                                    ir_from_imem <= 1'b0;
+                                end
+                            `VTX1_OPV_RET: ; // nxt_pc = TA
                             `VTX1_OPV_CACHE, `VTX1_OPV_FLUSH, `VTX1_OPV_MEMBAR: ;
                             default: do_trap;
                         endcase
@@ -295,11 +377,9 @@ module vtx1_core (
                         `VTX1_FMT_R1: case (opcode)
                             `VTX1_OPV_INC, `VTX1_OPV_DEC:
                                 writereg(reg1, alu_result);
-                            `VTX1_OPV_JR: pc <= regword(reg1);
-                            `VTX1_OPV_JALR: begin
-                                writereg(REG_TA, pc_plus1);
-                                pc <= regword(reg1);
-                            end
+                            `VTX1_OPV_JR: ; // nxt_pc = reg1
+                            `VTX1_OPV_JALR:
+                                writereg(REG_TA, pc_plus1); // nxt_pc = reg1
                             default: do_trap; // PUSH/POP: no stack ABI yet
                         endcase
 
@@ -310,26 +390,25 @@ module vtx1_core (
 
                         `VTX1_FMT_MEM: case (opcode)
                             `VTX1_OPV_LD: begin
-                                ld_rd  <= reg1;
-                                mem_ea <= ea_bin;
-                                state  <= S_LOAD;
+                                ld_rd        <= reg1;
+                                mem_ea       <= ea_bin;
+                                state        <= S_LOAD;
+                                ir_from_imem <= 1'b0;
                             end
                             `VTX1_OPV_ST: begin
-                                mem_ea <= ea_bin;
-                                state  <= S_STORE;
+                                mem_ea       <= ea_bin;
+                                state        <= S_STORE;
+                                ir_from_imem <= 1'b0;
                             end
                             `VTX1_OPV_LEA: writereg(reg1, ea_trits);
                             default: do_trap; // VLD/VST/FLD/FST
                         endcase
 
-                        `VTX1_FMT_BRANCH:
-                            if (branch_take) pc <= branch_target;
+                        `VTX1_FMT_BRANCH: ; // nxt_pc = taken ? target : pc+1
 
-                        `VTX1_FMT_JUMP: begin
+                        `VTX1_FMT_JUMP:
                             if (opcode == `VTX1_OPV_JAL || opcode == `VTX1_OPV_CALL)
-                                writereg(REG_TA, pc_plus1);
-                            pc <= imm_trits; // absolute target as trits
-                        end
+                                writereg(REG_TA, pc_plus1); // nxt_pc = target
 
                         default: do_trap;
                     endcase

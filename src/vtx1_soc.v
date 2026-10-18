@@ -115,6 +115,11 @@ wire [31:0] cpu_trap_pc;
 wire [VTX1_WORD_WIDTH-1:0] cpu_debug_pc;
 wire [31:0] cpu_cycle_count, cpu_instruction_count;
 
+// Tightly-coupled instruction memory (single-cycle fetch fast path)
+wire cpu_imem_en, cpu_imem_hit;
+wire [31:0] cpu_imem_addr;
+wire [35:0] cpu_imem_rdata;
+
 // CPU Adapter Interface (CPU to Bus Matrix)
 wire cpu_bus_req, cpu_bus_wr, cpu_bus_ready, cpu_bus_error, cpu_bus_timeout, cpu_bus_error_clear;
 wire [1:0] cpu_bus_size;
@@ -606,6 +611,12 @@ vtx1_core cpu_inst (
     .mem_rdata(cpu_bus_rdata),
     .mem_ready(cpu_bus_ready),
 
+    // Instruction fetch fast path -> tightly-coupled instruction RAM
+    .imem_en(cpu_imem_en),
+    .imem_addr(cpu_imem_addr),
+    .imem_rdata(cpu_imem_rdata),
+    .imem_hit(cpu_imem_hit),
+
     // Execution state
     .halted(cpu_halted),
     .trap(cpu_trap),
@@ -615,6 +626,23 @@ vtx1_core cpu_inst (
     .retired(cpu_instruction_count),
     .cycles(cpu_cycle_count),
     .debug_pc(cpu_pc)
+);
+
+// Tightly-coupled instruction RAM on the core's fetch port: covers the
+// program region (0x1000..0x1FFF) with single-cycle fetch, bypassing the
+// bus matrix. The write port snoops the CPU's store transactions
+// (write-through), which is also the boot-time load path (see vtx1_tcm.v).
+// ADDR_BITS is left at the module default (12) so the synthesis smoke
+// test can shrink the array with chparam (see Taskfile synth-soc).
+vtx1_tcm #(.BASE(32'h0000_1000)) tcm_inst (
+    .clk(clk_cpu),
+    .en(cpu_imem_en),
+    .addr(cpu_imem_addr),
+    .hit(cpu_imem_hit),
+    .rdata(cpu_imem_rdata),
+    .wen(cpu_bus_req && cpu_bus_wr && cpu_bus_ready),
+    .waddr(cpu_mem_addr32),
+    .wdata(cpu_bus_wdata)
 );
 
 assign cpu_bus_addr = {{(VTX1_ADDR_WIDTH-32){1'b0}}, cpu_mem_addr32};
