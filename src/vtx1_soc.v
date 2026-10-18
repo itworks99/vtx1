@@ -120,6 +120,12 @@ wire cpu_imem_en, cpu_imem_hit;
 wire [31:0] cpu_imem_addr;
 wire [35:0] cpu_imem_rdata0, cpu_imem_rdata1, cpu_imem_rdata2;
 
+// Core memory port, before the data scratchpad (which serves in-window
+// reads locally and passes writes and out-of-window accesses to the bus)
+wire cpu_dmem_req, cpu_dmem_wr, cpu_dmem_ready;
+wire [31:0] cpu_dmem_addr;
+wire [35:0] cpu_dmem_wdata, cpu_dmem_rdata;
+
 // CPU Adapter Interface (CPU to Bus Matrix)
 wire cpu_bus_req, cpu_bus_wr, cpu_bus_ready, cpu_bus_error, cpu_bus_timeout, cpu_bus_error_clear;
 wire [1:0] cpu_bus_size;
@@ -603,13 +609,13 @@ vtx1_core cpu_inst (
     .clk(clk_cpu),
     .rst_n(rst_cpu_n),
 
-    // Memory port -> bus matrix CPU master port
-    .mem_req(cpu_bus_req),
-    .mem_wr(cpu_bus_wr),
-    .mem_addr(cpu_mem_addr32),
-    .mem_wdata(cpu_bus_wdata),
-    .mem_rdata(cpu_bus_rdata),
-    .mem_ready(cpu_bus_ready),
+    // Memory port -> data scratchpad -> bus matrix CPU master port
+    .mem_req(cpu_dmem_req),
+    .mem_wr(cpu_dmem_wr),
+    .mem_addr(cpu_dmem_addr),
+    .mem_wdata(cpu_dmem_wdata),
+    .mem_rdata(cpu_dmem_rdata),
+    .mem_ready(cpu_dmem_ready),
 
     // Instruction fetch fast path -> tightly-coupled instruction RAM
     .imem_en(cpu_imem_en),
@@ -634,6 +640,26 @@ vtx1_core cpu_inst (
 // program region (0x1000..0x1FFF) with single-cycle fetch, bypassing the
 // bus matrix. The write port snoops the CPU's store transactions
 // (write-through), which is also the boot-time load path (see vtx1_tcm.v).
+// Data scratchpad: local 1-cycle reads over the low 16K words (covers the
+// program data and output regions; MMIO at 0xF0000000 is untouched).
+// ADDR_BITS left at the module default so synth-soc can chparam-shrink it.
+vtx1_scratchpad #(.BASE(32'h0000_0000)) spad_inst (
+    .clk(clk_cpu),
+    .rst_n(rst_cpu_n),
+    .cpu_req(cpu_dmem_req),
+    .cpu_wr(cpu_dmem_wr),
+    .cpu_addr(cpu_dmem_addr),
+    .cpu_wdata(cpu_dmem_wdata),
+    .cpu_rdata(cpu_dmem_rdata),
+    .cpu_ready(cpu_dmem_ready),
+    .bus_req(cpu_bus_req),
+    .bus_wr(cpu_bus_wr),
+    .bus_addr(cpu_mem_addr32),
+    .bus_wdata(cpu_bus_wdata),
+    .bus_rdata(cpu_bus_rdata),
+    .bus_ready(cpu_bus_ready)
+);
+
 // ADDR_BITS is left at the module default (12) so the synthesis smoke
 // test can shrink the array with chparam (see Taskfile synth-soc).
 vtx1_tcm #(.BASE(32'h0000_1000)) tcm_inst (

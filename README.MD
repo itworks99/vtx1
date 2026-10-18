@@ -9,7 +9,7 @@ A personal project: a balanced-ternary System-on-Chip with a complete, verified 
 ```
 $ task test-soc
 SoC says: "Hello, VTX1!"
-Cycles: 271  Retired: 93
+Cycles: 179  Retired: 93
 PASS: VTX1 SoC executed hello_world end to end
 ```
 
@@ -60,7 +60,7 @@ Written in Go, under `src/assembler/`:
 
 - **`vtxasm`** — assembler with a preprocessor (`.INCLUDE`, parameterized `.MACRO`), VLIW packing validation (resource conflicts are errors, read-after-write hazards are warnings), and output as raw words, VLIW bundles, Intel HEX, a trit-level `objdump` disassembly, or `$readmemh` memory images
 - **`vtxsim`** — ISA-level simulator with balanced-ternary semantics; reports dynamic instruction counts, memory traffic, and branch behavior for architecture evaluation
-- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel. At the cycle level (`task bench-rtl`, real RTL on all sides), VTX1 is compared against an **issue-width-matched RV32IM core** (same microarchitecture, same memory model, same author — isolating the ISA): parity on the memory-bound kernels, **−8%..−14% cycles** on the three-valued showcases, because `ABS` and `CMP` shorten dependent chains that issue width cannot hide. PicoRV32 stays in the table as the size-optimized reference (~3× more cycles) — [full tables and caveats](src/assembler/benchmarks/README.md)
+- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel. At the cycle level (`task bench-rtl`, real RTL on all sides), VTX1 is compared against an **issue-width-matched RV32IM core** (same microarchitecture, same memory model, same author — isolating the ISA): parity on the memory-bound kernels, **−10%..−16% cycles** on the three-valued showcases, because `ABS` and `CMP` shorten dependent chains that issue width cannot hide. PicoRV32 stays in the table as the size-optimized reference (~3.5× more cycles) — [full tables and caveats](src/assembler/benchmarks/README.md)
 
 The chain is kept honest by cross-checks at every seam: the Verilog decoder is tested against real assembler output word by word, and the RTL core's retired-instruction count must match the simulator exactly.
 
@@ -71,12 +71,12 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Assembler, ISA simulator, and benchmark suite (all Go-tested)
 - CPU RTL executing programs, cross-checked against the simulator — with a fully native balanced-ternary datapath (trit adders, multiplier tree, overflow-correct three-valued compare; no binary conversion anywhere) that synthesizes cleanly with Yosys
 - **Triple issue**: up to 3 consecutive instruction words commit per cycle, with the VLIW packing rules (≤1 memory op, control ends the group, no intra-group hazards) enforced dynamically in hardware — a packed bundle is guaranteed to issue in one cycle, and independent scalar code multi-issues too
-- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins — fetching 3-word groups per cycle from a banked tightly-coupled instruction RAM (SoC CPI 9.8 → 2.9 on hello_world; peak 3 words/cycle on independent code)
+- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins — fetching 3-word groups per cycle from a banked tightly-coupled instruction RAM, with a write-through data scratchpad serving local reads and no refetch after memory ops (SoC CPI 9.8 → 1.9 on hello_world; peak 3 words/cycle on independent code)
 - Ternary-vs-binary architecture comparison (VTX1 vs RV32IM, identical instrumentation)
 - Build and test automation with Taskfile; Yosys synthesis flow
 
 **✅ Working today (continued):**
-- Cycle-level RTL comparison on three cores (`task bench-rtl`), results asserted everywhere: VTX1 vs an issue-width-matched RV32IM control (ISA-only: parity to −14%) and vs PicoRV32 (−64%..−67%)
+- Cycle-level RTL comparison on three cores (`task bench-rtl`), results asserted everywhere: VTX1 vs an issue-width-matched RV32IM control (ISA-only: parity to −16%) and vs PicoRV32 (−70%..−73%)
 
 **✅ Working today (continued):**
 - Hardware DIV/MOD: a ~22-cycle iterative balanced-ternary divider (quotient digit per trit, signs applied for free by tritwise negation), semantics locked to the simulator, verified by 6048 vectors and a cross-checked test program (`task test-div`)

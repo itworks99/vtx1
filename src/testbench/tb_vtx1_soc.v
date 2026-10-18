@@ -119,6 +119,9 @@ module tb_vtx1_soc;    // Test signals
             uut.tcm_inst.bank2[tci >> 2] = sram['h1000 + tci + 2];
             uut.tcm_inst.bank3[tci >> 2] = sram['h1000 + tci + 3];
         end
+        // Data scratchpad mirrors the whole SRAM image (boot-flow stand-in)
+        for (tci = 0; tci < 16384; tci = tci + 1)
+            uut.spad_inst.mem[tci] = sram[tci];
     end
 
     assign mem_data = (!mem_cs_n && !mem_oe_n && mem_we_n)

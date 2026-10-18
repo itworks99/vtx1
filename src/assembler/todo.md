@@ -455,6 +455,37 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Memory-Path Performance Pass (2026-10-18)
+
+- Refetch elimination (both matched cores): a memory op or DIV leaving
+  EXEC no longer clears ir_from_imem - the next instruction group was
+  fetched during that same EXEC cycle and the TCM output registers hold
+  it while imem_en is low, so S_LOAD/S_STORE/S_DIV resume straight into
+  EXEC. One cycle saved per memory op / divide; nothing consumes slot
+  outputs during the memory states (store data is latched), so it is
+  free. Core hello_world 136 -> 109 cycles (CPI 1.17).
+- `src/memory/vtx1_scratchpad.v`: the data-side twin of the instruction
+  TCM, between the core's memory port and the SoC bus master port.
+  In-window READS are served from a local sync RAM (1-cycle handshake);
+  WRITES always pass through to the bus (write-through: external memory
+  stays the source of truth for DMA/debug/testbench) and are snooped
+  into the local copy. Window = low 16K words; MMIO (0xF0000000+)
+  untouched; chparam-shrunk for the synth smoke test like the TCM.
+- SoC hello_world: 911 (morning) -> 271 -> 244 (refetch) -> 179 cycles
+  (CPI 1.92). The remaining gap to the bare core (109) is store traffic
+  crossing the bus - by design under write-through.
+- bench-rtl after the pass (both matched cores benefit equally):
+  dot 153 vs 154, sign_count 131 vs 132, abs_sum 169 vs 202 (-16%),
+  sign_sum 153 vs 170 (-10%). Tightening the machines GREW the ISA
+  deltas: less fixed overhead makes the dependent-chain difference a
+  larger share of what remains.
+- Measured and parked: two memory ops per group (banked data memory)
+  would halve dot_product's loop but changes a ratified ISA packing rule
+  (max 1 mem op per bundle) - an architecture decision for later.
+  Software-side bundle packing/unrolling of the kernels also unmeasured.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

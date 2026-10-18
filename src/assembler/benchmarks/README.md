@@ -60,10 +60,16 @@ the same instruction lists the interpreter executes.
 
 | Kernel | VTX1 cycles (CPI) | RV32-matched (CPI) | Δ ISA | PicoRV32 | Δ |
 |---|---|---|---|---|---|
-| `dot_product` | 187 (1.81) | 187 (1.52) | 0% | 517 | −64% |
-| `sign_count`  | 151 (1.37) | 151 (1.33) | 0% | 435 | −65% |
-| `abs_sum`     | **203** (1.70) | 235 (1.37) | **−14%** | 613 | −67% |
-| `sign_sum`    | **187** (1.81) | 203 (1.30) | **−8%** | 565 | −67% |
+| `dot_product` | 153 (1.48) | 154 (1.25) | ~0% | 517 | −70% |
+| `sign_count`  | 131 (1.19) | 132 (1.16) | ~0% | 435 | −70% |
+| `abs_sum`     | **169** (1.42) | 202 (1.18) | **−16%** | 613 | −72% |
+| `sign_sum`    | **153** (1.48) | 170 (1.09) | **−10%** | 565 | −73% |
+
+(Both matched cores resume execution directly after a memory access — the
+next instruction group is held in the TCM output registers, so a load
+costs 3 cycles end to end. Tightening the machines *grew* the ISA deltas:
+less fixed overhead means the dependent-chain difference is a larger
+share of what remains.)
 
 Reading the matched column — this is the honest ISA-only cycle result:
 

@@ -389,17 +389,19 @@ module vtx1_core (
     );
         begin
             if (c_wr_en) writereg(c_wr_idx, c_wr_data);
+            // LD/ST keep the default ir_from_imem: the next group was
+            // fetched during this EXEC and the TCM output registers hold
+            // it through the memory state (imem_en is low there), so the
+            // core resumes in EXEC with no refetch cycle.
             if (c_is_ld) begin
                 ld_rd        <= c_ld_rd;
                 mem_ea       <= c_ea_bin;
                 state        <= S_LOAD;
-                ir_from_imem <= 1'b0;
             end
             if (c_is_st) begin
                 mem_ea       <= c_ea_bin;
                 st_data_r    <= c_st_data;
                 state        <= S_STORE;
-                ir_from_imem <= 1'b0;
             end
             if (c_is_halt) begin
                 halted       <= 1'b1;
@@ -459,9 +461,8 @@ module vtx1_core (
                     else if (s0_is_div) begin
                         if (div_bz) do_trap; // division by zero
                         else begin
-                            ld_rd        <= s0_ld_rd; // rd (reg1)
-                            state        <= S_DIV;
-                            ir_from_imem <= 1'b0;
+                            ld_rd <= s0_ld_rd; // rd (reg1)
+                            state <= S_DIV;    // default ir_from_imem kept
                         end
                     end
                     else begin
@@ -484,15 +485,15 @@ module vtx1_core (
 
                 S_LOAD: if (mem_ready) begin
                     writereg(ld_rd, mem_rdata);
-                    state <= S_FETCH;
+                    state <= ir_from_imem ? S_EXEC : S_FETCH;
                 end
 
                 S_STORE: if (mem_ready)
-                    state <= S_FETCH;
+                    state <= ir_from_imem ? S_EXEC : S_FETCH;
 
                 S_DIV: if (div_done) begin
                     writereg(ld_rd, div_result);
-                    state <= S_FETCH;
+                    state <= ir_from_imem ? S_EXEC : S_FETCH;
                 end
 
                 S_HALT: ; // stay halted

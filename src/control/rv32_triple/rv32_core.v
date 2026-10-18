@@ -270,17 +270,19 @@ module rv32_core (
     );
         begin
             if (c_wr_en) writereg(c_wr_idx, c_wr_data);
+            // LD/ST keep the default ir_from_imem: the next group was
+            // fetched during this EXEC and the TCM output registers hold
+            // it through the memory state (imem_en is low there), so the
+            // core resumes in EXEC with no refetch cycle.
             if (c_is_ld) begin
                 ld_rd        <= c_ld_rd;
                 mem_ea       <= c_ea;
                 state        <= S_LOAD;
-                ir_from_imem <= 1'b0;
             end
             if (c_is_st) begin
                 mem_ea       <= c_ea;
                 st_data_r    <= c_st_data;
                 state        <= S_STORE;
-                ir_from_imem <= 1'b0;
             end
             if (c_is_halt) begin
                 halted       <= 1'b1;
@@ -351,11 +353,11 @@ module rv32_core (
 
                 S_LOAD: if (mem_ready) begin
                     writereg(ld_rd, mem_rdata);
-                    state <= S_FETCH;
+                    state <= ir_from_imem ? S_EXEC : S_FETCH;
                 end
 
                 S_STORE: if (mem_ready)
-                    state <= S_FETCH;
+                    state <= ir_from_imem ? S_EXEC : S_FETCH;
 
                 S_HALT: ;
 
