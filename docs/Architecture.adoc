@@ -1,4 +1,3 @@
-
 = VTX1 Ternary SoC Architecture
 version {revnumber}, {revdate}
 :doctype: book
@@ -6,9 +5,9 @@ version {revnumber}, {revdate}
 :description: VTX1 Ternary SoC Architecture
 :author: K.Vanyushov
 :keywords: VTX1, Ternary SoC, Architecture, Specification
-:revnumber: 1.0
-:revdate: 2025-06-16
-:revremark: Initial release
+:revnumber: 2.0
+:revdate: 2026-10-18
+:revremark: Trit-native rework - spec rewritten from the implemented machine
 :url-repo: https://github.com/itworks99/vtx1
 :source-highlighter: rouge
 :rouge-theme: github
@@ -21,12 +20,21 @@ version {revnumber}, {revdate}
 ----
 include::../AUTHORS[]
 ----
+
+[NOTE]
+====
+This revision describes the machine as implemented and measured, not as
+planned. Every structure named here exists in the repository's RTL,
+executes the same binaries as the ISA simulator, and synthesizes with
+Yosys; every performance number is produced by a committed task. The
+pre-2026 microcode-era chapters are archived under `docs/archive/`. The
+running design-decision log is `src/assembler/todo.md`.
+====
 <<<
 
 include::overview.adoc[]
-include::system.adoc[]
+include::isa.adoc[]
 include::cpu.adoc[]
 include::memory.adoc[]
-include::boot.adoc[]
-include::debug.adoc[]
-include::addendums.adoc[]
+include::soc.adoc[]
+include::evaluation.adoc[]

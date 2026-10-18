@@ -563,6 +563,24 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Documentation Consolidation (2026-10-18)
+
+- docs/Architecture.adoc is rewritten as rev 2.0 FROM THE IMPLEMENTED
+  MACHINE: overview (number system, principles as practiced), ISA with
+  all ratified semantics (LD/LEA, division, shifts, stack ABI, negative-
+  address MMIO, wrap/compare rules), the triple-issue core, the memory
+  system (TCM/scratchpad/bus/cache), the SoC with the MMIO map and the
+  accelerator, and the evaluation method with the honest verdict. Both
+  PDFs regenerated (task doc).
+- The pre-2026 chapters (microcode-era: "under 10k gates", FPGA target,
+  FPU/SIMD, microcode addendums) moved to docs/archive/ with a note:
+  kept for history, peripheral chapters unverified against current RTL.
+- Assembler book: fixed 96-bit -> 108-bit bundle size and the TB role.
+- Rule going forward: the spec describes what exists and is measured;
+  aspirations live in README's Planned section and this log.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

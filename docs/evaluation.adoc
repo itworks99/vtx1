@@ -1,0 +1,74 @@
+== Toolchain and Evaluation
+
+=== Toolchain
+
+Written in Go under `src/assembler/`:
+
+* *vtxasm* - the assembler: ANTLR grammar, preprocessor (`.INCLUDE`,
+  parameterized `.MACRO`), VLIW packing validation, and output as raw
+  words, 108-bit bundles, Intel HEX, a trit-level objdump disassembly,
+  or `$readmemh` memory images.
+* *vtxsim* - the ISA-level simulator with the ratified balanced-ternary
+  semantics; reports dynamic instruction counts, memory traffic and
+  branch behavior.
+* *rvsim* + *rvhex* - the RV32IM control: a structural interpreter
+  sharing vtxsim's instrumentation exactly, and an encoder that emits
+  real RV32IM machine code from the same instruction lists, so the
+  binary side of every comparison runs both interpreted and on RTL with
+  asserted results and no external toolchain.
+* The ISA generator emits the Verilog opcode constants and decode tables
+  from `isa.go`.
+
+=== The evaluation method
+
+The architecture is evaluated in tiers, each with a matched control and
+machine-checked results (`src/assembler/benchmarks/README.md` holds the
+full tables and caveats):
+
+*Tier A - instruction level.* Four kernels, hand-written on both ISAs,
+asserted by tests: −34% dynamic instructions on three-valued sign
+arithmetic, −30% on absolute differences, −16% on dot product, −3% on
+the deliberately neutral control-flow kernel.
+
+*Cycle level, issue-width-matched.* The same kernels on the VTX1 RTL and
+on `rv32_triple` (the identical microarchitecture with an RV32IM
+datapath): parity on the memory-bound kernels, **−10% to −16%** on the
+three-valued showcases - `ABS` and `CMP` shorten dependent chains that
+issue width cannot hide. PicoRV32 (vendored unmodified, at its fastest
+configuration) provides the size-optimized reference point at roughly
+3.5× more cycles.
+
+*Accelerator level.* The ternary-weight MAC array against a matched
+binary implementation of the same function and against a conventional
+INT8 multiplier MAC: ternary *weights* halve the array (4,469 vs 9,473
+cells) on any substrate; trit *logic* in the 2-bit encoding costs 1.64×
+its binary equivalent (7,339 vs 4,469) - the quantitative bar for any
+native ternary substrate.
+
+*Tier B - circuit level* (`tierb/`, ngspice on SkyWater Sky130
+production models). Stock multi-Vt devices provide the three-threshold
+palette; the ternary inverter family works with an exact 0.9 V middle
+level; one ternary wire matches the two-wire binary encoding at both
+speed and energy (1.58 bits/wire at parity, 2 T receivers). The costs,
+measured: ~1 µA static per stage holding the mid level, and 18 T for
+voltage-mode negation against 4 T in the 2-bit encoding.
+
+=== The honest verdict
+
+Balanced ternary buys ~10-16% fewer cycles on sign-heavy dependent code
+and ~1.58× information density on wires and storage, at a cost of
+~1.64× more logic per operation on binary substrates. It is an encoding
+and interconnect play, not a general compute speedup; the 2-bit-encoded
+trit datapath VTX1 builds on is cheaper than native voltage-mode ternary
+CMOS in this process, so the architecture results stand by choice, not
+compromise. The remaining native-ternary opportunities are interconnect
+signaling and device research (hard-off at half swing), both recorded in
+the roadmap.
+
+=== Known gaps
+
+SQRT and the vector/FP operation sets trap (unimplemented). The cache is
+not performance-critical in the current memory map and is minimally
+provisioned. No timing closure has been run - cycle counts are not
+seconds. The accelerator handles rows up to 16 lanes; tiling is
+designed but not implemented.

@@ -1,0 +1,69 @@
+== System-on-Chip
+
+`src/vtx1_soc.v` integrates the core with its TCM and data scratchpad,
+the bus matrix (CPU, DMA controller and debug controller as masters),
+the memory controller, cache, external SRAM pins, and the MMIO
+peripherals: GPIO, UART, SPI, I2C, flash controller, the JTAG debug
+controller, clock/reset/power management - and the ternary-weight MAC
+accelerator. The whole SoC synthesizes with Yosys (`task synth-soc`);
+the smoke test shrinks the TCM and scratchpad arrays with `chparam`,
+since the generic flow maps RAMs to flip-flops.
+
+=== Memory-mapped I/O at negative addresses
+
+The ISA reserves negative word addresses for MMIO, and the SoC
+implements the mapping: for a negative address of magnitude m,
+peripheral = m[19:16] and register offset = m[15:0] - that is,
+peripheral P register k lives at word address −(P·0x10000 + k).
+
+[cols="1,1,3"]
+|===
+| P | Peripheral | Notes
+
+| 0 | GPIO       | 24-pin controller
+| 1 | UART       | with DMA request lines
+| 2 | SPI        |
+| 3 | I2C        |
+| 4 | TIMER      | address decode reserved
+| 5 | FLASH      | SPI flash controller
+| 6 | TMAC       | ternary-weight MAC accelerator
+|===
+
+=== The ternary-weight MAC accelerator
+
+`src/accel/vtx1_tmac.v` is 16 multiply-accumulate lanes with no
+multipliers: weights are trits, so a weight multiply is tritwise
+select / skip / negate (negation is a wire swap), feeding a tree of the
+ALU's 18-trit adders. Arithmetic wraps mod 3^18^ exactly like the CPU's
+ADD chain, so software and accelerator results are bit-identical. One
+machine word carries all 16 lane weights in its low 16 trits (lane i at
+weight 3^i^): a weight row is the balanced number Σ wᵢ·3^i^, emitted by
+an ordinary `.DW`.
+
+The MMIO wrapper (`vtx1_tmac_mmio.v`, peripheral 6) offers two modes:
+
+* *Direct:* activation words at offsets 0x00-0x0F, accumulator
+  read/clear at 0x10, a weight-word write to 0x11 = one 16-lane step.
+* *DMA:* descriptor registers ACT_BASE / W_BASE / R_BASE at 0x12-0x14,
+  row count + START at 0x15 (which also reads back as the busy status).
+  The engine streams from the data scratchpad at one word per cycle -
+  16 activation reads, then per output row one packed-weight read and
+  one result write - and writes each row's dot product back to the
+  scratchpad.
+
+Measured on the SoC (16×16 matrix-vector product, all result vectors
+compared in-program): software loop 2,489 cycles; direct MMIO mode 605;
+DMA-fed **86 cycles** including descriptor setup and the status poll.
+Rows wider than 16 lanes (tiling across multiple accumulate steps) are
+the designed extension.
+
+=== Verification harnesses
+
+`src/testbench/` carries per-unit randomized testbenches (ALU: 34,612
+vectors; divider: 6,048; MAC: 61 accumulation runs - each against an
+independent binary reference), the core testbench (bus-only and
+TCM-fed cores side by side, cross-checked against the simulator's
+retired count), the full-SoC hello_world test, benchmark harnesses for
+all three cores, and a generic full-SoC program harness
+(`tb_vtx1_soc_bench.v`) with phase timestamps via marker stores.
+`task test-all` runs the suite.

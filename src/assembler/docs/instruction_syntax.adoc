@@ -47,7 +47,7 @@ The VTX1 supports several register types:
 1. *General Purpose Registers (GPRs)*: T0-T6
 2. *Special Registers*:
    * TA: Accumulator
-   * TB: Base Pointer
+   * TB: Stack/Base Pointer (the PUSH/POP stack ABI)
    * TC: Program Counter
    * TS: Status Register
    * TI: Instruction Register

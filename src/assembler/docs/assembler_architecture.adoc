@@ -41,7 +41,7 @@ Manages symbol resolution including:
 
 Converts the parsed instructions into binary code according to the VTX1 instruction encoding:
 
-* 96-bit VLIW instruction words (3 operations per word)
+* 108-bit VLIW bundles (3 operation words of 18 trits each)
 * 36-bit ternary word encoding
 * Balanced ternary literal encoding
 * Address resolution

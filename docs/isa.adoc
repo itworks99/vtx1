@@ -1,0 +1,98 @@
+== Instruction Set Architecture
+
+The normative definition is `src/assembler/isa/isa.go`; this chapter
+describes it. The Verilog headers (`vtx1_isa_generated.vh`,
+`vtx1_isa_decode.vh`) are generated from that file with
+`go run ./isa/gen`.
+
+=== Operation words and the opcode space
+
+Every operation is one 18-trit word. Trit 0 is the most significant and
+occupies bits [35:34]. All formats start with a 4-trit opcode (trits
+0-3), giving an 81-value space: 69 assigned, 12 reserved (the retired
+transcendental and unsigned operations). The opcode's numeric value is
+its balanced value + 40. The all-zero-trit word is NOP, so zeroed memory
+executes as NOPs.
+
+=== Formats
+
+[cols="1,4"]
+|===
+| Format | Layout (trit positions, MSB first)
+
+| R3     | rd 4-6 \| rs1 7-9 \| mode 10 \| payload 11-17 +
+           mode 0: rs2 = trits 15-17; mode +1: 7-trit immediate (±1093)
+| R2     | rd 4-6 \| rs 7-9
+| R1     | r 4-6
+| None   | all operand trits zero
+| Mem    | reg 4-6 \| mode 7 \| payload 8-17 +
+           mode 0: 10-trit direct address/immediate (±29524) +
+           mode +1: base 8-10, index 11-13 (`[base]` uses index TZ) +
+           mode −1: base 8-10, 7-trit offset 11-17
+| Branch | rs1 4-6 \| rs2 7-9 \| 8-trit PC-relative word offset 10-17
+           (±3280); rs2 = TZ encodes compare-against-zero
+| Jump   | 14-trit absolute word address, trits 4-17 (±2391484)
+|===
+
+All numeric fields are balanced ternary: immediates, offsets and
+displacements are naturally signed and symmetric around zero.
+
+=== Registers
+
+A unified 3-trit index space (pattern = balanced(index − 13)):
+
+[cols="1,1,4"]
+|===
+| Registers | Indices | Role
+
+| T0-T6 | 0-6   | general purpose
+| TB    | 7     | stack/base pointer (the ratified stack ABI)
+| TA    | 8     | accumulator and link register (CALL/JAL/JALR write the
+                 return address here; RET jumps to it)
+| TC    | 9     | program counter
+| TS    | 10    | status
+| TI    | 11    | instruction
+| VA, VT, VB | 12-14 | vector (operations currently trap)
+| FA, FT, FB | 15-17 | floating point (operations currently trap)
+| TZ    | 18    | zero register: reads 0, writes discarded
+|===
+
+=== Ratified semantics
+
+These decisions are binding on every implementation (simulator and RTL
+enforce them identically):
+
+* *LD is a memory read; LEA is load-immediate/address.* The effective
+  address of a direct operand is the immediate.
+* *Division truncates toward zero;* MOD's sign follows the dividend;
+  `a/b*b + a%b == a`; division by zero traps.
+* *Shift/rotate amounts* are the value of the low 4 trits of the second
+  source (±40), reduced mod 18; negative amounts shift the opposite way.
+* *Stack ABI:* TB is the stack pointer, full-descending, word-addressed.
+  `PUSH r`: TB ← TB−1, mem[TB] ← r (the old r, relevant for PUSH TB).
+  `POP r`: r ← mem[TB], TB ← TB+1. For `POP TB` the loaded value wins.
+  Programs initialize TB themselves.
+* *Negative addresses are memory-mapped I/O* (see the SoC chapter for
+  the ratified peripheral map). Positive addresses are word-addressed
+  memory: one address names one 18-trit word.
+* Arithmetic wraps mod 3^18^ (dropped carries). Compare (CMP and the
+  branch comparisons) is overflow-correct: a nonzero carry-out trit of
+  the subtraction is taken as the true sign.
+
+=== VLIW bundles
+
+A bundle is 3 operation words = 54 trits = 108 bits. The assembler
+enforces, per bundle: at most 3 operations (shorter bundles are
+NOP-padded), at most one memory operation, at most one control
+operation, no two writes to the same register (error), and a warning
+when a slot reads a register another slot writes. The core enforces the
+same rules dynamically at issue time (see the CPU chapter), so a packed
+bundle is a scheduling guarantee, not a correctness obligation: scalar
+code multi-issues whenever adjacent words happen to be independent.
+
+=== Trapping operations
+
+SQRT, PUSH-era vector/FP operations (VLD/VST/FLD/FST and the vector/FP
+ALU set) trap as unimplemented. An instruction word containing an
+undefined trit pair traps. Traps halt the core with `trap_pc` pointing
+at the offending word.
