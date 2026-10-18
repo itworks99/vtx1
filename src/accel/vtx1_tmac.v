@@ -29,7 +29,9 @@ module vtx1_tmac (
     input  wire         step,     // perform one 16-lane MAC step
     input  wire [31:0]  weights,  // 16 trit weights, lane i = bits [2i+1:2i]
     input  wire [575:0] acts,     // 16 activation words, lane i = [36i+35:36i]
-    output reg  [35:0]  acc
+    output reg  [35:0]  acc,
+    output wire [35:0]  sum16     // combinational 16-lane sum (one row's
+                                  // dot product when the row fits one word)
 );
 
     localparam [35:0] ZERO_WORD = 36'h555555555; // 18 zero trits
@@ -86,6 +88,7 @@ module vtx1_tmac (
 
     vtx1_trit_adder t4  (.a(l3[0]), .b(l3[1]),
                          .negate_b(1'b0), .sum(l4), .cout());
+    assign sum16 = l4;
     vtx1_trit_adder tacc (.a(acc), .b(l4),
                           .negate_b(1'b0), .sum(acc_next), .cout());
 

@@ -106,20 +106,51 @@ hw_row:
         ST  T3, 0x1212       ; marker: accelerator matvec done
 
 ;-------------------------------------------------------------------------------
-; Phase 3: compare the two result vectors
+; Phase 2b: DMA-fed matvec. One 4-register descriptor (activation base,
+; packed-weight base, result base, row count) and a status poll - the
+; accelerator streams everything from the data scratchpad itself.
+;-------------------------------------------------------------------------------
+        LD  T0, tmac_base    ; T0 = -0x60000
+        LEA T1, 0x1100       ; ACT_BASE: the activation vector
+        LEA T4, -18          ; register 0x12
+        ST  T1, [T0+T4]
+        LEA T1, 0x1260       ; W_BASE: the packed weight rows
+        LEA T4, -19          ; register 0x13
+        ST  T1, [T0+T4]
+        LEA T1, 0x1280       ; R_BASE: DMA results
+        LEA T4, -20          ; register 0x14
+        ST  T1, [T0+T4]
+        LEA T1, 16           ; 16 rows + START
+        LEA T4, -21          ; register 0x15
+        ST  T1, [T0+T4]
+dma_poll:
+        LD  T5, [T0+T4]      ; status: +1 while busy
+        BNE T5, 0, dma_poll
+
+        LEA T3, 0
+        ST  T3, 0x1213       ; marker: DMA matvec done
+
+;-------------------------------------------------------------------------------
+; Phase 3: compare both accelerator result vectors against software
 ;-------------------------------------------------------------------------------
         LEA T0, 0x1220
         LEA T1, 0x1240
+        LEA T6, 0x1280
         LEA T2, 16
         LEA T3, 0            ; mismatch count
 cmp_loop:
         LD  T4, [T0]
         LD  T5, [T1]
-        BEQ T4, T5, cmp_ok
+        BEQ T4, T5, cmp_mmio_ok
         INC T3
-cmp_ok:
+cmp_mmio_ok:
+        LD  T5, [T6]
+        BEQ T4, T5, cmp_dma_ok
+        INC T3
+cmp_dma_ok:
         INC T0
         INC T1
+        INC T6
         DEC T2
         BGT T2, 0, cmp_loop
 

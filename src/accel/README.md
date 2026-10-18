@@ -12,7 +12,7 @@ select / skip / negate, and negation in balanced ternary is a wire swap.
 | `vtx1_tmac.v` | 16-lane ternary-weight MAC: tritwise select/negate into a tree of the ALU's 18-trit adders; wraps mod 3¹⁸ exactly like a chain of CPU `ADD`s, so software and accelerator results are bit-identical |
 | `bin_tmac.v` | the matched control: the same function in two's-complement (30-bit signed lanes = the same value range), select/negate + binary adder tree — also multiplier-free |
 | `bin_mac8.v` | the industry reference: 16 lanes of signed INT8×INT8 multiply + adder tree, what a conventional binary NPU builds (different function — labeled reference, not a control) |
-| `vtx1_tmac_mmio.v` | MMIO wrapper: activations at offsets 0x00–0x0F, accumulator (read/clear) at 0x10, a weight-word write to 0x11 = one 16-lane MAC step |
+| `vtx1_tmac_mmio.v` | MMIO wrapper + DMA engine: direct mode (activations at offsets 0x00–0x0F, accumulator at 0x10, weight-word write to 0x11 = one step) and descriptor mode (ACT_BASE/W_BASE/R_BASE at 0x12–0x14, row count + start at 0x15, status poll on 0x15) — the DMA engine streams from the data scratchpad at one word per cycle and writes each row's dot product back |
 
 One 18-trit machine word carries all 16 lane weights in its low 16 trits
 (lane *i* at weight 3^i), so a weight word is simply the balanced number
@@ -48,13 +48,23 @@ accelerator through MMIO — and compares the vectors itself (the ISA's
 negative-address MMIO space, ratified today: peripheral *P* register *k*
 lives at word address −(P·0x10000 + k); TMAC is peripheral 6).
 
-| Phase | Cycles |
-|---|---|
-| software matvec (MUL/ADD loop) | 2,489 |
-| accelerator matvec via MMIO | **605** (4.1×) |
+| Phase | Cycles | vs software |
+|---|---|---|
+| software matvec (MUL/ADD loop) | 2,489 | 1× |
+| accelerator, direct MMIO mode | 605 | 4.1× |
+| accelerator, **DMA-fed from the scratchpad** | **86** | **29×** |
 
-Caveat, stated plainly: of those 605 cycles only 16 are MAC work (one
-step per output row — 256 MACs); the rest is MMIO transport at ~9 cycles
-per register access. The compute itself is ~150× the software loop; DMA
-feeding or a tightly-coupled port is where the system-level number goes
-next.
+The DMA number includes everything: the 4-register descriptor setup over
+MMIO, the stream itself (16 activation reads + per row one weight read
+and one result write, at scratchpad speed), and the status poll. The
+MMIO-mode row remains in the table as the measured cost of register-level
+transport — 97% of its 605 cycles.
+
+Caveats: results are written into the data scratchpad, which owns them
+until a CPU store overwrites that address (external memory is not
+updated — fine for CPU-consumed results, stated for everything else);
+the scratchpad gains a second read port and a shared write port for the
+accelerator, with the CPU write-through snoop taking priority; rows are
+currently one weight word (16 lanes) wide — tiling wider layers across
+multiple steps per row is the designed extension (the `step` interface
+already accumulates).

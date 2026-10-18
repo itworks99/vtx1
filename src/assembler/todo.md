@@ -512,6 +512,20 @@ The VTX1 assembler processes input in the following stages:
   software 2,489 cycles vs accelerator 605 (4.1x). Only 16 of the 605
   are MAC work (256 MACs); MMIO transport at ~9 cycles/access dominates.
   DMA feeding / a tightly-coupled accelerator port is the next lever.
+- DMA FEEDING LANDED (same day): the wrapper gained a descriptor mode
+  (ACT_BASE/W_BASE/R_BASE/rows+start at registers 0x12-0x15, status poll
+  on 0x15) and a streaming port into the data scratchpad (second read
+  port + shared write port, CPU snoop priority). The engine reads one
+  word per cycle: 16 activations, then per row one packed-weight read
+  and one result write (sum16, the combinational 16-lane row sum - no
+  clear/step dance needed for single-word rows). Same matvec: 86 cycles
+  including descriptor setup and poll - 29x software, 7x MMIO mode.
+  Descriptor values arrive as trit words; the wrapper t2b-converts them
+  (and that t2b-of-a-function part-select re-triggered the "no
+  part-select on a function call" Icarus syntax rule - hoist to a wire).
+  Ownership caveat documented: DMA results live in the scratchpad only.
+  Tiling rows wider than 16 lanes = designed extension (step interface
+  already accumulates).
 - tb_vtx1_soc_bench is a new GENERIC full-SoC program harness (+img,
   +exp0..5 at 0x1200, phase timestamps via marker stores to 0x121x).
 

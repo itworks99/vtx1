@@ -83,12 +83,12 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Stack ABI: TB is the stack pointer (full-descending, word-addressed); PUSH/POP and nested CALL/RET verified in vtxsim and on the RTL core (`task test-stack`)
 
 **✅ Working today (continued):**
-- **Ternary-weight MAC accelerator** (`src/accel/`): 16 multiplier-free MAC lanes, verified against a matched binary control and an INT8 multiplier reference — ternary weights **halve** the MAC array vs the conventional multiplier unit (4,469 vs 9,473 cells) while processing wider activations; on the SoC, a 16×16 matvec runs 4.1× faster than the software loop through MMIO (`task test-tmac`, [details and caveats](src/accel/README.md))
+- **Ternary-weight MAC accelerator** (`src/accel/`): 16 multiplier-free MAC lanes, verified against a matched binary control and an INT8 multiplier reference — ternary weights **halve** the MAC array vs the conventional multiplier unit (4,469 vs 9,473 cells) while processing wider activations; DMA-fed from the data scratchpad, a 16×16 matvec takes **86 cycles vs 2,489 in software (29×)**, descriptor setup and status poll included (`task test-tmac`, [details and caveats](src/accel/README.md))
 - Memory-mapped I/O at **negative addresses**, as the ISA always specified: peripheral *P* register *k* at word address −(P·0x10000+k)
 
 **🔮 Planned:**
 - SPICE-characterized ternary cells on SkyWater 130nm device models (circuit-level evaluation) — the concrete target: beat the measured 1.64× binary-substrate overhead of trit logic
-- DMA feeding for the MAC accelerator (the 605-cycle matvec is ~97% MMIO transport)
+- MAC tiling for layers wider than 16 (the accumulate interface already supports it); OpenROAD/OpenLane place & route
 - OpenROAD/OpenLane place & route; FPGA demonstrator
 
 ## Prerequisites

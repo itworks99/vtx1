@@ -39,7 +39,21 @@ module vtx1_scratchpad #(
     output wire [31:0] bus_addr,
     output wire [35:0] bus_wdata,
     input  wire [35:0] bus_rdata,
-    input  wire        bus_ready
+    input  wire        bus_ready,
+
+    // Accelerator port (TMAC DMA): one synchronous read port and one
+    // write port into the same array. The CPU write-through snoop has
+    // priority on writes; acc_wr_stall tells the accelerator to hold.
+    // OWNERSHIP CAVEAT: words the accelerator writes exist only in the
+    // scratchpad (not in external memory) until a CPU store overwrites
+    // them - fine for CPU-consumed results, stated for everything else.
+    input  wire        acc_rd_en,
+    input  wire [31:0] acc_rd_addr,
+    output reg  [35:0] acc_rd_data,
+    input  wire        acc_wr_en,
+    input  wire [31:0] acc_wr_addr,
+    input  wire [35:0] acc_wr_data,
+    output wire        acc_wr_stall
 );
 
     wire in_win    = (cpu_addr[31:ADDR_BITS] == BASE[31:ADDR_BITS]);
@@ -51,15 +65,23 @@ module vtx1_scratchpad #(
     assign bus_addr  = cpu_addr;
     assign bus_wdata = cpu_wdata;
 
-    // Local memory: synchronous read, write-snoop, no reset (RAM inference)
+    // Local memory: synchronous reads, write-snoop + accelerator write,
+    // no reset (RAM inference)
     reg [35:0] mem [0:(1 << ADDR_BITS) - 1];
     reg [35:0] rdata_r;
+
+    wire snoop_wr = cpu_req && cpu_wr && bus_ready && in_win;
+    assign acc_wr_stall = snoop_wr && acc_wr_en;
 
     always @(posedge clk) begin
         if (local_rd)
             rdata_r <= mem[cpu_addr[ADDR_BITS-1:0]];
-        if (cpu_req && cpu_wr && bus_ready && in_win)
+        if (acc_rd_en)
+            acc_rd_data <= mem[acc_rd_addr[ADDR_BITS-1:0]];
+        if (snoop_wr)
             mem[cpu_addr[ADDR_BITS-1:0]] <= cpu_wdata;
+        else if (acc_wr_en)
+            mem[acc_wr_addr[ADDR_BITS-1:0]] <= acc_wr_data;
     end
 
     // One-cycle ready handshake for local reads

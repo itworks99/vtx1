@@ -359,9 +359,13 @@ assign i2c_wr = mmio_wr;
 assign i2c_addr = mmio_addr;
 assign i2c_wdata = mmio_wdata;
 
-// Request routing - TMAC (ternary-weight MAC accelerator)
+// Request routing - TMAC (ternary-weight MAC accelerator with a DMA port
+// into the data scratchpad)
 wire tmac_ready;
 wire [VTX1_WORD_WIDTH-1:0] tmac_rdata;
+wire tmac_sp_rd_en, tmac_sp_wr_en, tmac_sp_wr_stall;
+wire [31:0] tmac_sp_rd_addr, tmac_sp_wr_addr;
+wire [35:0] tmac_sp_rd_data, tmac_sp_wr_data;
 vtx1_tmac_mmio tmac_inst (
     .clk(clk_cpu),
     .rst_n(rst_cpu_n),
@@ -370,7 +374,14 @@ vtx1_tmac_mmio tmac_inst (
     .offset(mmio_addr[15:0]),
     .wdata(mmio_wdata[35:0]),
     .rdata(tmac_rdata),
-    .ready(tmac_ready)
+    .ready(tmac_ready),
+    .sp_rd_en(tmac_sp_rd_en),
+    .sp_rd_addr(tmac_sp_rd_addr),
+    .sp_rd_data(tmac_sp_rd_data),
+    .sp_wr_en(tmac_sp_wr_en),
+    .sp_wr_addr(tmac_sp_wr_addr),
+    .sp_wr_data(tmac_sp_wr_data),
+    .sp_wr_stall(tmac_sp_wr_stall)
 );
 
 // Request routing - Flash
@@ -678,7 +689,15 @@ vtx1_scratchpad #(.BASE(32'h0000_0000)) spad_inst (
     .bus_addr(cpu_mem_addr32),
     .bus_wdata(cpu_bus_wdata),
     .bus_rdata(cpu_bus_rdata),
-    .bus_ready(cpu_bus_ready)
+    .bus_ready(cpu_bus_ready),
+    // TMAC accelerator DMA port
+    .acc_rd_en(tmac_sp_rd_en),
+    .acc_rd_addr(tmac_sp_rd_addr),
+    .acc_rd_data(tmac_sp_rd_data),
+    .acc_wr_en(tmac_sp_wr_en),
+    .acc_wr_addr(tmac_sp_wr_addr),
+    .acc_wr_data(tmac_sp_wr_data),
+    .acc_wr_stall(tmac_sp_wr_stall)
 );
 
 // ADDR_BITS is left at the module default (12) so the synthesis smoke
