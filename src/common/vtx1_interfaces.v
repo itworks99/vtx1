@@ -23,6 +23,7 @@
 `define VTX1_I2C_BASE_ADDR   16'h1003
 `define VTX1_TIMER_BASE_ADDR 16'h1004
 `define VTX1_FLASH_BASE_ADDR 16'h1005
+`define VTX1_TMAC_BASE_ADDR  16'h1006
 
 // System Configuration
 `define VTX1_NUM_REGISTERS 13

@@ -97,6 +97,7 @@ localparam VTX1_SPI_BASE_ADDR   = 16'h1002;
 localparam VTX1_I2C_BASE_ADDR   = 16'h1003;
 localparam VTX1_TIMER_BASE_ADDR = 16'h1004;
 localparam VTX1_FLASH_BASE_ADDR = 16'h1005;
+localparam VTX1_TMAC_BASE_ADDR  = 16'h1006; // ternary-weight MAC accelerator
 
 // =============================================================================
 // CONSOLIDATED SIGNAL DECLARATIONS
@@ -321,7 +322,7 @@ assign rst_flash_n = rst_system_n;
 // CONSOLIDATED MMIO ROUTER  
 // =============================================================================
 // Address decode signals
-reg mmio_gpio_sel, mmio_uart_sel, mmio_spi_sel, mmio_i2c_sel, mmio_timer_sel, mmio_flash_sel;
+reg mmio_gpio_sel, mmio_uart_sel, mmio_spi_sel, mmio_i2c_sel, mmio_timer_sel, mmio_flash_sel, mmio_tmac_sel;
 
 // Address decoder (using VTX1 parameters)
 always @(*) begin
@@ -331,6 +332,7 @@ always @(*) begin
     mmio_i2c_sel   = (mmio_addr[31:16] == VTX1_I2C_BASE_ADDR);
     mmio_timer_sel = (mmio_addr[31:16] == VTX1_TIMER_BASE_ADDR);
     mmio_flash_sel = (mmio_addr[31:16] == VTX1_FLASH_BASE_ADDR);
+    mmio_tmac_sel  = (mmio_addr[31:16] == VTX1_TMAC_BASE_ADDR);
 end
 
 // Request routing - GPIO
@@ -356,6 +358,20 @@ assign i2c_req = mmio_req && mmio_i2c_sel;
 assign i2c_wr = mmio_wr;
 assign i2c_addr = mmio_addr;
 assign i2c_wdata = mmio_wdata;
+
+// Request routing - TMAC (ternary-weight MAC accelerator)
+wire tmac_ready;
+wire [VTX1_WORD_WIDTH-1:0] tmac_rdata;
+vtx1_tmac_mmio tmac_inst (
+    .clk(clk_cpu),
+    .rst_n(rst_cpu_n),
+    .req(mmio_req && mmio_tmac_sel),
+    .wr(mmio_wr),
+    .offset(mmio_addr[15:0]),
+    .wdata(mmio_wdata[35:0]),
+    .rdata(tmac_rdata),
+    .ready(tmac_ready)
+);
 
 // Request routing - Flash
 assign flash_req = mmio_req && mmio_flash_sel;
@@ -391,6 +407,11 @@ always @(*) begin
             mmio_rdata = flash_rdata;
             mmio_ready = flash_ready;
             mmio_error = flash_error;
+        end
+        mmio_tmac_sel: begin
+            mmio_rdata = tmac_rdata;
+            mmio_ready = tmac_ready;
+            mmio_error = 1'b0;
         end
         default: begin
             // Pass through memory controller response for unmapped addresses
@@ -675,7 +696,16 @@ vtx1_tcm #(.BASE(32'h0000_1000)) tcm_inst (
     .wdata(cpu_bus_wdata)
 );
 
-assign cpu_bus_addr = {{(VTX1_ADDR_WIDTH-32){1'b0}}, cpu_mem_addr32};
+// The ISA reserves NEGATIVE word addresses for memory-mapped I/O. A
+// negative CPU address maps into the bus matrix MMIO window (0x4_xxxx_xxxx)
+// with its magnitude m selecting the peripheral (m[19:16]: 0 GPIO, 1 UART,
+// 2 SPI, 3 I2C, 4 TIMER, 5 FLASH, 6 TMAC) and m[15:0] the register offset,
+// so peripheral P register k lives at word address -(P*0x10000 + k).
+// Positive addresses map to memory exactly as before.
+wire [31:0] cpu_mmio_mag = (~cpu_mem_addr32) + 32'd1;
+assign cpu_bus_addr = cpu_mem_addr32[31]
+    ? {4'h4, 12'h100, cpu_mmio_mag[19:16], cpu_mmio_mag[15:0]}
+    : {{(VTX1_ADDR_WIDTH-32){1'b0}}, cpu_mem_addr32};
 assign cpu_bus_size = 2'b10;          // always one 36-bit word
 assign cpu_bus_error_clear = 1'b0;
 assign cpu_debug_pc = {{(VTX1_WORD_WIDTH-32){1'b0}}, cpu_pc};

@@ -486,6 +486,37 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Ternary-Weight MAC Accelerator (2026-10-18)
+
+- `src/accel/`: the idea from "Ideas Worth Keeping" is now hardware.
+  vtx1_tmac = 16 multiplier-free MAC lanes (tritwise select/negate into a
+  tree of the ALU's adders; wraps mod 3^18 exactly like CPU ADDs, so
+  software and accelerator agree bit for bit). bin_tmac = the matched
+  binary control (same function, 30-bit two's-complement). bin_mac8 =
+  the INT8 multiplier MAC industry reference. Verified equivalent on 61
+  random accumulation runs (tb_tmac).
+- Cell counts (task synth-mac, flattened): bin_tmac 4,469 / vtx1_tmac
+  7,339 / bin_mac8 9,473. Two honest headlines: (1) ternary WEIGHTS
+  halve the MAC array vs the multiplier unit while processing 3.75x
+  wider activations - on any substrate; (2) trit logic at 2 bits/trit on
+  a binary substrate costs 1.64x its binary equivalent - the concrete
+  bar Tier B's real ternary cells must beat.
+- NEGATIVE-ADDRESS MMIO RATIFIED: the ISA's "negative addresses are
+  MMIO" provision is now implemented - a negative CPU word address maps
+  into the bus matrix MMIO window, magnitude m selecting peripheral
+  m[19:16] (GPIO 0 ... FLASH 5, TMAC 6) and register m[15:0], so
+  peripheral P register k is at address -(P*0x10000 + k). This was dead
+  letter before: the CPU's zero-extended address could never reach the
+  0x4_xxxx_xxxx MMIO window at all.
+- SoC demo (task test-tmac, tb_vtx1_soc_bench markers): 16x16 matvec,
+  software 2,489 cycles vs accelerator 605 (4.1x). Only 16 of the 605
+  are MAC work (256 MACs); MMIO transport at ~9 cycles/access dominates.
+  DMA feeding / a tightly-coupled accelerator port is the next lever.
+- tb_vtx1_soc_bench is a new GENERIC full-SoC program harness (+img,
+  +exp0..5 at 0x1200, phase timestamps via marker stores to 0x121x).
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

@@ -56,7 +56,7 @@ tasks:
     cmds:
       - task: os-mkdir-build
       - echo "Testing VTX1 Consolidated System..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -I src/testbench -o build/vtx1_soc_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -I src/testbench -o build/vtx1_soc_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v
       - vvp build/vtx1_soc_test
       - echo "VTX1 Consolidated system test completed. View waveforms with gtkwave vtx1_soc_test.vcd"
 
@@ -78,6 +78,7 @@ tasks:
       - task: test-alu
       - task: test-div
       - task: test-stack
+      - task: test-tmac
       - task: test-core
       - task: test-optimized
       - echo "All VTX1 tests completed successfully"
@@ -170,6 +171,27 @@ tasks:
       - iverilog -g2012 -I src/common -o build/vtx1_bench src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/vtx1_tcm.v src/testbench/tb_vtx1_bench.v
       - vvp build/vtx1_bench +img=build/stack_test.memh +nres=6 +exp0=33 +exp1=22 +exp2=11 +exp3=5 +exp4=7936 +exp5=4242 | grep RTL
 
+  test-tmac:
+    desc: Verify the ternary-weight MAC accelerator (unit + SoC matvec demo)
+    cmds:
+      - task: os-mkdir-build
+      - iverilog -g2012 -I src/common -o build/tmac_test src/cpu/vtx1_alu.v src/accel/vtx1_tmac.v src/accel/bin_tmac.v src/testbench/tb_tmac.v
+      - vvp build/tmac_test
+      - cd src/assembler && go build -o ../../build/vtxasm .
+      - ./build/vtxasm -f memh -o build/tmac_matvec.memh src/assembler/examples/tmac_matvec.asm
+      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -I src/cache -o build/soc_bench src/vtx1_soc.v src/testbench/tb_vtx1_soc_bench.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v
+      - vvp build/soc_bench +img=build/tmac_matvec.memh +nres=2 +exp0=0 +exp1=1 | grep -E "phase|SoC-bench"
+
+  synth-mac:
+    desc: Cell-count comparison - ternary MAC vs binary MAC vs INT8 multiplier MAC
+    cmds:
+      - echo "=== vtx1_tmac (trit logic, ternary weights) ==="
+      - yosys -p "read_verilog -I src/common src/cpu/vtx1_alu.v src/accel/vtx1_tmac.v; synth -top vtx1_tmac -flatten; stat" | grep -E "Number of cells|_DFF" | head -4
+      - echo "=== bin_tmac (binary logic, ternary weights, same function) ==="
+      - yosys -p "read_verilog src/accel/bin_tmac.v; synth -top bin_tmac -flatten; stat" | grep -E "Number of cells|_DFF" | head -4
+      - echo "=== bin_mac8 (binary INT8 multiplier MAC, industry reference) ==="
+      - yosys -p "read_verilog src/accel/bin_mac8.v; synth -top bin_mac8 -flatten; stat" | grep -E "Number of cells|_DFF" | head -4
+
   test-core:
     desc: Run hello_world on the trit-native RTL core (code-to-silicon loop)
     cmds:
@@ -209,7 +231,7 @@ tasks:
     desc: Check VTX1 SoC syntax
     cmds:
       - echo "Checking VTX1 Consolidated System syntax..."
-      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -t null src/vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+      - iverilog -g2012 -I src/common -I src/cpu -I src/memory -I src/system -t null src/vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v
       - echo "VTX1 Consolidated syntax check completed"
 
   synth:
@@ -228,7 +250,7 @@ tasks:
       # smoke test: Yosys' generic flow maps RAMs to flip-flops (no RAM
       # target library), and FF-mapping the full 4096x36 array validates
       # no additional logic. On a real flow the array is a RAM macro.
-      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/memory/vtx1_tcm.v src/memory/vtx1_scratchpad.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; chparam -set ADDR_BITS 8 vtx1_tcm; chparam -set ADDR_BITS 8 vtx1_scratchpad; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
+      - yosys -p "read_verilog -I src/common -I src/cpu -I src/memory -I src/system -I src/cache src/vtx1_soc.v src/common/ternary_arithmetic.v src/common/ternary_constants.v src/common/vtx1_state_constants.v src/common/vtx1_interfaces.v src/common/vtx1_error_macros.v src/common/ternary_logic.v src/common/ternary_encoding.v src/cpu/vtx1_decoder.v src/cpu/vtx1_alu.v src/cpu/vtx1_div.v src/cpu/vtx1_slot.v src/cpu/vtx1_core.v src/memory/memory_controller.v src/memory/vtx1_tcm.v src/memory/vtx1_scratchpad.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v src/system/uart_controller.v src/system/spi_controller.v src/system/i2c_controller.v src/system/gpio_controller.v src/system/dma_controller.v src/system/debug_controller.v src/system/cpu_adapter.v src/system/bus_matrix.v src/cache/cache_controller.v; chparam -set ADDR_BITS 8 vtx1_tcm; chparam -set ADDR_BITS 8 vtx1_scratchpad; synth -top vtx1_soc; write_verilog build/vtx1_soc_synth.v; write_json build/vtx1_soc_synth.json"
 
   # Utilities
   clean:
@@ -289,7 +311,7 @@ tasks:
         if [ "${OS}" = "windows" ]; then
           powershell -Command "iverilog -I src\common -I src\cache -o build\vtx1_optimized_test src\vtx1_soc.v src\testbench\tb_vtx1_soc.v src\common\*.v src\cpu\*.v src\memory\*.v src\system\*.v src\cache\*.v"
         else
-          iverilog -I src/common -I src/cache -o build/vtx1_optimized_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v
+          iverilog -I src/common -I src/cache -o build/vtx1_optimized_test src/vtx1_soc.v src/testbench/tb_vtx1_soc.v src/common/*.v src/cpu/*.v src/memory/*.v src/system/*.v src/cache/*.v src/accel/vtx1_tmac.v src/accel/vtx1_tmac_mmio.v
         fi
     silent: true
 

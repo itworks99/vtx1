@@ -65,7 +65,9 @@ branch displacements are naturally signed and symmetric around zero -- there
 is no sign bit and no two's-complement asymmetry.
 
 Negative absolute addresses are architecturally legal and reserved for
-memory-mapped I/O. Shift and rotate amounts are the value of the low 4 trits
+memory-mapped I/O (ratified mapping: peripheral P register k lives at
+word address -(P*0x10000 + k); P = 0 GPIO, 1 UART, 2 SPI, 3 I2C,
+4 TIMER, 5 FLASH, 6 TMAC ternary-weight MAC accelerator). Shift and rotate amounts are the value of the low 4 trits
 of the second source operand (range ±40), reduced modulo 18; negative amounts
 shift the opposite direction.
 
