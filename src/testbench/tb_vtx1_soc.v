@@ -112,8 +112,13 @@ module tb_vtx1_soc;    // Test signals
     integer tci;
     initial begin
         #1; // after the SRAM image loads
-        for (tci = 0; tci < 4096; tci = tci + 1)
-            uut.tcm_inst.mem[tci] = sram['h1000 + tci];
+        // word w -> bank w[1:0], index w[11:2]
+        for (tci = 0; tci < 4096; tci = tci + 4) begin
+            uut.tcm_inst.bank0[tci >> 2] = sram['h1000 + tci];
+            uut.tcm_inst.bank1[tci >> 2] = sram['h1000 + tci + 1];
+            uut.tcm_inst.bank2[tci >> 2] = sram['h1000 + tci + 2];
+            uut.tcm_inst.bank3[tci >> 2] = sram['h1000 + tci + 3];
+        end
     end
 
     assign mem_data = (!mem_cs_n && !mem_oe_n && mem_we_n)

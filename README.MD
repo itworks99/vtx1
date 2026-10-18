@@ -9,7 +9,7 @@ A personal project: a balanced-ternary System-on-Chip with a complete, verified 
 ```
 $ task test-soc
 SoC says: "Hello, VTX1!"
-Cycles: 310  Retired: 93
+Cycles: 271  Retired: 93
 PASS: VTX1 SoC executed hello_world end to end
 ```
 
@@ -48,7 +48,7 @@ That buys properties binary machines have to work for:
 
 - **18-trit machine words** (36 bits at 2 bits/trit), word-addressed memory
 - **Trit-native ISA**: 4-trit opcodes (69 assigned, 12 reserved of the 3⁴ space), balanced-ternary immediates and PC-relative branches, a TZ zero register, negative addresses reserved for MMIO. The all-zero-trit word is NOP.
-- **VLIW bundles**: 3 operation words = 54 trits = 108 bits, with assembler-enforced packing rules
+- **VLIW bundles**: 3 operation words = 54 trits = 108 bits, with assembler-enforced packing rules — and the same rules enforced dynamically by the core's triple-issue logic, so bundles are a scheduling guarantee, not a correctness obligation
 - **No microcode**: hardwired control plus dedicated multi-cycle units (divider, vector reductions). Transcendentals are software over the ternary primitives.
 - **Single source of truth**: the entire ISA lives in [`src/assembler/isa/isa.go`](src/assembler/isa/isa.go); the Verilog constants and decode tables are generated from it, so the toolchain and the RTL cannot drift apart.
 
@@ -70,12 +70,13 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Trit-native ISA, single-sourced, with generated Verilog headers
 - Assembler, ISA simulator, and benchmark suite (all Go-tested)
 - CPU RTL executing programs, cross-checked against the simulator — with a fully native balanced-ternary datapath (trit adders, multiplier tree, overflow-correct three-valued compare; no binary conversion anywhere) that synthesizes cleanly with Yosys
-- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins — with single-cycle instruction fetch from a tightly-coupled instruction RAM (SoC CPI 9.8 → 3.3; straight-line code runs at CPI 1)
+- **Triple issue**: up to 3 consecutive instruction words commit per cycle, with the VLIW packing rules (≤1 memory op, control ends the group, no intra-group hazards) enforced dynamically in hardware — a packed bundle is guaranteed to issue in one cycle, and independent scalar code multi-issues too
+- Full SoC executing programs through the bus matrix, memory controller, and external SRAM pins — fetching 3-word groups per cycle from a banked tightly-coupled instruction RAM (SoC CPI 9.8 → 2.9 on hello_world; peak 3 words/cycle on independent code)
 - Ternary-vs-binary architecture comparison (VTX1 vs RV32IM, identical instrumentation)
 - Build and test automation with Taskfile; Yosys synthesis flow
 
 **🚧 In progress:**
-- Performance: parallel VLIW bundle issue, then a cycle-level comparison against PicoRV32 under the same memory model
+- Cycle-level comparison against PicoRV32 under the same memory model
 - Stack ABI (PUSH/POP), iterative divider FSM for synthesis
 
 **🔮 Planned:**

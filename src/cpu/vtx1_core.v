@@ -1,30 +1,31 @@
 `timescale 1ns / 1ps
-// VTX1 Trit-Native CPU Core (v2: native balanced-ternary datapath)
+// VTX1 Trit-Native CPU Core (v3: triple-issue native balanced-ternary)
 // Part of the VTX1 Ternary System-on-Chip
 //
-// A clean core built around vtx1_decoder and vtx1_alu: hardwired control,
-// no microcode, and NO binary<->ternary conversion in the datapath:
+// A core built from three vtx1_slot units (decode + single-cycle execute
+// of one operation word each): hardwired control, no microcode, and NO
+// binary<->ternary conversion in the datapath - registers, the PC,
+// immediates, effective addresses and all ALU results are trit words end
+// to end; the only trit->binary conversion is t2b() toward the memory
+// address bus.
 //
-//   - registers, the PC, immediates, effective addresses and all ALU
-//     results are trit words end to end;
-//   - immediates come out of the decoder as trit fields placed in
-//     zero-trit-padded words (padding with zero trits preserves any
-//     balanced value - no sign extension exists or is needed);
-//   - the only trit->binary conversion is t2b() toward the memory address
-//     bus, which is a chain of x3 adds (synthesizes cleanly); there is no
-//     binary->trit conversion anywhere (the b2t divider chains of the v1
-//     core are gone - they were a synthesis blocker).
+// Issue model: up to three CONSECUTIVE words commit in the same cycle.
+// The hardware enforces the VLIW packing rules dynamically, so they hold
+// whether the assembler packed the words into a bundle or not:
+//   - at most one memory operation per group
+//   - a control operation (branch/jump/ret/jr/jalr) or halt ends the group
+//   - no write-write conflicts and no read-after-write within a group
+//     (dependent words simply start the next group)
+// Co-issued words are therefore provably independent, so parallel commit
+// is bit-identical to sequential execution - the ISA simulator cross-check
+// (retired word count) is preserved exactly.
 //
-// Fetch model (a): one 18-trit instruction word per fetch, PC steps by one
-// word; a VLIW bundle executes as its three slots in sequence.
-//
-// Instruction fetch has a fast path through a tightly-coupled instruction
-// memory (vtx1_tcm): during EXEC the next PC is known combinationally, so
-// the core issues the TCM read for it in the same cycle and executes the
-// next instruction directly from imem_rdata - straight-line TCM code runs
-// at CPI 1 with no fetch state at all. Fetches outside the TCM window
-// (imem_hit low) fall back to the bus port exactly as before; tying
-// imem_hit to 0 gives the original bus-only core.
+// Fetch: the tightly-coupled instruction memory delivers the 3-word group
+// at the next PC, which is resolved combinationally during EXEC (branches
+// included) - so TCM-resident code needs no fetch state at all and
+// straight-line independent code runs at up to 3 words per cycle. A TCM
+// miss (or imem_hit tied low) falls back to the bus port, one word per
+// fetch, single issue: the original scalar core behavior.
 //
 // DIV/MOD belong to the pending iterative divider FSM and trap for now;
 // SQRT, PUSH/POP (no stack ABI yet) and vector/FP operations trap.
@@ -51,11 +52,14 @@ module vtx1_core (
 
     // Tightly-coupled instruction memory port (synchronous read):
     // imem_addr is valid while imem_en is high; the TCM answers hit
-    // combinationally and delivers the word in imem_rdata one clock
-    // later. Tie imem_hit low to fetch everything over the bus port.
+    // combinationally and delivers the 3-word group (imem_addr,+1,+2)
+    // in imem_rdata0..2 one clock later. Tie imem_hit low to fetch
+    // everything over the bus port, one word at a time.
     output reg         imem_en,
     output reg  [31:0] imem_addr,
-    input  wire [35:0] imem_rdata,
+    input  wire [35:0] imem_rdata0,
+    input  wire [35:0] imem_rdata1,
+    input  wire [35:0] imem_rdata2,
     input  wire        imem_hit,
 
     // Execution state
@@ -97,17 +101,6 @@ module vtx1_core (
         end
     endfunction
 
-    // Sign of a word: its most significant nonzero trit.
-    function [1:0] word_sign(input [35:0] w);
-        integer i;
-        begin
-            word_sign = 2'b01;
-            for (i = 17; i >= 0; i = i - 1)
-                if (word_sign == 2'b01 && w[2*i+1 -: 2] != 2'b01)
-                    word_sign = w[2*i+1 -: 2];
-        end
-    endfunction
-
     // CONSTANT function: binary -> trit word. Contains division, but it is
     // evaluated at elaboration time only (reset vector), costing no gates.
     function [35:0] const_b2t(input integer v);
@@ -133,122 +126,166 @@ module vtx1_core (
     // ------------------------------------------------------------------
     reg [35:0] regs [0:17];
 
-    function [35:0] regword(input [4:0] idx);
-        regword = (idx >= 5'd18) ? ZERO_WORD : regs[idx];
-    endfunction
+    wire [647:0] regs_flat;
+    genvar gi;
+    generate
+        for (gi = 0; gi < 18; gi = gi + 1) begin : flat
+            assign regs_flat[36*gi +: 36] = regs[gi];
+        end
+    endgenerate
 
     task writereg(input [4:0] idx, input [35:0] w);
         if (idx < 5'd18)
             regs[idx] <= w;
     endtask
 
-    localparam REG_TA = 5'd8; // link register (provisional ABI)
-
     // ------------------------------------------------------------------
-    // Decoder (combinational on the current instruction word)
+    // Program counter chain: p0 = PC of slot 0, p1..p3 = +1, +2, +3
+    // (trit words; binary only at the address buses)
     // ------------------------------------------------------------------
-    // On the fast path the instruction is consumed directly from the TCM
-    // read register (ir_from_imem = 1); otherwise it is the latched ir.
-    // EXEC always latches the executed word into ir so it stays stable
-    // through the LOAD/STORE states (mem_wdata reads a decoder field).
-    reg [35:0] ir;
-    reg        ir_from_imem;
-    wire [35:0] iword = ir_from_imem ? imem_rdata : ir;
-
-    wire        dec_valid;
-    wire [6:0]  opcode;
-    wire [2:0]  format, category;
-    wire        multicycle;
-    wire [4:0]  reg1, reg2, reg3;
-    wire        uses_imm;
-    wire signed [31:0] imm;
-    wire [1:0]  mem_mode;
-    wire [35:0] imm_trits;
-
-    vtx1_decoder dec (
-        .word(iword), .valid(dec_valid), .opcode(opcode),
-        .format(format), .category(category), .multicycle(multicycle),
-        .reg1(reg1), .reg2(reg2), .reg3(reg3),
-        .uses_imm(uses_imm), .imm(imm), .mem_mode(mem_mode),
-        .imm_trits(imm_trits), .word_value()
-    );
-
-    // ------------------------------------------------------------------
-    // Native-trit datapath
-    // ------------------------------------------------------------------
-
-    // Program counter as a trit word; binary only at the address bus.
     reg  [35:0] pc;
-    wire [35:0] pc_plus1;
-    vtx1_trit_adder u_pcinc (.a(pc), .b(ONE_WORD), .negate_b(1'b0), .sum(pc_plus1), .cout());
-
-    wire [35:0] branch_target;
-    vtx1_trit_adder u_btgt (.a(pc), .b(imm_trits), .negate_b(1'b0), .sum(branch_target), .cout());
+    wire [35:0] p1, p2, p3;
+    vtx1_trit_adder u_pc1 (.a(pc), .b(ONE_WORD), .negate_b(1'b0), .sum(p1), .cout());
+    vtx1_trit_adder u_pc2 (.a(p1), .b(ONE_WORD), .negate_b(1'b0), .sum(p2), .cout());
+    vtx1_trit_adder u_pc3 (.a(p2), .b(ONE_WORD), .negate_b(1'b0), .sum(p3), .cout());
 
     wire [31:0] pc_bin = t2b(pc);
     assign debug_pc = pc_bin;
 
-    // ALU operand selection
-    wire [35:0] alu_a =
-        (format == `VTX1_FMT_R1) ? regword(reg1) : regword(reg2);
-    wire [35:0] alu_b =
-        (format == `VTX1_FMT_R1) ? ONE_WORD :
-        uses_imm                 ? imm_trits : regword(reg3);
+    // ------------------------------------------------------------------
+    // Issue slots: the group's three consecutive words. On the fast path
+    // the words come from the TCM read registers; a bus fetch delivers a
+    // single word into ir (slots 1 and 2 are then unavailable).
+    // ------------------------------------------------------------------
+    reg  [35:0] ir;           // bus-fetched instruction word
+    reg         ir_from_imem; // 1: group comes from the TCM (3 words)
 
-    wire [35:0] alu_result;
-    wire        alu_unsup;
-    vtx1_alu u_alu (.a(alu_a), .b(alu_b), .opcode(opcode),
-                    .result(alu_result), .unsupported(alu_unsup));
+    wire [35:0] w0 = ir_from_imem ? imem_rdata0 : ir;
+    wire [35:0] w1 = imem_rdata1;
+    wire [35:0] w2 = imem_rdata2;
+    wire        avail12 = ir_from_imem;
 
-    // Branch compare: sign of (rs1 - rs2)
-    wire [35:0] br_diff;
-    wire [1:0]  br_cout;
-    vtx1_trit_adder u_brsub (.a(regword(reg1)), .b(regword(reg2)),
-                             .negate_b(1'b1), .sum(br_diff), .cout(br_cout));
-    // Overflow-correct compare: a nonzero carry trit is the true sign.
-    wire [1:0] br_sign = (br_cout != 2'b01) ? br_cout : word_sign(br_diff);
+    wire        s0_traps, s0_is_ld, s0_is_st, s0_is_ctrl, s0_is_halt, s0_redirect;
+    wire [35:0] s0_ctrl_target;
+    wire        s0_wr_en;
+    wire [4:0]  s0_wr_idx;
+    wire [35:0] s0_wr_data;
+    wire [4:0]  s0_ld_rd;
+    wire [31:0] s0_ea_bin;
+    wire [35:0] s0_st_data;
+    wire        s0_dst_v, s0_src1_v, s0_src2_v, s0_src3_v;
+    wire [4:0]  s0_dst, s0_src1, s0_src2, s0_src3;
 
-    reg branch_take;
-    always @* begin
-        branch_take = 1'b0;
-        case (opcode)
-            `VTX1_OPV_BEQ: branch_take = (regword(reg1) == regword(reg2));
-            `VTX1_OPV_BNE: branch_take = (regword(reg1) != regword(reg2));
-            `VTX1_OPV_BLT: branch_take = (br_sign == 2'b00);
-            `VTX1_OPV_BGE: branch_take = (br_sign != 2'b00);
-            `VTX1_OPV_BGT: branch_take = (br_sign == 2'b10);
-            `VTX1_OPV_BLE: branch_take = (br_sign != 2'b10);
-            default: ;
-        endcase
-    end
+    vtx1_slot slot0 (
+        .word(w0), .regs_flat(regs_flat), .pc_self(pc), .pc_next(p1),
+        .traps(s0_traps), .is_ld(s0_is_ld), .is_st(s0_is_st),
+        .is_ctrl(s0_is_ctrl), .is_halt(s0_is_halt),
+        .redirect(s0_redirect), .ctrl_target(s0_ctrl_target),
+        .wr_en(s0_wr_en), .wr_idx(s0_wr_idx), .wr_data(s0_wr_data),
+        .ld_rd(s0_ld_rd), .ea_bin(s0_ea_bin), .st_data(s0_st_data),
+        .dst_v(s0_dst_v), .dst(s0_dst),
+        .src1_v(s0_src1_v), .src2_v(s0_src2_v), .src3_v(s0_src3_v),
+        .src1(s0_src1), .src2(s0_src2), .src3(s0_src3)
+    );
 
-    // Next PC, resolved combinationally during EXEC (control flow
-    // included) so the TCM fetch of the next instruction can be issued
-    // in the same cycle.
+    wire        s1_traps, s1_is_ld, s1_is_st, s1_is_ctrl, s1_is_halt, s1_redirect;
+    wire [35:0] s1_ctrl_target;
+    wire        s1_wr_en;
+    wire [4:0]  s1_wr_idx;
+    wire [35:0] s1_wr_data;
+    wire [4:0]  s1_ld_rd;
+    wire [31:0] s1_ea_bin;
+    wire [35:0] s1_st_data;
+    wire        s1_dst_v, s1_src1_v, s1_src2_v, s1_src3_v;
+    wire [4:0]  s1_dst, s1_src1, s1_src2, s1_src3;
+
+    vtx1_slot slot1 (
+        .word(w1), .regs_flat(regs_flat), .pc_self(p1), .pc_next(p2),
+        .traps(s1_traps), .is_ld(s1_is_ld), .is_st(s1_is_st),
+        .is_ctrl(s1_is_ctrl), .is_halt(s1_is_halt),
+        .redirect(s1_redirect), .ctrl_target(s1_ctrl_target),
+        .wr_en(s1_wr_en), .wr_idx(s1_wr_idx), .wr_data(s1_wr_data),
+        .ld_rd(s1_ld_rd), .ea_bin(s1_ea_bin), .st_data(s1_st_data),
+        .dst_v(s1_dst_v), .dst(s1_dst),
+        .src1_v(s1_src1_v), .src2_v(s1_src2_v), .src3_v(s1_src3_v),
+        .src1(s1_src1), .src2(s1_src2), .src3(s1_src3)
+    );
+
+    wire        s2_traps, s2_is_ld, s2_is_st, s2_is_ctrl, s2_is_halt, s2_redirect;
+    wire [35:0] s2_ctrl_target;
+    wire        s2_wr_en;
+    wire [4:0]  s2_wr_idx;
+    wire [35:0] s2_wr_data;
+    wire [4:0]  s2_ld_rd;
+    wire [31:0] s2_ea_bin;
+    wire [35:0] s2_st_data;
+    wire        s2_dst_v, s2_src1_v, s2_src2_v, s2_src3_v;
+    wire [4:0]  s2_dst, s2_src1, s2_src2, s2_src3;
+
+    vtx1_slot slot2 (
+        .word(w2), .regs_flat(regs_flat), .pc_self(p2), .pc_next(p3),
+        .traps(s2_traps), .is_ld(s2_is_ld), .is_st(s2_is_st),
+        .is_ctrl(s2_is_ctrl), .is_halt(s2_is_halt),
+        .redirect(s2_redirect), .ctrl_target(s2_ctrl_target),
+        .wr_en(s2_wr_en), .wr_idx(s2_wr_idx), .wr_data(s2_wr_data),
+        .ld_rd(s2_ld_rd), .ea_bin(s2_ea_bin), .st_data(s2_st_data),
+        .dst_v(s2_dst_v), .dst(s2_dst),
+        .src1_v(s2_src1_v), .src2_v(s2_src2_v), .src3_v(s2_src3_v),
+        .src1(s2_src1), .src2(s2_src2), .src3(s2_src3)
+    );
+
+    // ------------------------------------------------------------------
+    // Issue logic: the dynamic packing-rule check
+    // ------------------------------------------------------------------
+
+    // Does a later slot depend on an earlier slot's destination?
+    // (RAW on any source, or WAW on the destination; TZ never conflicts.)
+    function dep(
+        input av,  input [4:0] a,                    // earlier slot's dest
+        input s1v, input [4:0] s1,                   // later slot's sources
+        input s2v, input [4:0] s2,
+        input s3v, input [4:0] s3,
+        input dv,  input [4:0] d                     // later slot's dest
+    );
+        dep = av && (a < 5'd18) && (
+              (s1v && s1 == a) || (s2v && s2 == a) || (s3v && s3 == a) ||
+              (dv  && d  == a));
+    endfunction
+
+    wire grp_end0 = s0_traps || s0_is_ctrl || s0_is_halt;
+    wire mem0     = s0_is_ld || s0_is_st;
+    wire h01 = dep(s0_dst_v, s0_dst, s1_src1_v, s1_src1, s1_src2_v, s1_src2,
+                   s1_src3_v, s1_src3, s1_dst_v, s1_dst);
+
+    // A halt may not follow a memory op in the same group (the LD/ST
+    // states must run to completion before the core stops).
+    wire issue1 = avail12 && !grp_end0 && !s1_traps && !h01
+               && !(mem0 && (s1_is_ld || s1_is_st || s1_is_halt));
+
+    wire grp_end1 = s1_is_ctrl || s1_is_halt;
+    wire mem01    = mem0 || s1_is_ld || s1_is_st;
+    wire h02 = dep(s0_dst_v, s0_dst, s2_src1_v, s2_src1, s2_src2_v, s2_src2,
+                   s2_src3_v, s2_src3, s2_dst_v, s2_dst);
+    wire h12 = dep(s1_dst_v, s1_dst, s2_src1_v, s2_src1, s2_src2_v, s2_src2,
+                   s2_src3_v, s2_src3, s2_dst_v, s2_dst);
+
+    wire issue2 = issue1 && !grp_end1 && !s2_traps && !h02 && !h12
+               && !(mem01 && (s2_is_ld || s2_is_st || s2_is_halt));
+
+    wire [2:0] n_issue = 3'd1 + {2'd0, issue1} + {2'd0, issue2};
+
+    // Next PC: the issued control slot's target, or the fall-through past
+    // the last issued word. (At most one control op issues per group.)
     reg [35:0] nxt_pc;
     always @* begin
-        nxt_pc = pc_plus1;
-        case (format)
-            `VTX1_FMT_NONE:   if (opcode == `VTX1_OPV_RET)
-                                  nxt_pc = regword(REG_TA);
-            `VTX1_FMT_R1:     if (opcode == `VTX1_OPV_JR ||
-                                  opcode == `VTX1_OPV_JALR)
-                                  nxt_pc = regword(reg1);
-            `VTX1_FMT_BRANCH: if (branch_take) nxt_pc = branch_target;
-            `VTX1_FMT_JUMP:   nxt_pc = imm_trits; // absolute target as trits
-            default: ;
-        endcase
+        if (!s0_traps && s0_redirect) nxt_pc = s0_ctrl_target;
+        else if (issue1 && s1_redirect) nxt_pc = s1_ctrl_target;
+        else if (issue2 && s2_redirect) nxt_pc = s2_ctrl_target;
+        else if (issue2) nxt_pc = p3;
+        else if (issue1) nxt_pc = p2;
+        else nxt_pc = p1;
     end
     wire [31:0] nxt_pc_bin = t2b(nxt_pc);
-
-    // Effective address (trit add; binary only at the port)
-    wire [35:0] ea_sum;
-    vtx1_trit_adder u_ea (
-        .a(regword(reg2)),
-        .b((mem_mode == 2'd1) ? regword(reg3) : imm_trits),
-        .negate_b(1'b0), .sum(ea_sum), .cout());
-    wire [35:0] ea_trits = (mem_mode == 2'd0) ? imm_trits : ea_sum;
-    wire [31:0] ea_bin   = t2b(ea_trits);
 
     // ------------------------------------------------------------------
     // Control state machine
@@ -260,14 +297,15 @@ module vtx1_core (
     localparam S_HALT  = 3'd4;
 
     reg [2:0]  state;
-    reg [4:0]  ld_rd;  // destination latched for the load writeback cycle
-    reg [31:0] mem_ea; // effective address latched for LOAD/STORE
+    reg [4:0]  ld_rd;     // destination latched for the load writeback cycle
+    reg [31:0] mem_ea;    // effective address latched for LOAD/STORE
+    reg [35:0] st_data_r; // store data latched at issue
 
-    // Instruction-TCM port control (combinational): fetch the next
-    // instruction during EXEC (fast path - next PC known this cycle) or
-    // the current PC during FETCH (after reset, loads, stores and bus
-    // fetches). Reads the TCM ignores are harmless, so EXEC may issue
-    // speculatively even when it ends up in LOAD/STORE/HALT instead.
+    // Instruction-TCM port control (combinational): fetch the next group
+    // during EXEC (fast path - next PC known this cycle) or the current
+    // PC during FETCH (after reset, loads, stores and bus fetches).
+    // Reads the TCM ignores are harmless, so EXEC may issue speculatively
+    // even when it ends up in LOAD/STORE/HALT instead.
     always @* begin
         imem_en   = 1'b0;
         imem_addr = pc_bin;
@@ -284,7 +322,7 @@ module vtx1_core (
         mem_req   = 1'b0;
         mem_wr    = 1'b0;
         mem_addr  = pc_bin;
-        mem_wdata = regword(reg1);
+        mem_wdata = st_data_r;
         case (state)
             S_FETCH: begin
                 mem_req  = !imem_hit;
@@ -312,18 +350,53 @@ module vtx1_core (
         end
     endtask
 
+    // Commit actions shared by all three slots
+    task commit_slot(
+        input        c_wr_en,
+        input [4:0]  c_wr_idx,
+        input [35:0] c_wr_data,
+        input        c_is_ld,
+        input [4:0]  c_ld_rd,
+        input        c_is_st,
+        input [31:0] c_ea_bin,
+        input [35:0] c_st_data,
+        input        c_is_halt
+    );
+        begin
+            if (c_wr_en) writereg(c_wr_idx, c_wr_data);
+            if (c_is_ld) begin
+                ld_rd        <= c_ld_rd;
+                mem_ea       <= c_ea_bin;
+                state        <= S_LOAD;
+                ir_from_imem <= 1'b0;
+            end
+            if (c_is_st) begin
+                mem_ea       <= c_ea_bin;
+                st_data_r    <= c_st_data;
+                state        <= S_STORE;
+                ir_from_imem <= 1'b0;
+            end
+            if (c_is_halt) begin
+                halted       <= 1'b1;
+                state        <= S_HALT;
+                ir_from_imem <= 1'b0;
+            end
+        end
+    endtask
+
     integer ri;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state   <= S_FETCH;
-            pc      <= RESET_PC;
-            ir      <= ZERO_WORD;
+            state        <= S_FETCH;
+            pc           <= RESET_PC;
+            ir           <= ZERO_WORD;
             ir_from_imem <= 1'b0;
-            halted  <= 1'b0;
-            trap    <= 1'b0;
-            trap_pc <= 32'h0;
-            retired <= 32'h0;
-            cycles  <= 32'h0;
+            halted       <= 1'b0;
+            trap         <= 1'b0;
+            trap_pc      <= 32'h0;
+            retired      <= 32'h0;
+            cycles       <= 32'h0;
+            st_data_r    <= ZERO_WORD;
             for (ri = 0; ri < 18; ri = ri + 1)
                 regs[ri] <= ZERO_WORD;
         end else begin
@@ -332,8 +405,8 @@ module vtx1_core (
             case (state)
                 S_FETCH:
                     if (imem_hit) begin
-                        // TCM fetch: the word read this cycle is in
-                        // imem_rdata next cycle; execute it from there.
+                        // TCM fetch: the 3-word group read this cycle is in
+                        // imem_rdata0..2 next cycle; execute from there.
                         state        <= S_EXEC;
                         ir_from_imem <= 1'b1;
                     end else if (mem_ready) begin
@@ -343,12 +416,12 @@ module vtx1_core (
                     end
 
                 S_EXEC: begin
-                    retired <= retired + 1;
-                    pc      <= nxt_pc;   // control flow resolved combinationally
-                    ir      <= iword;    // keep the word stable for LOAD/STORE
+                    retired <= retired + {29'd0, n_issue};
+                    pc      <= nxt_pc;  // control flow resolved combinationally
                     // Default next state: when the next PC hits the TCM, the
-                    // fetch issued this cycle lands in imem_rdata and we stay
-                    // in EXEC (CPI 1); otherwise fetch over the bus.
+                    // group fetch issued this cycle lands in imem_rdata0..2
+                    // and we stay in EXEC; otherwise fetch over the bus.
+                    // LD/ST/halt commits below override this.
                     if (imem_hit) begin
                         state        <= S_EXEC;
                         ir_from_imem <= 1'b1;
@@ -357,61 +430,23 @@ module vtx1_core (
                         ir_from_imem <= 1'b0;
                     end
 
-                    if (!dec_valid) do_trap;
-                    else case (format)
-
-                        `VTX1_FMT_NONE: case (opcode)
-                            `VTX1_OPV_NOP: ;
-                            `VTX1_OPV_WFI, `VTX1_OPV_HALT,
-                            `VTX1_OPV_SYSCALL, `VTX1_OPV_BREAK:
-                                begin
-                                    halted       <= 1'b1;
-                                    state        <= S_HALT;
-                                    ir_from_imem <= 1'b0;
-                                end
-                            `VTX1_OPV_RET: ; // nxt_pc = TA
-                            `VTX1_OPV_CACHE, `VTX1_OPV_FLUSH, `VTX1_OPV_MEMBAR: ;
-                            default: do_trap;
-                        endcase
-
-                        `VTX1_FMT_R1: case (opcode)
-                            `VTX1_OPV_INC, `VTX1_OPV_DEC:
-                                writereg(reg1, alu_result);
-                            `VTX1_OPV_JR: ; // nxt_pc = reg1
-                            `VTX1_OPV_JALR:
-                                writereg(REG_TA, pc_plus1); // nxt_pc = reg1
-                            default: do_trap; // PUSH/POP: no stack ABI yet
-                        endcase
-
-                        `VTX1_FMT_R2, `VTX1_FMT_R3: begin
-                            if (alu_unsup) do_trap; // DIV/MOD (FSM pending), SQRT, vec/FP
-                            else writereg(reg1, alu_result);
-                        end
-
-                        `VTX1_FMT_MEM: case (opcode)
-                            `VTX1_OPV_LD: begin
-                                ld_rd        <= reg1;
-                                mem_ea       <= ea_bin;
-                                state        <= S_LOAD;
-                                ir_from_imem <= 1'b0;
-                            end
-                            `VTX1_OPV_ST: begin
-                                mem_ea       <= ea_bin;
-                                state        <= S_STORE;
-                                ir_from_imem <= 1'b0;
-                            end
-                            `VTX1_OPV_LEA: writereg(reg1, ea_trits);
-                            default: do_trap; // VLD/VST/FLD/FST
-                        endcase
-
-                        `VTX1_FMT_BRANCH: ; // nxt_pc = taken ? target : pc+1
-
-                        `VTX1_FMT_JUMP:
-                            if (opcode == `VTX1_OPV_JAL || opcode == `VTX1_OPV_CALL)
-                                writereg(REG_TA, pc_plus1); // nxt_pc = target
-
-                        default: do_trap;
-                    endcase
+                    if (s0_traps) do_trap;
+                    else begin
+                        commit_slot(s0_wr_en, s0_wr_idx, s0_wr_data,
+                                    s0_is_ld, s0_ld_rd,
+                                    s0_is_st, s0_ea_bin, s0_st_data,
+                                    s0_is_halt);
+                        if (issue1)
+                            commit_slot(s1_wr_en, s1_wr_idx, s1_wr_data,
+                                        s1_is_ld, s1_ld_rd,
+                                        s1_is_st, s1_ea_bin, s1_st_data,
+                                        s1_is_halt);
+                        if (issue2)
+                            commit_slot(s2_wr_en, s2_wr_idx, s2_wr_data,
+                                        s2_is_ld, s2_ld_rd,
+                                        s2_is_st, s2_ea_bin, s2_st_data,
+                                        s2_is_halt);
+                    end
                 end
 
                 S_LOAD: if (mem_ready) begin

@@ -115,10 +115,10 @@ wire [31:0] cpu_trap_pc;
 wire [VTX1_WORD_WIDTH-1:0] cpu_debug_pc;
 wire [31:0] cpu_cycle_count, cpu_instruction_count;
 
-// Tightly-coupled instruction memory (single-cycle fetch fast path)
+// Tightly-coupled instruction memory (single-cycle 3-word fetch fast path)
 wire cpu_imem_en, cpu_imem_hit;
 wire [31:0] cpu_imem_addr;
-wire [35:0] cpu_imem_rdata;
+wire [35:0] cpu_imem_rdata0, cpu_imem_rdata1, cpu_imem_rdata2;
 
 // CPU Adapter Interface (CPU to Bus Matrix)
 wire cpu_bus_req, cpu_bus_wr, cpu_bus_ready, cpu_bus_error, cpu_bus_timeout, cpu_bus_error_clear;
@@ -614,7 +614,9 @@ vtx1_core cpu_inst (
     // Instruction fetch fast path -> tightly-coupled instruction RAM
     .imem_en(cpu_imem_en),
     .imem_addr(cpu_imem_addr),
-    .imem_rdata(cpu_imem_rdata),
+    .imem_rdata0(cpu_imem_rdata0),
+    .imem_rdata1(cpu_imem_rdata1),
+    .imem_rdata2(cpu_imem_rdata2),
     .imem_hit(cpu_imem_hit),
 
     // Execution state
@@ -639,7 +641,9 @@ vtx1_tcm #(.BASE(32'h0000_1000)) tcm_inst (
     .en(cpu_imem_en),
     .addr(cpu_imem_addr),
     .hit(cpu_imem_hit),
-    .rdata(cpu_imem_rdata),
+    .rdata0(cpu_imem_rdata0),
+    .rdata1(cpu_imem_rdata1),
+    .rdata2(cpu_imem_rdata2),
     .wen(cpu_bus_req && cpu_bus_wr && cpu_bus_ready),
     .waddr(cpu_mem_addr32),
     .wdata(cpu_bus_wdata)

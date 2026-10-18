@@ -48,11 +48,12 @@ module core_harness #(parameter USE_TCM = 0) (
     // Instruction fetch fast path (TCM covers 0x1000..0x1FFF when enabled)
     wire        imem_en, tcm_hit;
     wire [31:0] imem_addr;
-    wire [35:0] tcm_rdata;
+    wire [35:0] tcm_rdata0, tcm_rdata1, tcm_rdata2;
 
     vtx1_tcm #(.BASE(32'h1000)) tcm (
         .clk(clk), .en(imem_en), .addr(imem_addr),
-        .hit(tcm_hit), .rdata(tcm_rdata),
+        .hit(tcm_hit),
+        .rdata0(tcm_rdata0), .rdata1(tcm_rdata1), .rdata2(tcm_rdata2),
         // Write-through snoop on the core's store path
         .wen(mem_req && mem_wr), .waddr(mem_addr), .wdata(mem_wdata)
     );
@@ -65,7 +66,8 @@ module core_harness #(parameter USE_TCM = 0) (
         .mem_addr(mem_addr), .mem_wdata(mem_wdata), .mem_rdata(mem_rdata),
         .mem_ready(mem_ready),
         .imem_en(imem_en), .imem_addr(imem_addr),
-        .imem_rdata(tcm_rdata), .imem_hit(imem_hit),
+        .imem_rdata0(tcm_rdata0), .imem_rdata1(tcm_rdata1),
+        .imem_rdata2(tcm_rdata2), .imem_hit(imem_hit),
         .halted(halted), .trap(trap), .trap_pc(trap_pc),
         .retired(retired), .cycles(cycles), .debug_pc()
     );
@@ -175,9 +177,14 @@ module tb_vtx1_core;
         errors = 0;
         $readmemh("build/hello_world.memh", h_bus.mem);
         $readmemh("build/hello_world.memh", h_tcm.mem);
-        // Preload the TCM with the program region (word 0x1000 -> index 0)
-        for (i = 0; i < 4096; i = i + 1)
-            h_tcm.tcm.mem[i] = h_tcm.mem['h1000 + i];
+        // Preload the TCM banks with the program region
+        // (word w -> bank w[1:0], index w[11:2])
+        for (i = 0; i < 4096; i = i + 4) begin
+            h_tcm.tcm.bank0[i >> 2] = h_tcm.mem['h1000 + i];
+            h_tcm.tcm.bank1[i >> 2] = h_tcm.mem['h1000 + i + 1];
+            h_tcm.tcm.bank2[i >> 2] = h_tcm.mem['h1000 + i + 2];
+            h_tcm.tcm.bank3[i >> 2] = h_tcm.mem['h1000 + i + 3];
+        end
 
         rst_n = 0;
         repeat (4) @(posedge clk);

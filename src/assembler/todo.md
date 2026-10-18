@@ -327,6 +327,39 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Triple Issue (2026-10-18)
+
+- The core is now v3: three `vtx1_slot` units (decode + single-cycle
+  execute of one operation word, combinational against the register file)
+  plus dynamic issue logic. Up to three CONSECUTIVE words commit per
+  cycle; the hardware enforces the VLIW packing rules itself (max one
+  memory op, control/halt ends the group, no intra-group RAW/WAW), so
+  co-issued words are provably independent and parallel commit is
+  bit-identical to sequential execution. The vtxsim retired-count
+  cross-check (93) is preserved exactly, and the assembler's VLIW packing
+  becomes the scheduler: a packed bundle is guaranteed to issue in one
+  cycle, but plain scalar code multi-issues too whenever it happens to be
+  independent.
+- The TCM is banked 4-way on addr[1:0] so any three consecutive words
+  (arbitrary alignment, branch targets included) read in one cycle;
+  rdata0..2 feed the group. The fast path still resolves the next PC
+  combinationally during EXEC, so TCM code needs no fetch state: 3 words
+  per cycle peak. A bus fetch delivers one word (single issue) - with
+  imem_hit low the core is cycle-identical to the single-issue v2.
+- hello_world: core+1-cycle RAM 175 -> 136 cycles (CPI 1.88 -> 1.46);
+  full SoC 310 -> 271 cycles (CPI 3.33 -> 2.91; was 9.8 before the TCM).
+  Remaining cycles are dominated by LD/ST bus transactions.
+- ICARUS SENSITIVITY TRAP (cost one debug session, worth remembering):
+  a Verilog function that reads module signals NOT passed as arguments
+  (e.g. `regword(idx)` reading the register file, or a helper reading
+  `addr`) never re-evaluates in a continuous assign or always-@* in
+  Icarus - the sensitivity list is computed from the arguments only. The
+  v2 core got away with it because its reads sat inside the clocked
+  always block. Rule: functions must be pure over their arguments; reads
+  of module state go in explicit wires/muxes.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip
