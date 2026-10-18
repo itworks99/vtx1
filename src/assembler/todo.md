@@ -360,6 +360,30 @@ The VTX1 assembler processes input in the following stages:
 
 ---
 
+## Cycle-Level RTL Comparison vs PicoRV32 (2026-10-18)
+
+- `task bench-rtl`: the four Tier A kernels run on both RTL cores in
+  Icarus with results asserted by the testbenches. VTX1 = triple-issue
+  core + banked TCM + 2-cycle-handshake data RAM; PicoRV32 (vendored
+  unmodified under src/third_party/picorv32, ISC) = its FASTEST config:
+  combinational 1-cycle memory, ENABLE_FAST_MUL, BARREL_SHIFTER.
+- Results: dot_product 187 vs 517 (-64%), sign_count 151 vs 435 (-65%),
+  abs_sum 203 vs 613 (-67%), sign_sum 187 vs 565 (-67%). VTX1 CPI
+  1.37-1.81; PicoRV32 reproduces its documented ~4 CPI.
+- The RV32 machine code is produced by `rvsim/encode.go` + `rvsim/rvhex`
+  from the SAME structural instruction lists the rvsim interpreter
+  executes - no external toolchain, and the asserted results validate
+  the encoder on real RTL.
+- Honest framing (also in benchmarks/README caveat 5): this is a
+  triple-issue ~100k-cell core vs a size-optimized ~2-3k-cell serial
+  core, memory models stated and favoring PicoRV32, no timing closure
+  on either. The ISA claim stays the instruction-count table; the cycle
+  table shows the ternary core's microarchitecture is real and fast,
+  not that ternary beats binary per se. An issue-width-matched RV32
+  control would be the next rigor step.
+
+---
+
 ## Ideas Worth Keeping (ternary leverage)
 
 - Ternary CORDIC: CORDIC with the native digit set {-1, 0, +1} can skip

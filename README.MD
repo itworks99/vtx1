@@ -60,7 +60,7 @@ Written in Go, under `src/assembler/`:
 
 - **`vtxasm`** — assembler with a preprocessor (`.INCLUDE`, parameterized `.MACRO`), VLIW packing validation (resource conflicts are errors, read-after-write hazards are warnings), and output as raw words, VLIW bundles, Intel HEX, a trit-level `objdump` disassembly, or `$readmemh` memory images
 - **`vtxsim`** — ISA-level simulator with balanced-ternary semantics; reports dynamic instruction counts, memory traffic, and branch behavior for architecture evaluation
-- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel — [full table and caveats](src/assembler/benchmarks/README.md)
+- **Benchmarks** (`src/assembler/benchmarks/`) — Tier A kernels with machine-verified results on both sides of the comparison: VTX1 vs an RV32IM control core (`rvsim`, same instrumentation). Headline: **−34%** dynamic instructions on three-valued sign arithmetic, **−30%** on absolute differences, **−16%** on dot product, parity on the neutral control-flow kernel. At the cycle level (`task bench-rtl`, real RTL on both sides), the triple-issue VTX1 core runs the same kernels in **~⅓ the cycles** of PicoRV32 at its fastest memory configuration — [full tables and caveats](src/assembler/benchmarks/README.md)
 
 The chain is kept honest by cross-checks at every seam: the Verilog decoder is tested against real assembler output word by word, and the RTL core's retired-instruction count must match the simulator exactly.
 
@@ -75,8 +75,10 @@ The chain is kept honest by cross-checks at every seam: the Verilog decoder is t
 - Ternary-vs-binary architecture comparison (VTX1 vs RV32IM, identical instrumentation)
 - Build and test automation with Taskfile; Yosys synthesis flow
 
+**✅ Working today (continued):**
+- Cycle-level RTL comparison vs PicoRV32: same kernels, results asserted on both cores, −64%..−67% cycles (`task bench-rtl`)
+
 **🚧 In progress:**
-- Cycle-level comparison against PicoRV32 under the same memory model
 - Stack ABI (PUSH/POP), iterative divider FSM for synthesis
 
 **🔮 Planned:**

@@ -38,6 +38,34 @@ On a true ternary storage medium a VTX1 word is 18 trits (≈28.5 bits of
 information), which would widen the code-size advantage further; the table
 uses the 2-bit-encoded storage cost, the honest number for binary substrates.
 
+## Cycle-level results (real RTL, both sides)
+
+`task bench-rtl` runs the same kernels on both **RTL cores** in Icarus,
+with every result asserted by the testbench:
+
+- **VTX1**: the triple-issue trit-native core (`vtx1_core` + banked TCM),
+  fetching from the tightly-coupled instruction RAM (1 cycle, 3 words) with
+  data loads/stores through a synchronous RAM with a 2-cycle ready handshake
+- **PicoRV32** (`src/third_party/picorv32`, YosysHQ, unmodified): the same
+  kernels as real RV32IM machine code (encoded by `rvsim/rvhex` from the
+  same instruction lists the interpreter executes), on PicoRV32's **fastest**
+  native configuration — single-cycle combinational memory, `ENABLE_FAST_MUL`
+  (1-cycle multiply), `BARREL_SHIFTER` (1-cycle shifts)
+
+| Kernel | VTX1 cycles (CPI) | PicoRV32 cycles | Δ cycles |
+|---|---|---|---|
+| `dot_product` | **187** (1.81) | 517 | **−64%** |
+| `sign_count`  | **151** (1.37) | 435 | **−65%** |
+| `abs_sum`     | **203** (1.70) | 613 | **−67%** |
+| `sign_sum`    | **187** (1.81) | 565 | **−67%** |
+
+The ~3× cycle advantage has two multiplicative sources: the ternary ISA
+retires fewer instructions (the Tier A table above, −3%..−34%), and the
+microarchitecture issues up to 3 independent words per cycle while PicoRV32
+is a deliberately small serial core (its documented CPI is ~4, which these
+numbers reproduce). Both factors are real properties of the two designs,
+but only the first is an *ISA* claim — see caveat 5.
+
 ## Reading the results
 
 - **`sign_sum` (−34%) and `abs_sum` (−30%)** are the designed showcases, and
@@ -56,10 +84,9 @@ uses the 2-bit-encoded storage cost, the honest number for binary substrates.
 
 ## Caveats (read before quoting)
 
-1. These are **architecture** metrics (dynamic instruction count, memory
-   traffic, code size), not performance: neither simulator models cycles.
-   Cycle comparisons belong to the RTL (VTX1's `task test-soc` vs a binary
-   core like PicoRV32 under the same memory model).
+1. The instruction-count tables are **architecture** metrics (dynamic
+   instruction count, memory traffic, code size), not performance: the
+   simulators do not model cycles. The cycle table is measured on RTL.
 2. The RV32IM baseline is granted the M extension (VTX1 has MUL in hardware)
    and is hand-written by the same author as the VTX1 kernels — idiomatic,
    but not compiler-optimized output.
@@ -69,11 +96,21 @@ uses the 2-bit-encoded storage cost, the honest number for binary substrates.
    would favor binary.
 4. Minor asymmetry: VTX1 kernels load the element count from memory
    (1 extra load) while the RV versions use a build-time end pointer.
+5. The cycle comparison pits a triple-issue core with an instruction TCM
+   against a size-optimized serial core: PicoRV32 is the realistic *small*
+   binary control core (~2–3k cells), not a performance peer — VTX1's CPU
+   synthesizes to ~100k cells (three ALUs with multiplier trees). The
+   memory models are stated above and deliberately favor PicoRV32
+   (combinational 1-cycle memory vs VTX1's 2-cycle data handshake). No
+   timing closure was run on either core, so cycles are not seconds: a
+   per-ISA comparison at equal issue width would need a triple-issue RV32
+   core as the control.
 
 ## Running
 
 ```sh
-task bench                                   # VTX1 side (vtxsim)
+task bench                                   # instruction counts (simulators)
+task bench-rtl                               # cycle counts (RTL, both cores)
 cd src/assembler && go test ./rvsim/ -run TestComparisonStats -v   # RV side
 go test ./cmd/ -run TestBenchmarkKernels     # VTX1 results asserted
 go test ./rvsim/                             # RV32IM results asserted
